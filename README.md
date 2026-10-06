@@ -33,8 +33,16 @@ Create a Secret from a fresh worker enrollment token, then install the
 single-replica outbound worker:
 
 ```bash
+umask 077
+token_file=$(mktemp)
+trap 'rm -f "$token_file"' EXIT
+read -rsp 'Enrollment token: ' enrollment_token && printf '\n'
+printf '%s' "$enrollment_token" >"$token_file"
+unset enrollment_token
 kubectl create secret generic relayflows-enrollment \
-  --from-literal=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN='<enrollment-token>'
+  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file"
+rm -f "$token_file"
+trap - EXIT
 helm install relayflows agentworkforce/relayflows \
   --set credentials.existingSecret=relayflows-enrollment
 ```

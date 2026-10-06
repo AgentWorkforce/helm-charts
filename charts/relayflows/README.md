@@ -50,8 +50,16 @@ Keep the one-time enrollment token out of shell history and Helm release data:
 
 ```bash
 kubectl create namespace relayflows
+umask 077
+token_file=$(mktemp)
+trap 'rm -f "$token_file"' EXIT
+read -rsp 'Enrollment token: ' enrollment_token && printf '\n'
+printf '%s' "$enrollment_token" >"$token_file"
+unset enrollment_token
 kubectl -n relayflows create secret generic relayflows-enrollment \
-  --from-literal=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN='<enrollment-token>'
+  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file"
+rm -f "$token_file"
+trap - EXIT
 
 helm install customer-flows agentworkforce/relayflows \
   --namespace relayflows \
