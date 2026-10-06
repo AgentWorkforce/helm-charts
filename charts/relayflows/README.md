@@ -28,10 +28,11 @@ one pod; it does not create a pod per step.
 
 ## Prerequisites
 
-- Kubernetes 1.21+
+- Kubernetes 1.29+, or 1.22+ with `ReadWriteOncePod` enabled, plus a supporting
+  CSI driver
 - Helm 3.8+
 - An x86-64 node when using the published Relayflows runtime
-- A default StorageClass, or an existing ReadWriteOnce PVC
+- A default CSI StorageClass, or an existing `ReadWriteOncePod` PVC
 - For agent steps, an image containing the selected harness CLI and a Secret
   containing that provider's credentials
 - Outbound access to provider APIs and, when `runtimeInstaller.enabled=true`,
@@ -144,7 +145,9 @@ helm upgrade customer-flow agentworkforce/relayflows \
 
 Every standalone install or upgrade creates a Job for that Helm revision. Clear
 `standalone.resumeRunId` before intentionally starting a fresh run. To retain
-journals independently of the release lifecycle, provision a PVC separately:
+journals independently of the release lifecycle, provision a PVC separately.
+It must use `ReadWriteOncePod`: unlike `ReadWriteOnce`, that access mode prevents
+an old and new Job on the same node from writing the journal simultaneously.
 
 ```yaml
 persistence:
@@ -224,6 +227,7 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 | `credentials.*` | Cloud-mode enrollment Secret or token | unset |
 | `persistence.existingClaim` | Existing durable-state PVC | `""` |
 | `persistence.storageClass` / `size` | Chart PVC class and request | `""` / `5Gi` |
+| `persistence.accessModes` | PVC access; keep pod-exclusive for safe upgrades | `[ReadWriteOncePod]` |
 | `serviceAccount.*` | ServiceAccount settings | created; token disabled |
 | `podSecurityContext` / `containerSecurityContext` | Pod security settings | non-root hardened defaults |
 | `resources` / `runtimeInstaller.resources` | Runner and installer resources | see `values.yaml` |

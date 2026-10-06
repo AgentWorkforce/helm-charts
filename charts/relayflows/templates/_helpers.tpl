@@ -49,7 +49,10 @@ app.kubernetes.io/component: {{ ternary "runner" "worker" (eq (include "relayflo
 
 {{/* Standalone Jobs are revisioned because their pod templates are immutable. */}}
 {{- define "relayflows.jobName" -}}
-{{- printf "%s-%d" (include "relayflows.fullname" .) .Release.Revision | trunc 63 | trimSuffix "-" -}}
+{{- $suffix := printf "-%d" .Release.Revision -}}
+{{- $baseLength := sub 63 (len $suffix) | int -}}
+{{- $base := include "relayflows.fullname" . | trunc $baseLength | trimSuffix "-" -}}
+{{- printf "%s%s" $base $suffix -}}
 {{- end }}
 
 {{/* Chart-managed standalone flow ConfigMap name. */}}

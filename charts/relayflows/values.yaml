@@ -74,7 +74,8 @@ persistence:
   existingClaim: ""
   storageClass: ""
   accessModes:
-    - ReadWriteOnce
+    # Prevents an old and new standalone Job from mounting the journal at once.
+    - ReadWriteOncePod
   size: 5Gi
   annotations: {}
   selector: {}
