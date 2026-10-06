@@ -1,3 +1,30 @@
 apiVersion: v1
-entries: {}
-generated: "2026-08-11T00:00:00.000000000Z"
+entries:
+  relayflows:
+  - apiVersion: v2
+    appVersion: 2.0.42
+    created: "2026-10-06T21:09:23.555394654Z"
+    description: Run durable Relayflows workflows locally on Kubernetes, with optional
+      Cloud assignment mode.
+    digest: 4f27513c60a24928d8a626e826523c122c0390d64f5771cf739326def5f68336
+    home: https://github.com/AgentWorkforce/flows
+    keywords:
+    - relayflows
+    - workflows
+    - agents
+    - kubernetes
+    - agentworkforce
+    kubeVersion: '>=1.22.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relayflows
+    sources:
+    - https://github.com/AgentWorkforce/flows
+    - https://github.com/AgentWorkforce/cloud
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayflows
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relayflows-0.1.0/relayflows-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-10-06T21:09:23.555404993Z"
