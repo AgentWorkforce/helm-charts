@@ -93,6 +93,8 @@ podLabels: {}
 podSecurityContext:
   fsGroup: 1000
   fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
 
 containerSecurityContext:
   allowPrivilegeEscalation: false
@@ -147,8 +149,10 @@ nodeSelector:
 tolerations: []
 affinity: {}
 
-# Use these for model/provider credentials (for example ANTHROPIC_API_KEY),
-# customer configuration, and custom image mounts.
+# Use these for model/provider credentials (for example an ESO-created Secret
+# containing ANTHROPIC_API_KEY), customer configuration, and custom mounts.
+# Standalone mode reserves FLOWS_CLOUD_MIRROR and
+# AGENT_RELAY_TELEMETRY_DISABLED to keep hosted publication disabled.
 extraEnv: []
 extraEnvFrom: []
 extraVolumes: []

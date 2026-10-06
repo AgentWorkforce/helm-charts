@@ -26,6 +26,12 @@ are also absent. Kubernetes, Argo, KEDA, or another local controller can create
 or upgrade releases to trigger Jobs. The current runtime runs the whole flow in
 one pod; it does not create a pod per step.
 
+The default command always passes `--no-observer-link` and forces
+`FLOWS_CLOUD_MIRROR=0`; ambient Secret values cannot opt a standalone run into
+hosted publication. It also disables Agent Relay telemetry. A custom
+`standalone.command` replaces this contract, so regulated installations should
+audit custom commands and enforce their own egress policy.
+
 ## Prerequisites
 
 - Kubernetes 1.29+, or 1.22+ with `ReadWriteOncePod` enabled, plus a supporting
@@ -99,6 +105,23 @@ kubectl -n relayflows logs job/customer-flow-relayflows-1 -c runner -f
 not sent to Agent Relay Cloud; in standalone mode there is no Cloud process or
 Cloud credential at all. The image must still contain the `claude` executable,
 and the flow must select the matching harness.
+
+### External Secrets Operator
+
+The chart never fetches provider credentials. Point `extraEnvFrom` at the
+ordinary Kubernetes Secret materialized by External Secrets Operator (ESO):
+
+```yaml
+# The ExternalSecret and SecretStore stay in the platform/ESO release.
+# Relayflows only consumes the resulting Kubernetes Secret.
+extraEnvFrom:
+  - secretRef:
+      name: relayflows-provider-credentials
+```
+
+That Secret can contain `ANTHROPIC_API_KEY`, other model-provider keys, and
+Relayfile mount credentials. Secret values remain pod environment variables;
+they are not placed in this Helm release or baked into the image.
 
 ### ConfigMap flow
 
@@ -189,6 +212,66 @@ enrollment. The one-time Secret may be removed after successful registration.
 When reinstalling against an already-enrolled `persistence.existingClaim`, the
 enrollment Secret may be omitted; a fresh PVC without a token fails at runtime
 with a clear message. PDB, VPA, and worker probes apply only to this mode.
+
+## Self-hosted Relayfile mount
+
+Relayfile remains an independently installable chart, so it can be upgraded and
+scaled separately while staying inside the customer cluster. An ESO-produced
+Secret can satisfy its `secrets.existingSecret` value:
+
+```bash
+helm install customer-relayfile agentworkforce/relayfile \
+  --namespace relayflows \
+  --set secrets.existingSecret=relayfile-server-credentials
+```
+
+For flows that use Relayfile helpers, include `relayfile-mount` in the immutable
+runtime image and add it as a restartable init sidecar in poll mode. Kubernetes
+starts it before the runner, shares the mirror directory, and terminates it when
+the Job finishes. This needs no FUSE device or privileged container:
+
+```yaml
+extraVolumes:
+  - name: relayfile-workspace
+    emptyDir: {}
+extraVolumeMounts:
+  - name: relayfile-workspace
+    mountPath: /workspace
+extraEnv:
+  - name: RELAYFILE_MOUNT_PATH
+    value: /workspace
+extraInitContainers:
+  - name: relayfile-mount
+    restartPolicy: Always
+    image: registry.example.com/acme/customer-flow:sha-0123456789abcdef
+    command: [relayfile-mount]
+    env:
+      - name: RELAYFILE_BASE_URL
+        value: http://customer-relayfile:8080
+      - name: RELAYFILE_WORKSPACE
+        value: ws_customer
+      - name: RELAYFILE_LOCAL_DIR
+        value: /workspace
+      - name: RELAYFILE_MOUNT_MODE
+        value: poll
+      - name: RELAYFILE_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: relayflows-provider-credentials
+            key: RELAYFILE_TOKEN
+    volumeMounts:
+      - name: relayfile-workspace
+        mountPath: /workspace
+```
+
+This keeps the server, workspace mirror, credentials, flow source, journals,
+run logs, and attribution records in-cluster. Model calls use the customer's
+BYO provider keys directly; no AgentWorkforce metering component is involved.
+For a hard network boundary, enable `networkPolicy` and replace its default
+broad HTTPS rule with only the in-cluster Relayfile service and approved model
+provider destinations. Standard Kubernetes NetworkPolicy matches CIDRs and pod
+selectors, not DNS names; use the cluster CNI's FQDN policy when endpoint-level
+allowlisting is required.
 
 ## Network policy and security
 

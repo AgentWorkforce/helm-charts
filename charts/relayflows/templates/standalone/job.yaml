@@ -5,6 +5,11 @@
 {{- if and .Values.standalone.localAgent (or (lt (int .Values.standalone.agentCapacity) 1) (gt (int .Values.standalone.agentCapacity) 32)) -}}
 {{- fail "standalone.agentCapacity must be between 1 and 32 when standalone.localAgent=true" -}}
 {{- end -}}
+{{- range .Values.extraEnv -}}
+{{- if or (eq .name "FLOWS_CLOUD_MIRROR") (eq .name "AGENT_RELAY_TELEMETRY_DISABLED") -}}
+{{- fail (printf "extraEnv may not override %s in standalone mode" .name) -}}
+{{- end -}}
+{{- end -}}
 {{- if and (ne .Values.standalone.activeDeadlineSeconds nil) (lt (int .Values.standalone.activeDeadlineSeconds) 1) -}}
 {{- fail "standalone.activeDeadlineSeconds must be at least 1 when set" -}}
 {{- end -}}
@@ -133,6 +138,13 @@ spec:
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+            # Explicit env values override envFrom, including ESO-managed
+            # Secrets. Keep the standalone path from opting into hosted
+            # mirroring or Agent Relay telemetry through ambient environment.
+            - name: FLOWS_CLOUD_MIRROR
+              value: "0"
+            - name: AGENT_RELAY_TELEMETRY_DISABLED
+              value: "1"
           {{- with .Values.extraEnvFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
