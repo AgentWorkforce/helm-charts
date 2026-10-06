@@ -26,6 +26,11 @@ are also absent. Kubernetes, Argo, KEDA, or another local controller can create
 or upgrade releases to trigger Jobs. The current runtime runs the whole flow in
 one pod; it does not create a pod per step.
 
+The chart intentionally creates no webhook listener. A cloud-free POC can run
+the Job manually, invoke a flow tick from an existing in-cluster orchestrator,
+or have the customer's scheduler/GitOps controller launch it on a cron. Hosted
+issue-to-pickup routing and Nango are not silently pulled into this path.
+
 The default command always passes `--no-observer-link` and forces
 `FLOWS_CLOUD_MIRROR=0`; ambient Secret values cannot opt a standalone run into
 hosted publication. It also disables Agent Relay telemetry. A custom
@@ -106,10 +111,11 @@ not sent to Agent Relay Cloud; in standalone mode there is no Cloud process or
 Cloud credential at all. The image must still contain the `claude` executable,
 and the flow must select the matching harness.
 
-### External Secrets Operator
+### Keeper or External Secrets Operator
 
 The chart never fetches provider credentials. Point `extraEnvFrom` at the
-ordinary Kubernetes Secret materialized by External Secrets Operator (ESO):
+ordinary Kubernetes Secret materialized by Keeper, External Secrets Operator
+(ESO), or the customer's existing secrets pipeline:
 
 ```yaml
 # The ExternalSecret and SecretStore stay in the platform/ESO release.
@@ -122,6 +128,12 @@ extraEnvFrom:
 That Secret can contain `ANTHROPIC_API_KEY`, other model-provider keys, and
 Relayfile mount credentials. Secret values remain pod environment variables;
 they are not placed in this Helm release or baked into the image.
+
+For the GitLab POC, the same pattern can provide a narrowly scoped
+`GITLAB_TOKEN`. Include `glab` and the required harness CLI in the immutable
+image, and either bake in the intended checkout or populate a shared workspace
+with `extraInitContainers`. No Nango or Relayfile integration is required for
+that preloaded-checkout path.
 
 ### ConfigMap flow
 
@@ -213,7 +225,7 @@ When reinstalling against an already-enrolled `persistence.existingClaim`, the
 enrollment Secret may be omitted; a fresh PVC without a token fails at runtime
 with a clear message. PDB, VPA, and worker probes apply only to this mode.
 
-## Self-hosted Relayfile mount
+## Optional self-hosted Relayfile mount
 
 Relayfile remains an independently installable chart, so it can be upgraded and
 scaled separately while staying inside the customer cluster. An ESO-produced
@@ -272,6 +284,20 @@ broad HTTPS rule with only the in-cluster Relayfile service and approved model
 provider destinations. Standard Kubernetes NetworkPolicy matches CIDRs and pod
 selectors, not DNS names; use the cluster CNI's FQDN policy when endpoint-level
 allowlisting is required.
+
+## Local observability and flow permissions
+
+Standalone runs write the durable journal and attribution records to the PVC
+and write ordinary process output to Kubernetes pod logs. Existing cluster
+agents can collect those logs for Datadog, and customer tooling can inspect the
+SQLite journals locally. The chart exposes no hosted observer or metrics
+dependency; Prometheus/Grafana integration can be added through the customer's
+standard collectors.
+
+Permission and skill scopes belong to the flow specification, not to Cloud or
+the Helm release. A POC can therefore use the broader scope Julian requested,
+while production flow images and values can narrow filesystem, tool, Secret,
+and network access without changing execution mode.
 
 ## Network policy and security
 
