@@ -62,6 +62,8 @@ spec:
               value: {{ .Values.runtimeInstaller.agentRelayVersion | quote }}
             - name: RELAYFLOWS_VERSION
               value: {{ .Values.runtimeInstaller.relayflowsVersion | quote }}
+            - name: HOME
+              value: /tmp
             - name: NPM_CONFIG_CACHE
               value: /tmp/npm-cache
           {{- with .Values.containerSecurityContext }}
@@ -141,6 +143,10 @@ spec:
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.resources }}

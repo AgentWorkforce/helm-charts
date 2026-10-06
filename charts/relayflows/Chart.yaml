@@ -2,6 +2,7 @@ apiVersion: v2
 name: relayflows
 type: application
 version: 0.1.0
+# Tracks the Relayflows npm runtime. It is not used as the bootstrap image tag.
 appVersion: "2.0.42"
 description: >-
   Relayflows customer-cloud worker for running durable workflows on Kubernetes.

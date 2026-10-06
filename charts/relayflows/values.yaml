@@ -13,6 +13,7 @@ imagePullSecrets: []
 
 worker:
   # Stable Cloud worker name. Defaults to the Helm release fullname.
+  # Keep this and cloudUrl unchanged while reusing an enrolled PVC.
   name: ""
   # Agent Relay Cloud URL. A self-hosted Cloud installation can be used here.
   cloudUrl: https://agentrelay.com/cloud
@@ -93,36 +94,42 @@ startupProbe:
     command:
       - /bin/sh
       - -ec
-      - test -s /var/lib/agent-relay/cloud-workers.json
+      - >-
+        agent-relay cloud worker status
+        --name "${AGENT_RELAY_WORKER_NAME}"
+        --base-url "${AGENT_RELAY_CLOUD_URL}"
+        --json >/dev/null
   periodSeconds: 5
   timeoutSeconds: 2
   failureThreshold: 60
 
-readinessProbe:
-  exec:
-    command:
-      - /bin/sh
-      - -ec
-      - test -s /var/lib/agent-relay/cloud-workers.json
-  periodSeconds: 10
-  timeoutSeconds: 2
-  failureThreshold: 3
+# The current worker CLI has no local endpoint that reports Cloud heartbeat
+# health. A persisted registration file is not a readiness signal, so no
+# readiness/liveness probe is installed by default. The foreground worker exits
+# on fatal errors and Kubernetes restarts it. Custom images may supply a real
+# health probe here and/or under livenessProbe.
+readinessProbe: {}
+livenessProbe: {}
 
 podDisruptionBudget:
   enabled: false
-  # Uncomment exactly one when enabled.
+  # With one replica, either example prevents voluntary eviction and therefore
+  # blocks node drains until the PDB or pod is removed. Enable intentionally and
+  # uncomment exactly one.
   # minAvailable: 1
   # maxUnavailable: 0
 
 verticalPodAutoscaler:
   enabled: false
+  # Off records recommendations without evicting the only worker pod. Auto can
+  # interrupt in-flight runs and conflicts with a zero-eviction PDB.
   updateMode: "Off"
 
 networkPolicy:
   enabled: false
-  # By default, an enabled policy permits DNS and outbound HTTPS. Restrict the
-  # destinations with a complete custom list if the cluster supports stable
-  # egress selectors/CIDRs for Cloud, Relayfile, model APIs, and package hosts.
+  # By default, an enabled policy permits DNS and outbound HTTPS. A custom list
+  # replaces the broad HTTPS rule; the DNS UDP/TCP 53 rule remains present.
+  # Restrict HTTPS destinations with selectors/CIDRs supported by the cluster.
   egress: []
 
 # The published Relayflows runtime currently includes linux-x64 binaries only.

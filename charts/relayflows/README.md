@@ -3,8 +3,8 @@
 This chart runs an Agent Relay Cloud worker in a customer's Kubernetes cluster.
 Cloud supplies workflow assignments and short-lived run credentials; the worker
 materializes each assignment locally and hands execution to Relayflows. The pod
-only initiates outbound HTTPS connections, so the chart creates no Service or
-Ingress and needs no cluster-wide RBAC.
+only initiates outbound connections (DNS plus HTTPS), so the chart creates no
+Service or Ingress and needs no cluster-wide RBAC.
 
 ## Architecture
 
@@ -72,6 +72,13 @@ pod starts, the persisted worker credential is reused. After the first
 successful registration, the one-time enrollment Secret can be deleted; the
 Secret reference is optional so replacement pods can start from PVC state.
 
+If first registration fails because a token expired, replace the Secret and
+restart the Deployment so the pod receives the new environment value:
+
+```bash
+kubectl -n relayflows rollout restart deployment/customer-flows-relayflows
+```
+
 Check the worker:
 
 ```bash
@@ -127,14 +134,31 @@ persistence:
 
 Do not scale a release above one replica. To add capacity, mint another worker
 identity and install a second Helm release with its own Secret and PVC.
+`worker.name` and `worker.cloudUrl` identify the registration stored on that
+PVC and must remain stable. The worker fails with an identity-mismatch message
+rather than silently using another registration; use an empty PVC and fresh
+token for a different identity.
+
+The startup probe verifies that the PVC contains the requested worker identity.
+The current worker CLI exposes no local heartbeat-health endpoint, so the chart
+does not install a readiness or liveness probe based on the persistent state
+file. Kubernetes restarts the foreground process when it exits; monitor the
+worker's online state in Agent Relay Cloud for connectivity health.
+
+An enabled PDB that requires the sole replica to remain available intentionally
+blocks voluntary eviction, including node drains. Remove or relax the PDB (or
+delete the pod directly) during planned maintenance. VPA `Off` mode records
+recommendations safely; `Auto` may evict the only worker, interrupt an in-flight
+run, and cannot operate when a zero-eviction PDB is enabled.
 
 ## Network policy
 
 `networkPolicy.enabled=true` denies arbitrary egress while allowing DNS and TCP
-443 to any destination. Use `networkPolicy.egress` to replace those defaults
-with the destination selectors or CIDRs supported by your cluster. Ensure the
-custom rules cover Cloud, Relayfile, model APIs, source-control providers, and
-package registries used by the selected image.
+443 to any destination. Use `networkPolicy.egress` to replace the broad HTTPS
+rule with destination selectors or CIDRs supported by your cluster; the DNS
+UDP/TCP 53 rule remains present. Ensure custom HTTPS rules cover Cloud,
+Relayfile, model APIs, source-control providers, and package registries used by
+the selected image.
 
 ## Parameters
 
@@ -161,11 +185,14 @@ package registries used by the selected image.
 | `persistence.size` | PVC request | `5Gi` |
 | `serviceAccount.create` | Create a dedicated ServiceAccount | `true` |
 | `serviceAccount.automountServiceAccountToken` | Mount Kubernetes API credential | `false` |
+| `startupProbe` | Verify that persisted state contains the configured identity | local worker status |
+| `readinessProbe` / `livenessProbe` | Custom image health probes | `{}` / `{}` |
 | `resources` | Worker requests/limits | requests `250m`, `512Mi` |
 | `podDisruptionBudget.enabled` | Create a PDB | `false` |
 | `verticalPodAutoscaler.enabled` | Create a VPA | `false` |
+| `verticalPodAutoscaler.updateMode` | VPA mode; keep `Off` to avoid automatic eviction | `Off` |
 | `networkPolicy.enabled` | Restrict pod egress | `false` |
-| `networkPolicy.egress` | Complete custom egress rule list | `[]` |
+| `networkPolicy.egress` | Custom HTTPS egress rules; DNS remains allowed | `[]` |
 | `nodeSelector` | Pod node selector | `kubernetes.io/arch: amd64` |
 | `extraEnv` / `extraEnvFrom` | Extra runtime environment | `[]` / `[]` |
 | `extraVolumes` / `extraVolumeMounts` | Customer credential/config mounts | `[]` / `[]` |

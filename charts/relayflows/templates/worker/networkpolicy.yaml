@@ -13,14 +13,15 @@ spec:
   policyTypes:
     - Egress
   egress:
-    {{- if .Values.networkPolicy.egress }}
-    {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
-    {{- else }}
+    # DNS remains available when callers replace the default HTTPS rule.
     - ports:
         - port: 53
           protocol: UDP
         - port: 53
           protocol: TCP
+    {{- if .Values.networkPolicy.egress }}
+    {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+    {{- else }}
     - ports:
         - port: 443
           protocol: TCP

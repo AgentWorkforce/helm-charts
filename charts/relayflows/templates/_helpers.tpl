@@ -69,7 +69,7 @@ app.kubernetes.io/component: worker
 
 {{/* Full image reference. */}}
 {{- define "relayflows.image" -}}
-{{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+{{- $tag := required "image.tag is required because Chart.appVersion tracks the Relayflows runtime, not the bootstrap image" .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end }}
 
@@ -78,7 +78,16 @@ app.kubernetes.io/component: worker
 set -eu
 mkdir -p "${HOME}"
 store="${AGENT_RELAY_HOME}/cloud-workers.json"
-if [ ! -s "${store}" ]; then
+if [ -s "${store}" ]; then
+  if ! agent-relay cloud worker status \
+    --name "${AGENT_RELAY_WORKER_NAME}" \
+    --base-url "${AGENT_RELAY_CLOUD_URL}" \
+    --json >/dev/null 2>&1; then
+    echo "Persisted state does not contain exactly one registration for worker '${AGENT_RELAY_WORKER_NAME}' at '${AGENT_RELAY_CLOUD_URL}'." >&2
+    echo "Keep worker.name and worker.cloudUrl stable when reusing a PVC, or enroll with an empty PVC." >&2
+    exit 1
+  fi
+else
   if [ -z "${AGENT_RELAY_WORKER_ENROLLMENT_TOKEN:-}" ]; then
     echo "No persisted worker registration or enrollment token was found." >&2
     exit 1
