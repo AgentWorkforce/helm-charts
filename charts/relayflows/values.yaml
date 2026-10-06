@@ -6,7 +6,7 @@
 # harness CLIs your flows declare, then set runtimeInstaller.enabled=false.
 image:
   repository: node
-  tag: "22-bookworm-slim"
+  tag: "22.23.3-bookworm-slim"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -31,6 +31,10 @@ runtimeInstaller:
   enabled: true
   agentRelayVersion: "12.4.1"
   relayflowsVersion: "2.0.42"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
 
 telemetry:
   # Keep customer-cluster telemetry opt-in. Cloud assignment traffic and run
@@ -127,9 +131,10 @@ verticalPodAutoscaler:
 
 networkPolicy:
   enabled: false
-  # By default, an enabled policy permits DNS and outbound HTTPS. A custom list
-  # replaces the broad HTTPS rule; the DNS UDP/TCP 53 rule remains present.
-  # Restrict HTTPS destinations with selectors/CIDRs supported by the cluster.
+  # An enabled policy denies all ingress and permits DNS plus outbound HTTPS.
+  # A custom list replaces the broad HTTPS rule; the DNS UDP/TCP 53 rule remains
+  # present. Restrict HTTPS destinations with selectors/CIDRs supported by the
+  # cluster.
   egress: []
 
 # The published Relayflows runtime currently includes linux-x64 binaries only.

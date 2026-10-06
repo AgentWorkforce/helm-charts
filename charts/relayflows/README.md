@@ -39,8 +39,9 @@ model.
 - Helm 3.8+
 - An x86-64 node when using the stock published Relayflows runtime
 - A default StorageClass, or an existing ReadWriteOnce PVC
-- Outbound HTTPS access to Agent Relay Cloud, Relayfile, model/provider APIs,
-  and (when the stock installer is enabled) the npm registry
+- Outbound DNS and HTTPS access to Agent Relay Cloud, Relayfile,
+  model/provider APIs, and (when the stock installer is enabled) the npm
+  registry
 - A fresh worker enrollment token from the Cloud workspace's **Runtimes →
   Workers → Add worker** page
 
@@ -49,15 +50,25 @@ model.
 Keep the one-time enrollment token out of shell history and Helm release data:
 
 ```bash
-kubectl create namespace relayflows
+set -euo pipefail
+kubectl create namespace relayflows --dry-run=client -o yaml | kubectl apply -f -
 umask 077
 token_file=$(mktemp)
 trap 'rm -f "$token_file"' EXIT
-read -rsp 'Enrollment token: ' enrollment_token && printf '\n'
+if ! read -rsp 'Enrollment token: ' enrollment_token; then
+  printf '\nUnable to read enrollment token.\n' >&2
+  exit 1
+fi
+printf '\n'
+if [ -z "$enrollment_token" ]; then
+  echo 'Enrollment token must not be empty.' >&2
+  exit 1
+fi
 printf '%s' "$enrollment_token" >"$token_file"
 unset enrollment_token
 kubectl -n relayflows create secret generic relayflows-enrollment \
-  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file"
+  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file" \
+  --dry-run=client -o yaml | kubectl apply -f -
 rm -f "$token_file"
 trap - EXIT
 
@@ -95,7 +106,7 @@ without a separate image release. It does not contain model harness CLIs. Build
 an image for the flow types you intend to run:
 
 ```dockerfile
-FROM node:22-bookworm-slim
+FROM node:22.23.3-bookworm-slim
 ARG AGENT_RELAY_VERSION=12.4.1
 ARG RELAYFLOWS_VERSION=2.0.42
 RUN npm install -g --ignore-scripts --no-audit --no-fund \
@@ -153,19 +164,19 @@ run, and cannot operate when a zero-eviction PDB is enabled.
 
 ## Network policy
 
-`networkPolicy.enabled=true` denies arbitrary egress while allowing DNS and TCP
-443 to any destination. Use `networkPolicy.egress` to replace the broad HTTPS
-rule with destination selectors or CIDRs supported by your cluster; the DNS
-UDP/TCP 53 rule remains present. Ensure custom HTTPS rules cover Cloud,
-Relayfile, model APIs, source-control providers, and package registries used by
-the selected image.
+`networkPolicy.enabled=true` denies all ingress and arbitrary egress while
+allowing DNS and TCP 443 to any destination. Use `networkPolicy.egress` to
+replace the broad HTTPS rule with destination selectors or CIDRs supported by
+your cluster; the DNS UDP/TCP 53 rule remains present. Ensure custom HTTPS rules
+cover Cloud, Relayfile, model APIs, source-control providers, and package
+registries used by the selected image.
 
 ## Parameters
 
 | Parameter | Description | Default |
 | --- | --- | --- |
 | `image.repository` | Worker/bootstrap image repository | `node` |
-| `image.tag` | Worker/bootstrap image tag | `22-bookworm-slim` |
+| `image.tag` | Worker/bootstrap image tag | `22.23.3-bookworm-slim` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `imagePullSecrets` | Private registry pull secrets | `[]` |
 | `worker.name` | Stable Cloud worker name; release fullname when empty | `""` |
@@ -175,6 +186,7 @@ the selected image.
 | `runtimeInstaller.enabled` | Install pinned CLIs in an init container | `true` |
 | `runtimeInstaller.agentRelayVersion` | `agent-relay` package version | `12.4.1` |
 | `runtimeInstaller.relayflowsVersion` | `relayflows` package version | `2.0.42` |
+| `runtimeInstaller.resources` | Init-container requests/limits | requests `100m`, `256Mi` |
 | `telemetry.enabled` | Enable optional Agent Relay CLI product telemetry | `false` |
 | `credentials.existingSecret` | Secret containing the enrollment token | `""` |
 | `credentials.existingSecretKey` | Enrollment-token key in that Secret | `AGENT_RELAY_WORKER_ENROLLMENT_TOKEN` |
@@ -183,20 +195,31 @@ the selected image.
 | `persistence.storageClass` | StorageClass; `-` disables dynamic provisioning | `""` |
 | `persistence.accessModes` | PVC access modes | `[ReadWriteOnce]` |
 | `persistence.size` | PVC request | `5Gi` |
+| `persistence.annotations` | PVC annotations | `{}` |
+| `persistence.selector` | PVC label selector | `{}` |
 | `serviceAccount.create` | Create a dedicated ServiceAccount | `true` |
+| `serviceAccount.name` | ServiceAccount name override | `""` |
+| `serviceAccount.annotations` | ServiceAccount annotations | `{}` |
 | `serviceAccount.automountServiceAccountToken` | Mount Kubernetes API credential | `false` |
+| `podAnnotations` / `podLabels` | Worker pod metadata | `{}` / `{}` |
+| `podSecurityContext` | Pod-level security context | UID/GID `1000` defaults |
+| `containerSecurityContext` | Worker and installer security context | non-root, read-only root, no capabilities |
 | `startupProbe` | Verify that persisted state contains the configured identity | local worker status |
 | `readinessProbe` / `livenessProbe` | Custom image health probes | `{}` / `{}` |
 | `resources` | Worker requests/limits | requests `250m`, `512Mi` |
 | `podDisruptionBudget.enabled` | Create a PDB | `false` |
+| `podDisruptionBudget.minAvailable` / `maxUnavailable` | Sole-replica eviction policy; set exactly one | unset |
 | `verticalPodAutoscaler.enabled` | Create a VPA | `false` |
 | `verticalPodAutoscaler.updateMode` | VPA mode; keep `Off` to avoid automatic eviction | `Off` |
-| `networkPolicy.enabled` | Restrict pod egress | `false` |
+| `networkPolicy.enabled` | Deny ingress and restrict pod egress | `false` |
 | `networkPolicy.egress` | Custom HTTPS egress rules; DNS remains allowed | `[]` |
 | `nodeSelector` | Pod node selector | `kubernetes.io/arch: amd64` |
+| `tolerations` | Pod tolerations | `[]` |
+| `affinity` | Pod affinity rules | `{}` |
 | `extraEnv` / `extraEnvFrom` | Extra runtime environment | `[]` / `[]` |
 | `extraVolumes` / `extraVolumeMounts` | Customer credential/config mounts | `[]` / `[]` |
 | `extraInitContainers` | Additional image/bootstrap initialization | `[]` |
+| `nameOverride` / `fullnameOverride` | Chart resource-name overrides | `""` / `""` |
 
 ## Uninstall
 
