@@ -1,0 +1,144 @@
+## Default values for the Relayflows customer-cloud worker.
+
+# The stock chart uses the official Node image and installs pinned published
+# packages into an emptyDir before the worker starts. For production agent
+# workloads, use an immutable image containing agent-relay, relayflows, and the
+# harness CLIs your flows declare, then set runtimeInstaller.enabled=false.
+image:
+  repository: node
+  tag: "22-bookworm-slim"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+worker:
+  # Stable Cloud worker name. Defaults to the Helm release fullname.
+  name: ""
+  # Agent Relay Cloud URL. A self-hosted Cloud installation can be used here.
+  cloudUrl: https://agentrelay.com/cloud
+  # The chart supports exactly one replica per worker identity. Multiple worker
+  # identities should be installed as separate Helm releases.
+  # Covers the worker's 30s Cloud heartbeat interval during graceful drain.
+  terminationGracePeriodSeconds: 60
+  # Override the container command/args for a custom worker image.
+  command: []
+  args: []
+
+runtimeInstaller:
+  # Installs the pinned CLIs at pod startup. Disable when image already contains
+  # compatible `agent-relay` and `flows` executables.
+  enabled: true
+  agentRelayVersion: "12.4.1"
+  relayflowsVersion: "2.0.42"
+
+telemetry:
+  # Keep customer-cluster telemetry opt-in. Cloud assignment traffic and run
+  # reporting are operational protocol traffic and are not disabled by this.
+  enabled: false
+
+credentials:
+  # Recommended: create a Secret with AGENT_RELAY_WORKER_ENROLLMENT_TOKEN and
+  # put its name here. Enrollment tokens are one-time and expire after 15m.
+  existingSecret: ""
+  existingSecretKey: AGENT_RELAY_WORKER_ENROLLMENT_TOKEN
+  # Development convenience only. This value is stored in Helm release data.
+  enrollmentToken: ""
+
+persistence:
+  # Registration state includes the long-lived worker credential. It must
+  # survive pod replacement because the enrollment token is one-time.
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  annotations: {}
+  selector: {}
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  # The worker only makes outbound HTTPS calls and does not use the K8s API.
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  # limits:
+  #   cpu: "2"
+  #   memory: 4Gi
+
+startupProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -ec
+      - test -s /var/lib/agent-relay/cloud-workers.json
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 60
+
+readinessProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -ec
+      - test -s /var/lib/agent-relay/cloud-workers.json
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+podDisruptionBudget:
+  enabled: false
+  # Uncomment exactly one when enabled.
+  # minAvailable: 1
+  # maxUnavailable: 0
+
+verticalPodAutoscaler:
+  enabled: false
+  updateMode: "Off"
+
+networkPolicy:
+  enabled: false
+  # By default, an enabled policy permits DNS and outbound HTTPS. Restrict the
+  # destinations with a complete custom list if the cluster supports stable
+  # egress selectors/CIDRs for Cloud, Relayfile, model APIs, and package hosts.
+  egress: []
+
+# The published Relayflows runtime currently includes linux-x64 binaries only.
+# Override this selector only when using a compatible custom image.
+nodeSelector:
+  kubernetes.io/arch: amd64
+tolerations: []
+affinity: {}
+
+# Extra environment variables and envFrom sources are useful for model/provider
+# credentials and customer-specific runtime configuration.
+extraEnv: []
+extraEnvFrom: []
+
+# Extend a custom runtime image with credential/config volumes as needed.
+extraVolumes: []
+extraVolumeMounts: []
+extraInitContainers: []
+
+nameOverride: ""
+fullnameOverride: ""

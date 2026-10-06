@@ -1,0 +1,16 @@
+Relayflows worker {{ include "relayflows.workerName" . }} was installed.
+
+The worker uses outbound HTTPS only; no Service or Ingress was created.
+
+Check registration and logs:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl logs --namespace {{ .Release.Namespace }} deployment/{{ include "relayflows.fullname" . }} -c worker --follow
+
+The worker's registration is stored in PVC {{ include "relayflows.pvcName" . }}.
+The enrollment token is one-time. Preserve that claim across pod replacements.
+
+{{- if .Values.runtimeInstaller.enabled }}
+This release installs pinned npm runtime packages on each pod start. For production
+agent steps, supply an immutable image containing agent-relay, relayflows, and all
+declared harness CLIs, and set runtimeInstaller.enabled=false.
+{{- end }}

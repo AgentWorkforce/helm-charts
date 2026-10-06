@@ -1,0 +1,21 @@
+apiVersion: v2
+name: relayflows
+type: application
+version: 0.1.0
+appVersion: "2.0.42"
+description: >-
+  Relayflows customer-cloud worker for running durable workflows on Kubernetes.
+home: https://github.com/AgentWorkforce/flows
+keywords:
+  - relayflows
+  - workflows
+  - agents
+  - worker
+  - agentworkforce
+maintainers:
+  - name: AgentWorkforce
+    url: https://github.com/AgentWorkforce/helm-charts
+sources:
+  - https://github.com/AgentWorkforce/flows
+  - https://github.com/AgentWorkforce/cloud
+  - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayflows

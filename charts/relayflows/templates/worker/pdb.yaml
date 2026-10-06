@@ -1,0 +1,26 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+{{- $hasMin := and (hasKey .Values.podDisruptionBudget "minAvailable") (not (kindIs "invalid" .Values.podDisruptionBudget.minAvailable)) -}}
+{{- $hasMax := and (hasKey .Values.podDisruptionBudget "maxUnavailable") (not (kindIs "invalid" .Values.podDisruptionBudget.maxUnavailable)) -}}
+{{- if and $hasMin $hasMax -}}
+{{- fail "podDisruptionBudget: set exactly one of minAvailable or maxUnavailable, not both" -}}
+{{- end -}}
+{{- if not (or $hasMin $hasMax) -}}
+{{- fail "podDisruptionBudget.enabled=true requires either minAvailable or maxUnavailable to be set" -}}
+{{- end -}}
+apiVersion: {{ include "relayflows.capabilities.pdb.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "relayflows.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayflows.labels" . | nindent 4 }}
+spec:
+  {{- if $hasMin }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "relayflows.selectorLabels" . | nindent 6 }}
+{{- end }}

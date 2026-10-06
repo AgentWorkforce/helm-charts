@@ -7,6 +7,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | Chart | Description |
 |-------|-------------|
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
+| [relayflows](charts/relayflows) | Relayflows customer-cloud worker — runs workflow assignments inside a customer's Kubernetes cluster |
 
 ## Quick start
 
@@ -25,6 +26,21 @@ helm install relayfile agentworkforce/relayfile \
 ```
 
 See [charts/relayfile/README.md](charts/relayfile/README.md) for the full parameter reference.
+
+### Install Relayflows worker
+
+Create a Secret from a fresh worker enrollment token, then install the
+single-replica outbound worker:
+
+```bash
+kubectl create secret generic relayflows-enrollment \
+  --from-literal=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN='<enrollment-token>'
+helm install relayflows agentworkforce/relayflows \
+  --set credentials.existingSecret=relayflows-enrollment
+```
+
+See [charts/relayflows/README.md](charts/relayflows/README.md) for the runtime
+image contract, persistence requirements, and production configuration.
 
 ## Releases
 
