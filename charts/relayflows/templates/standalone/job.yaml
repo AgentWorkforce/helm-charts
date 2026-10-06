@@ -1,30 +1,30 @@
-{{- if eq (include "relayflows.mode" .) "cloudWorker" -}}
-apiVersion: apps/v1
-kind: Deployment
+{{- if eq (include "relayflows.mode" .) "standalone" -}}
+{{- if not (hasPrefix "/" .Values.standalone.dataDir) -}}
+{{- fail "standalone.dataDir must be an absolute path" -}}
+{{- end -}}
+{{- if and .Values.standalone.localAgent (or (lt (int .Values.standalone.agentCapacity) 1) (gt (int .Values.standalone.agentCapacity) 32)) -}}
+{{- fail "standalone.agentCapacity must be between 1 and 32 when standalone.localAgent=true" -}}
+{{- end -}}
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: {{ include "relayflows.fullname" . }}
+  name: {{ include "relayflows.jobName" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "relayflows.labels" . | nindent 4 }}
 spec:
-  replicas: 1
-  # One Cloud worker identity must never be consumed concurrently. Recreate also
-  # avoids ReadWriteOnce multi-attach races during upgrades.
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      {{- include "relayflows.selectorLabels" . | nindent 6 }}
+  backoffLimit: {{ .Values.standalone.backoffLimit }}
+  {{- with .Values.standalone.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  {{- with .Values.standalone.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
   template:
     metadata:
-      {{- if or .Values.podAnnotations (not .Values.credentials.existingSecret) }}
+      {{- with .Values.podAnnotations }}
       annotations:
-        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- if not .Values.credentials.existingSecret }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
-        {{- end }}
       {{- end }}
       labels:
         {{- with .Values.podLabels }}
@@ -32,9 +32,10 @@ spec:
         {{- end }}
         {{- include "relayflows.selectorLabels" . | nindent 8 }}
     spec:
+      restartPolicy: Never
       serviceAccountName: {{ include "relayflows.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
-      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.standalone.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -49,18 +50,13 @@ spec:
         - name: install-runtime
           image: {{ include "relayflows.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command:
-            - /bin/sh
-            - -ec
+          command: [/bin/sh, -ec]
           args:
             - >-
               npm install --global --prefix /opt/relayflows-runtime
               --ignore-scripts --no-audit --no-fund
-              "agent-relay@${AGENT_RELAY_VERSION}"
               "relayflows@${RELAYFLOWS_VERSION}"
           env:
-            - name: AGENT_RELAY_VERSION
-              value: {{ .Values.runtimeInstaller.agentRelayVersion | quote }}
             - name: RELAYFLOWS_VERSION
               value: {{ .Values.runtimeInstaller.relayflowsVersion | quote }}
             - name: HOME
@@ -86,46 +82,43 @@ spec:
         {{- end }}
       {{- end }}
       containers:
-        - name: worker
+        - name: runner
           image: {{ include "relayflows.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.worker.command }}
+          {{- if .Values.standalone.command }}
           command:
-            {{- toYaml .Values.worker.command | nindent 12 }}
+            {{- toYaml .Values.standalone.command | nindent 12 }}
           {{- else }}
-          command:
-            - /bin/sh
-            - -ec
+          command: [/bin/sh, -ec]
           {{- end }}
-          {{- if .Values.worker.args }}
+          {{- if .Values.standalone.args }}
           args:
-            {{- toYaml .Values.worker.args | nindent 12 }}
-          {{- else if not .Values.worker.command }}
+            {{- toYaml .Values.standalone.args | nindent 12 }}
+          {{- else if not .Values.standalone.command }}
           args:
             - |-
-              {{- include "relayflows.workerScript" . | nindent 14 }}
+              {{- include "relayflows.standaloneScript" . | nindent 14 }}
           {{- end }}
           env:
             - name: HOME
-              value: /var/lib/agent-relay/home
-            - name: AGENT_RELAY_HOME
-              value: /var/lib/agent-relay
-            - name: AGENT_RELAY_CLOUD_URL
-              value: {{ .Values.worker.cloudUrl | quote }}
-            - name: AGENT_RELAY_WORKER_NAME
-              value: {{ include "relayflows.workerName" . | quote }}
-            - name: AGENT_RELAY_WORKER_ENROLLMENT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "relayflows.secretName" . }}
-                  key: {{ .Values.credentials.existingSecretKey | quote }}
-                  # Registration state is durable, but enrollment tokens are
-                  # one-time. Permit the spent Secret to be removed after the
-                  # first successful registration.
-                  optional: true
-            {{- if not .Values.telemetry.enabled }}
-            - name: AGENT_RELAY_TELEMETRY_DISABLED
-              value: "1"
+              value: {{ printf "%s/home" (trimSuffix "/" .Values.standalone.dataDir) | quote }}
+            - name: RELAYFLOWS_DATA_DIR
+              value: {{ .Values.standalone.dataDir | quote }}
+            {{- if and (not .Values.standalone.resumeRunId) (not .Values.standalone.command) }}
+            - name: RELAYFLOWS_FLOW_PATH
+              value: {{ include "relayflows.standaloneFlowPath" . | quote }}
+            {{- end }}
+            {{- with .Values.standalone.input }}
+            - name: RELAYFLOWS_INPUT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.standalone.resumeRunId }}
+            - name: RELAYFLOWS_RUN_ID
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.standalone.localAgent }}
+            - name: RELAYFLOWS_AGENT_CAPACITY
+              value: {{ .Values.standalone.agentCapacity | quote }}
             {{- end }}
             {{- if .Values.runtimeInstaller.enabled }}
             - name: PATH
@@ -142,29 +135,24 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.startupProbe }}
-          startupProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.livenessProbe }}
-          livenessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: state
-              mountPath: /var/lib/agent-relay
-            - name: runtime
-              mountPath: /opt/relayflows-runtime
+              mountPath: {{ .Values.standalone.dataDir | quote }}
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.runtimeInstaller.enabled }}
+            - name: runtime
+              mountPath: /opt/relayflows-runtime
+            {{- end }}
+            {{- if or .Values.standalone.flow.content .Values.standalone.flow.existingConfigMap }}
+            - name: flow
+              mountPath: /opt/relayflows/flow
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -172,10 +160,17 @@ spec:
         - name: state
           persistentVolumeClaim:
             claimName: {{ include "relayflows.pvcName" . }}
-        - name: runtime
-          emptyDir: {}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.runtimeInstaller.enabled }}
+        - name: runtime
+          emptyDir: {}
+        {{- end }}
+        {{- if or .Values.standalone.flow.content .Values.standalone.flow.existingConfigMap }}
+        - name: flow
+          configMap:
+            name: {{ default (include "relayflows.flowConfigMapName" .) .Values.standalone.flow.existingConfigMap }}
+        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

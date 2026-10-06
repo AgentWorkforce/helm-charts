@@ -22,6 +22,14 @@
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* Validate and return the execution mode. */}}
+{{- define "relayflows.mode" -}}
+{{- if and (ne .Values.mode "standalone") (ne .Values.mode "cloudWorker") -}}
+{{- fail "mode must be either standalone or cloudWorker" -}}
+{{- end -}}
+{{- .Values.mode -}}
+{{- end }}
+
 {{/* Common labels. */}}
 {{- define "relayflows.labels" -}}
 helm.sh/chart: {{ include "relayflows.chart" . }}
@@ -36,7 +44,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "relayflows.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "relayflows.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: worker
+app.kubernetes.io/component: {{ ternary "runner" "worker" (eq (include "relayflows.mode" .) "standalone") }}
+{{- end }}
+
+{{/* Standalone Jobs are revisioned because their pod templates are immutable. */}}
+{{- define "relayflows.jobName" -}}
+{{- printf "%s-%d" (include "relayflows.fullname" .) .Release.Revision | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/* Chart-managed standalone flow ConfigMap name. */}}
+{{- define "relayflows.flowConfigMapName" -}}
+{{- printf "%s-flow" (include "relayflows.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
 {{/* Service account name. */}}
@@ -71,6 +89,46 @@ app.kubernetes.io/component: worker
 {{- define "relayflows.image" -}}
 {{- $tag := required "image.tag is required because Chart.appVersion tracks the Relayflows runtime, not the bootstrap image" .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
+{{- end }}
+
+{{/* Resolve and validate the standalone flow source. */}}
+{{- define "relayflows.standaloneFlowPath" -}}
+{{- $flow := .Values.standalone.flow -}}
+{{- $sourceCount := 0 -}}
+{{- if $flow.path }}{{- $sourceCount = add1 $sourceCount -}}{{- end -}}
+{{- if $flow.content }}{{- $sourceCount = add1 $sourceCount -}}{{- end -}}
+{{- if $flow.existingConfigMap }}{{- $sourceCount = add1 $sourceCount -}}{{- end -}}
+{{- if ne $sourceCount 1 -}}
+{{- fail "standalone requires exactly one of standalone.flow.path, standalone.flow.content, or standalone.flow.existingConfigMap (unless standalone.resumeRunId is set)" -}}
+{{- end -}}
+{{- if or $flow.content $flow.existingConfigMap -}}
+{{- if not $flow.configMapKey -}}{{- fail "standalone.flow.configMapKey must not be empty" -}}{{- end -}}
+{{- printf "/opt/relayflows/flow/%s" $flow.configMapKey -}}
+{{- else -}}
+{{- $flow.path -}}
+{{- end -}}
+{{- end }}
+
+{{/* Default standalone invocation. relayflowd is spawned locally by the CLI. */}}
+{{- define "relayflows.standaloneScript" -}}
+set -eu
+mkdir -p "${HOME}" "${RELAYFLOWS_DATA_DIR}"
+{{- if .Values.standalone.resumeRunId }}
+exec flows resume \
+  --no-observer-link \
+  --data-dir "${RELAYFLOWS_DATA_DIR}"{{ if .Values.standalone.localAgent }} \
+  --local-agent \
+  --agent-capacity "${RELAYFLOWS_AGENT_CAPACITY}"{{ end }} \
+  "${RELAYFLOWS_RUN_ID}"
+{{- else }}
+exec flows run \
+  --no-observer-link \
+  --data-dir "${RELAYFLOWS_DATA_DIR}"{{ if .Values.standalone.localAgent }} \
+  --local-agent \
+  --agent-capacity "${RELAYFLOWS_AGENT_CAPACITY}"{{ end }}{{ if .Values.standalone.input }} \
+  --input "${RELAYFLOWS_INPUT}"{{ end }} \
+  "${RELAYFLOWS_FLOW_PATH}"
+{{- end }}
 {{- end }}
 
 {{/* Default worker bootstrap and foreground process. */}}

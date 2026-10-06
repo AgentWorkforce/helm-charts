@@ -1,57 +1,163 @@
 # Relayflows Helm Chart
 
-This chart runs an Agent Relay Cloud worker in a customer's Kubernetes cluster.
-Cloud supplies workflow assignments and short-lived run credentials; the worker
-materializes each assignment locally and hands execution to Relayflows. The pod
-only initiates outbound connections (DNS plus HTTPS), so the chart creates no
-Service or Ingress and needs no cluster-wide RBAC.
+This chart runs Relayflows v2 directly in Kubernetes. Its default `standalone`
+mode creates a one-shot Job, starts the local `relayflowd` orchestrator inside
+that pod, executes the flow, and stores durable run journals on a PVC. It does
+not enroll with, call, or otherwise depend on Agent Relay Cloud.
 
-## Architecture
+An optional `cloudWorker` mode keeps the existing long-lived worker integration
+for teams that want Cloud to assign runs. Neither mode creates a Service,
+Ingress, or cluster-wide RBAC.
 
-- One worker identity per Helm release and exactly one pod per identity.
-- A `Recreate` Deployment prevents two pods from consuming the same identity
-  during an upgrade.
-- A PVC stores `cloud-workers.json`, including the credential returned during
-  registration. This state must survive pod replacement because enrollment
-  tokens are single-use and expire after 15 minutes.
-- The stock configuration installs pinned `agent-relay` and `relayflows` npm
-  packages into an `emptyDir` before startup. This is a portable bootstrap path,
-  not the recommended production image strategy.
-- Production agent flows should use an immutable custom image containing
-  `agent-relay`, `flows`, and every harness CLI declared by those flows (for
-  example Codex or Claude), with `runtimeInstaller.enabled=false`.
+## Execution model
 
-The durable Relayflows kernel uses a local Unix socket. It is intentionally not
-exposed as a Kubernetes Service. The Cloud worker is the supported network
-boundary: it polls for assignments, starts Relayflows locally, and reports the
-result back to Cloud.
+In standalone mode:
 
-This chart packages Cloud's existing long-lived worker contract. Workflow runs
-are isolated into per-run directories inside that pod, but the chart does not
-create a Kubernetes Job or pod per workflow step. The draft Cloud BYOI
-container-per-step/Kubernetes driver is a separate future runtime seam; this
-worker does not need Kubernetes API access and does not claim that isolation
-model.
+1. Kubernetes starts a revisioned Job.
+2. The Job invokes `flows run --no-observer-link` (or `flows resume`).
+3. The `flows` CLI starts and connects to `relayflowd` in the same pod.
+4. `relayflowd` is the durable orchestrator; its journals live on the PVC.
+5. With `standalone.localAgent=true`, agent steps run through harness CLIs in
+   the same container.
+
+Cloud is therefore not part of execution. The tradeoff is that Cloud-provided
+assignment, hosted event routing, UI observability, and centralized scheduling
+are also absent. Kubernetes, Argo, KEDA, or another local controller can create
+or upgrade releases to trigger Jobs. The current runtime runs the whole flow in
+one pod; it does not create a pod per step.
 
 ## Prerequisites
 
 - Kubernetes 1.21+
 - Helm 3.8+
-- An x86-64 node when using the stock published Relayflows runtime
+- An x86-64 node when using the published Relayflows runtime
 - A default StorageClass, or an existing ReadWriteOnce PVC
-- Outbound DNS and HTTPS access to Agent Relay Cloud, Relayfile,
-  model/provider APIs, and (when the stock installer is enabled) the npm
-  registry
-- A fresh worker enrollment token from the Cloud workspace's **Runtimes →
-  Workers → Add worker** page
+- For agent steps, an image containing the selected harness CLI and a Secret
+  containing that provider's credentials
+- Outbound access to provider APIs and, when `runtimeInstaller.enabled=true`,
+  the npm registry
 
-## Install
+## Run a local flow
 
-Keep the one-time enrollment token out of shell history and Helm release data:
+Production flows should be packaged with their source, dependencies, and
+harness CLIs in an immutable image:
+
+```dockerfile
+FROM node:22.23.3-bookworm-slim
+ARG RELAYFLOWS_VERSION=2.0.42
+ARG CLAUDE_CODE_VERSION
+RUN test -n "${CLAUDE_CODE_VERSION}" && \
+    npm install -g --ignore-scripts --no-audit --no-fund \
+      "relayflows@${RELAYFLOWS_VERSION}" \
+      "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+COPY flows/ /app/flows/
+USER node
+```
+
+Create the model credential without putting it in Helm release data:
 
 ```bash
-set -euo pipefail
 kubectl create namespace relayflows --dry-run=client -o yaml | kubectl apply -f -
+umask 077
+credential_file=$(mktemp)
+trap 'rm -f "$credential_file"' EXIT
+printf '%s' "$ANTHROPIC_API_KEY" >"$credential_file"
+kubectl -n relayflows create secret generic model-credentials \
+  --from-file=ANTHROPIC_API_KEY="$credential_file"
+rm -f "$credential_file"
+trap - EXIT
+```
+
+Use a values file so JSON input and Secret references are not mangled by shell
+or Helm `--set` parsing:
+
+```yaml
+# local-values.yaml
+image:
+  repository: registry.example.com/acme/customer-flow
+  tag: sha-0123456789abcdef
+runtimeInstaller:
+  enabled: false
+standalone:
+  flow:
+    path: /app/flows/customer.flow.ts
+  input: '{"prompt":"process the queue"}'
+extraEnvFrom:
+  - secretRef:
+      name: model-credentials
+```
+
+```bash
+helm install customer-flow agentworkforce/relayflows \
+  --namespace relayflows \
+  --values local-values.yaml
+kubectl -n relayflows logs job/customer-flow-relayflows-1 -c runner -f
+```
+
+`ANTHROPIC_API_KEY` is inherited by the in-pod Claude Code process. The key is
+not sent to Agent Relay Cloud; in standalone mode there is no Cloud process or
+Cloud credential at all. The image must still contain the `claude` executable,
+and the flow must select the matching harness.
+
+### ConfigMap flow
+
+A self-contained declarative YAML/JSON flow can be stored in a chart-managed
+ConfigMap while the init container installs the published runtime:
+
+```yaml
+standalone:
+  flow:
+    configMapKey: flow.yaml
+    content: |-
+      # complete Relayflows flow specification
+      version: "0.1.0"
+      # ...
+```
+
+Or mount an existing ConfigMap:
+
+```yaml
+standalone:
+  flow:
+    existingConfigMap: customer-flow
+    configMapKey: flow.yaml
+```
+
+Use an image-bundled flow when authored TypeScript imports project packages or
+when agent steps need harness CLIs. Exactly one of `path`, `content`, or
+`existingConfigMap` is required for a new run.
+
+## Durable state and resume
+
+The Job writes run journals and its local home under
+`standalone.dataDir` (`/var/lib/relayflows` by default), backed by the release
+PVC. The Job has `backoffLimit: 0` because an automatic Kubernetes retry could
+start a second flow run. Resume an interrupted, parked, or suspended run
+explicitly:
+
+```bash
+helm upgrade customer-flow agentworkforce/relayflows \
+  --namespace relayflows \
+  --reuse-values \
+  --set standalone.resumeRunId=<run-id>
+```
+
+Every standalone install or upgrade creates a Job for that Helm revision. Clear
+`standalone.resumeRunId` before intentionally starting a fresh run. To retain
+journals independently of the release lifecycle, provision a PVC separately:
+
+```yaml
+persistence:
+  existingClaim: relayflows-state
+```
+
+## Optional Cloud worker mode
+
+Set `mode: cloudWorker` to run the single-replica, outbound-only Agent Relay
+Cloud worker from the original chart design. This mode requires a fresh worker
+enrollment token and stores its long-lived registration on the PVC:
+
+```bash
 umask 077
 token_file=$(mktemp)
 trap 'rm -f "$token_file"' EXIT
@@ -60,173 +166,80 @@ if ! read -rsp 'Enrollment token: ' enrollment_token; then
   exit 1
 fi
 printf '\n'
-if [ -z "$enrollment_token" ]; then
-  echo 'Enrollment token must not be empty.' >&2
-  exit 1
-fi
 printf '%s' "$enrollment_token" >"$token_file"
 unset enrollment_token
 kubectl -n relayflows create secret generic relayflows-enrollment \
-  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file"
 rm -f "$token_file"
 trap - EXIT
-
-helm install customer-flows agentworkforce/relayflows \
+helm install customer-worker agentworkforce/relayflows \
   --namespace relayflows \
-  --set credentials.existingSecret=relayflows-enrollment \
-  --set worker.name=customer-k8s
+  --set mode=cloudWorker \
+  --set credentials.existingSecret=relayflows-enrollment
 ```
 
-The token is redeemed only when the PVC has no registration. On subsequent
-pod starts, the persisted worker credential is reused. After the first
-successful registration, the one-time enrollment Secret can be deleted; the
-Secret reference is optional so replacement pods can start from PVC state.
+Cloud mode uses a `Recreate` Deployment so two pods cannot consume one worker
+identity. Keep `worker.name`, `worker.cloudUrl`, and the PVC stable after
+enrollment. The one-time Secret may be removed after successful registration.
+When reinstalling against an already-enrolled `persistence.existingClaim`, the
+enrollment Secret may be omitted; a fresh PVC without a token fails at runtime
+with a clear message. PDB, VPA, and worker probes apply only to this mode.
 
-If first registration fails because a token expired, replace the Secret and
-restart the Deployment so the pod receives the new environment value:
+## Network policy and security
 
-```bash
-kubectl -n relayflows rollout restart deployment/customer-flows-relayflows
-```
+`networkPolicy.enabled=true` denies ingress and permits DNS plus outbound TCP
+443. Set `networkPolicy.egress` to replace broad HTTPS egress with cluster-
+specific selectors or CIDRs. Standalone agent flows usually need model API,
+source-control, and package-registry destinations; Cloud mode additionally
+needs the configured Cloud and Relayfile endpoints.
 
-Check the worker:
-
-```bash
-kubectl -n relayflows get pods
-kubectl -n relayflows logs deployment/customer-flows-relayflows -c worker -f
-```
-
-Select that online worker as the workspace's runtime in Agent Relay Cloud.
-
-## Production image
-
-The default Node image plus init-container installer makes the chart usable
-without a separate image release. It does not contain model harness CLIs. Build
-an image for the flow types you intend to run:
-
-```dockerfile
-FROM node:22.23.3-bookworm-slim
-ARG AGENT_RELAY_VERSION=12.4.1
-ARG RELAYFLOWS_VERSION=2.0.42
-RUN npm install -g --ignore-scripts --no-audit --no-fund \
-      "agent-relay@${AGENT_RELAY_VERSION}" "relayflows@${RELAYFLOWS_VERSION}"
-# Install and pin the required harness CLIs here.
-USER node
-```
-
-Push it to the customer's registry and install with:
-
-```yaml
-image:
-  repository: registry.example.com/agentworkforce/relayflows-worker
-  tag: "sha-0123456789abcdef"
-runtimeInstaller:
-  enabled: false
-imagePullSecrets:
-  - name: registry-credentials
-```
-
-The image must provide `/bin/sh`, `agent-relay`, `flows`, and any declared
-harness executables. It must run as UID 1000 with a read-only root filesystem;
-the chart mounts writable state (and the worker's `HOME`) under
-`/var/lib/agent-relay` and writable scratch space at `/tmp`.
-
-## Persistence and lifecycle
-
-The chart-created PVC follows normal Helm ownership and is deleted on
-`helm uninstall`. A new install then requires a new enrollment token. To retain
-state independently of the release, provision a PVC separately and set:
-
-```yaml
-persistence:
-  existingClaim: relayflows-worker-state
-```
-
-Do not scale a release above one replica. To add capacity, mint another worker
-identity and install a second Helm release with its own Secret and PVC.
-`worker.name` and `worker.cloudUrl` identify the registration stored on that
-PVC and must remain stable. The worker fails with an identity-mismatch message
-rather than silently using another registration; use an empty PVC and fresh
-token for a different identity.
-
-The startup probe verifies that the PVC contains the requested worker identity.
-The current worker CLI exposes no local heartbeat-health endpoint, so the chart
-does not install a readiness or liveness probe based on the persistent state
-file. Kubernetes restarts the foreground process when it exits; monitor the
-worker's online state in Agent Relay Cloud for connectivity health.
-
-An enabled PDB that requires the sole replica to remain available intentionally
-blocks voluntary eviction, including node drains. Remove or relax the PDB (or
-delete the pod directly) during planned maintenance. VPA `Off` mode records
-recommendations safely; `Auto` may evict the only worker, interrupt an in-flight
-run, and cannot operate when a zero-eviction PDB is enabled.
-
-## Network policy
-
-`networkPolicy.enabled=true` denies all ingress and arbitrary egress while
-allowing DNS and TCP 443 to any destination. Use `networkPolicy.egress` to
-replace the broad HTTPS rule with destination selectors or CIDRs supported by
-your cluster; the DNS UDP/TCP 53 rule remains present. Ensure custom HTTPS rules
-cover Cloud, Relayfile, model APIs, source-control providers, and package
-registries used by the selected image.
+Pods run as UID 1000, drop Linux capabilities, use a read-only root filesystem,
+and do not mount a Kubernetes API token by default. Writable PVC and `/tmp`
+mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
+`extraVolumeMounts` pass customer credentials and configuration to the runtime.
 
 ## Parameters
 
 | Parameter | Description | Default |
 | --- | --- | --- |
-| `image.repository` | Worker/bootstrap image repository | `node` |
-| `image.tag` | Worker/bootstrap image tag | `22.23.3-bookworm-slim` |
-| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
-| `imagePullSecrets` | Private registry pull secrets | `[]` |
-| `worker.name` | Stable Cloud worker name; release fullname when empty | `""` |
-| `worker.cloudUrl` | Agent Relay Cloud or self-hosted Cloud base URL | `https://agentrelay.com/cloud` |
-| `worker.terminationGracePeriodSeconds` | Graceful worker drain window | `60` |
-| `worker.command` / `worker.args` | Custom image command override | `[]` / `[]` |
-| `runtimeInstaller.enabled` | Install pinned CLIs in an init container | `true` |
-| `runtimeInstaller.agentRelayVersion` | `agent-relay` package version | `12.4.1` |
-| `runtimeInstaller.relayflowsVersion` | `relayflows` package version | `2.0.42` |
-| `runtimeInstaller.resources` | Init-container requests/limits | requests `100m`, `256Mi` |
-| `telemetry.enabled` | Enable optional Agent Relay CLI product telemetry | `false` |
-| `credentials.existingSecret` | Secret containing the enrollment token | `""` |
-| `credentials.existingSecretKey` | Enrollment-token key in that Secret | `AGENT_RELAY_WORKER_ENROLLMENT_TOKEN` |
-| `credentials.enrollmentToken` | Chart-managed enrollment token (development only) | `""` |
-| `persistence.existingClaim` | Existing PVC for worker registration state | `""` |
-| `persistence.storageClass` | StorageClass; `-` disables dynamic provisioning | `""` |
-| `persistence.accessModes` | PVC access modes | `[ReadWriteOnce]` |
-| `persistence.size` | PVC request | `5Gi` |
-| `persistence.annotations` | PVC annotations | `{}` |
-| `persistence.selector` | PVC label selector | `{}` |
-| `serviceAccount.create` | Create a dedicated ServiceAccount | `true` |
-| `serviceAccount.name` | ServiceAccount name override | `""` |
-| `serviceAccount.annotations` | ServiceAccount annotations | `{}` |
-| `serviceAccount.automountServiceAccountToken` | Mount Kubernetes API credential | `false` |
-| `podAnnotations` / `podLabels` | Worker pod metadata | `{}` / `{}` |
-| `podSecurityContext` | Pod-level security context | UID/GID `1000` defaults |
-| `containerSecurityContext` | Worker and installer security context | non-root, read-only root, no capabilities |
-| `startupProbe` | Verify that persisted state contains the configured identity | local worker status |
-| `readinessProbe` / `livenessProbe` | Custom image health probes | `{}` / `{}` |
-| `resources` | Worker requests/limits | requests `250m`, `512Mi` |
-| `podDisruptionBudget.enabled` | Create a PDB | `false` |
-| `podDisruptionBudget.minAvailable` / `maxUnavailable` | Sole-replica eviction policy; set exactly one | unset |
-| `verticalPodAutoscaler.enabled` | Create a VPA | `false` |
-| `verticalPodAutoscaler.updateMode` | VPA mode; keep `Off` to avoid automatic eviction | `Off` |
-| `networkPolicy.enabled` | Deny ingress and restrict pod egress | `false` |
-| `networkPolicy.egress` | Custom HTTPS egress rules; DNS remains allowed | `[]` |
-| `nodeSelector` | Pod node selector | `kubernetes.io/arch: amd64` |
-| `tolerations` | Pod tolerations | `[]` |
-| `affinity` | Pod affinity rules | `{}` |
-| `extraEnv` / `extraEnvFrom` | Extra runtime environment | `[]` / `[]` |
-| `extraVolumes` / `extraVolumeMounts` | Customer credential/config mounts | `[]` / `[]` |
-| `extraInitContainers` | Additional image/bootstrap initialization | `[]` |
-| `nameOverride` / `fullnameOverride` | Chart resource-name overrides | `""` / `""` |
+| `mode` | `standalone` Job or `cloudWorker` Deployment | `standalone` |
+| `image.repository` / `image.tag` | Runtime image | `node` / `22.23.3-bookworm-slim` |
+| `image.pullPolicy` / `imagePullSecrets` | Image pull configuration | `IfNotPresent` / `[]` |
+| `standalone.flow.path` | Flow path bundled in the image | `""` |
+| `standalone.flow.content` | Flow stored in a generated ConfigMap | `""` |
+| `standalone.flow.existingConfigMap` | Existing flow ConfigMap | `""` |
+| `standalone.flow.configMapKey` | Flow key and mounted filename | `flow.yaml` |
+| `standalone.input` | JSON input for a new run | `""` |
+| `standalone.resumeRunId` | Durable run ID to resume instead of starting | `""` |
+| `standalone.localAgent` / `agentCapacity` | Run local agent workers and capacity | `true` / `1` |
+| `standalone.dataDir` | PVC-backed relayflowd data directory | `/var/lib/relayflows` |
+| `standalone.backoffLimit` | Kubernetes Job retries | `0` |
+| `standalone.activeDeadlineSeconds` | Optional Job deadline | `null` |
+| `standalone.ttlSecondsAfterFinished` | Optional completed-Job TTL | `null` |
+| `standalone.command` / `standalone.args` | Custom runner command | `[]` / `[]` |
+| `worker.*` | Cloud worker identity, URL, grace period, command | see `values.yaml` |
+| `runtimeInstaller.enabled` | Install pinned runtime CLIs at pod startup | `true` |
+| `runtimeInstaller.relayflowsVersion` | Relayflows package version | `2.0.42` |
+| `runtimeInstaller.agentRelayVersion` | Cloud-mode agent-relay version | `12.4.1` |
+| `credentials.*` | Cloud-mode enrollment Secret or token | unset |
+| `persistence.existingClaim` | Existing durable-state PVC | `""` |
+| `persistence.storageClass` / `size` | Chart PVC class and request | `""` / `5Gi` |
+| `serviceAccount.*` | ServiceAccount settings | created; token disabled |
+| `podSecurityContext` / `containerSecurityContext` | Pod security settings | non-root hardened defaults |
+| `resources` / `runtimeInstaller.resources` | Runner and installer resources | see `values.yaml` |
+| `networkPolicy.enabled` / `egress` | Deny ingress and control egress | `false` / `[]` |
+| `podDisruptionBudget.*` / `verticalPodAutoscaler.*` | Cloud-mode availability and sizing | disabled |
+| `nodeSelector` | Runtime architecture selector | `kubernetes.io/arch: amd64` |
+| `tolerations` / `affinity` | Pod scheduling | `[]` / `{}` |
+| `extraEnv` / `extraEnvFrom` | Provider and runtime environment | `[]` / `[]` |
+| `extraVolumes` / `extraVolumeMounts` | Customer mounts | `[]` / `[]` |
+| `extraInitContainers` | Additional initialization | `[]` |
 
 ## Uninstall
 
 ```bash
-helm uninstall customer-flows --namespace relayflows
+helm uninstall customer-flow --namespace relayflows
 ```
 
-This deletes the chart-managed PVC and registration state. The Cloud worker
-record can then be revoked from the workspace UI. Existing PVCs supplied via
-`persistence.existingClaim` are not deleted by Helm.
+This deletes a chart-managed PVC and its journals. A PVC supplied through
+`persistence.existingClaim` is not owned or deleted by the chart.

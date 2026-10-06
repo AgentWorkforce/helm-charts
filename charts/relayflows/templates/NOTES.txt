@@ -1,4 +1,18 @@
-Relayflows worker {{ include "relayflows.workerName" . }} was installed.
+{{- if eq (include "relayflows.mode" .) "standalone" }}
+Relayflows standalone Job {{ include "relayflows.jobName" . }} was installed.
+
+This run is local to Kubernetes. It does not register with or depend on Agent
+Relay Cloud. The `flows` CLI starts relayflowd inside the pod and stores durable
+run journals on PVC {{ include "relayflows.pvcName" . }}.
+
+Watch the run:
+  kubectl logs --namespace {{ .Release.Namespace }} job/{{ include "relayflows.jobName" . }} -c runner --follow
+  kubectl get job --namespace {{ .Release.Namespace }} {{ include "relayflows.jobName" . }}
+
+To resume a suspended or interrupted run, upgrade the release with:
+  helm upgrade {{ .Release.Name }} <chart> --namespace {{ .Release.Namespace }} --reuse-values --set standalone.resumeRunId=<run-id>
+{{- else }}
+Relayflows Cloud worker {{ include "relayflows.workerName" . }} was installed.
 
 The worker uses outbound DNS and HTTPS; no Service or Ingress was created.
 
@@ -8,9 +22,10 @@ Check registration and logs:
 
 The worker's registration is stored in PVC {{ include "relayflows.pvcName" . }}.
 The enrollment token is one-time. Preserve that claim across pod replacements.
+{{- end }}
 
 {{ if .Values.runtimeInstaller.enabled -}}
-This release installs pinned npm runtime packages on each pod start. For production
-agent steps, supply an immutable image containing agent-relay, relayflows, and all
-declared harness CLIs, and set runtimeInstaller.enabled=false.
+This release installs pinned npm runtime packages on pod startup. For production
+agent steps, supply an immutable image containing Relayflows and all declared
+harness CLIs, then set runtimeInstaller.enabled=false.
 {{- end }}

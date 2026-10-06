@@ -1,4 +1,4 @@
-{{- if .Values.verticalPodAutoscaler.enabled -}}
+{{- if and (eq (include "relayflows.mode" .) "cloudWorker") .Values.verticalPodAutoscaler.enabled -}}
 apiVersion: {{ include "relayflows.capabilities.vpa.apiVersion" . }}
 kind: VerticalPodAutoscaler
 metadata:

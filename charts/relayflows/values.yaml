@@ -1,9 +1,12 @@
-## Default values for the Relayflows customer-cloud worker.
+## Default values for Relayflows on Kubernetes.
+
+# standalone runs a flow entirely inside a Kubernetes Job and does not contact
+# Agent Relay Cloud. cloudWorker retains the optional Cloud assignment worker.
+mode: standalone
 
 # The stock chart uses the official Node image and installs pinned published
-# packages into an emptyDir before the worker starts. For production agent
-# workloads, use an immutable image containing agent-relay, relayflows, and the
-# harness CLIs your flows declare, then set runtimeInstaller.enabled=false.
+# packages into an emptyDir. For production agent workloads, use an immutable
+# image containing relayflows, the flow source, and every required harness CLI.
 image:
   repository: node
   tag: "22.23.3-bookworm-slim"
@@ -11,23 +14,44 @@ image:
 
 imagePullSecrets: []
 
+standalone:
+  # Run a flow from an image path, inline chart-managed ConfigMap, or existing
+  # ConfigMap. Set exactly one source unless resumeRunId is set.
+  flow:
+    path: ""
+    content: ""
+    existingConfigMap: ""
+    configMapKey: flow.yaml
+  # JSON passed to an authored TypeScript flow via `flows run --input`.
+  input: ""
+  # Explicitly resume this durable run instead of starting a new one.
+  resumeRunId: ""
+  # Attach in-process workers for agent steps. The image must contain each
+  # harness CLI used by the flow, such as Claude Code or Codex.
+  localAgent: true
+  agentCapacity: 1
+  dataDir: /var/lib/relayflows
+  terminationGracePeriodSeconds: 30
+  # A retry would create a second run, so failed Jobs do not retry by default.
+  backoffLimit: 0
+  activeDeadlineSeconds: null
+  ttlSecondsAfterFinished: null
+  command: []
+  args: []
+
+# Cloud-only settings. Used when mode=cloudWorker.
 worker:
   # Stable Cloud worker name. Defaults to the Helm release fullname.
   # Keep this and cloudUrl unchanged while reusing an enrolled PVC.
   name: ""
-  # Agent Relay Cloud URL. A self-hosted Cloud installation can be used here.
   cloudUrl: https://agentrelay.com/cloud
-  # The chart supports exactly one replica per worker identity. Multiple worker
-  # identities should be installed as separate Helm releases.
-  # Covers the worker's 30s Cloud heartbeat interval during graceful drain.
   terminationGracePeriodSeconds: 60
-  # Override the container command/args for a custom worker image.
   command: []
   args: []
 
 runtimeInstaller:
-  # Installs the pinned CLIs at pod startup. Disable when image already contains
-  # compatible `agent-relay` and `flows` executables.
+  # Installs pinned CLIs at pod startup. Standalone mode installs relayflows;
+  # cloudWorker mode also installs agent-relay. Disable for immutable images.
   enabled: true
   agentRelayVersion: "12.4.1"
   relayflowsVersion: "2.0.42"
@@ -37,23 +61,16 @@ runtimeInstaller:
       memory: 256Mi
 
 telemetry:
-  # Keep customer-cluster telemetry opt-in. Cloud assignment traffic and run
-  # reporting are operational protocol traffic and are not disabled by this.
   enabled: false
 
+# Cloud-worker enrollment only. Not rendered or required in standalone mode.
 credentials:
-  # Recommended: create a Secret with AGENT_RELAY_WORKER_ENROLLMENT_TOKEN and
-  # put its name here. Enrollment tokens are one-time and expire after 15m.
-  # The Secret may be removed after registration; replacement pods reuse the
-  # durable credential on the PVC through an optional Secret reference.
   existingSecret: ""
   existingSecretKey: AGENT_RELAY_WORKER_ENROLLMENT_TOKEN
-  # Development convenience only. This value is stored in Helm release data.
   enrollmentToken: ""
 
 persistence:
-  # Registration state includes the long-lived worker credential. It must
-  # survive pod replacement because the enrollment token is one-time.
+  # Stores standalone run journals or Cloud worker registration state.
   existingClaim: ""
   storageClass: ""
   accessModes:
@@ -66,7 +83,7 @@ serviceAccount:
   create: true
   annotations: {}
   name: ""
-  # The worker only makes outbound HTTPS calls and does not use the K8s API.
+  # Neither mode needs the Kubernetes API.
   automountServiceAccountToken: false
 
 podAnnotations: {}
@@ -89,10 +106,8 @@ resources:
   requests:
     cpu: 250m
     memory: 512Mi
-  # limits:
-  #   cpu: "2"
-  #   memory: 4Gi
 
+# Cloud-worker probes. Standalone Jobs intentionally have no probes.
 startupProbe:
   exec:
     command:
@@ -106,50 +121,35 @@ startupProbe:
   periodSeconds: 5
   timeoutSeconds: 2
   failureThreshold: 60
-
-# The current worker CLI has no local endpoint that reports Cloud heartbeat
-# health. A persisted registration file is not a readiness signal, so no
-# readiness/liveness probe is installed by default. The foreground worker exits
-# on fatal errors and Kubernetes restarts it. Custom images may supply a real
-# health probe here and/or under livenessProbe.
 readinessProbe: {}
 livenessProbe: {}
 
+# PDB and VPA apply only to mode=cloudWorker.
 podDisruptionBudget:
   enabled: false
-  # With one replica, either example prevents voluntary eviction and therefore
-  # blocks node drains until the PDB or pod is removed. Enable intentionally and
-  # uncomment exactly one.
   # minAvailable: 1
   # maxUnavailable: 0
 
 verticalPodAutoscaler:
   enabled: false
-  # Off records recommendations without evicting the only worker pod. Auto can
-  # interrupt in-flight runs and conflicts with a zero-eviction PDB.
   updateMode: "Off"
 
 networkPolicy:
   enabled: false
-  # An enabled policy denies all ingress and permits DNS plus outbound HTTPS.
-  # A custom list replaces the broad HTTPS rule; the DNS UDP/TCP 53 rule remains
-  # present. Restrict HTTPS destinations with selectors/CIDRs supported by the
-  # cluster.
+  # An enabled policy denies ingress and permits DNS plus outbound HTTPS. A
+  # custom list replaces the broad HTTPS rule while DNS remains available.
   egress: []
 
-# The published Relayflows runtime currently includes linux-x64 binaries only.
-# Override this selector only when using a compatible custom image.
+# Published Relayflows runtime binaries currently target linux-x64.
 nodeSelector:
   kubernetes.io/arch: amd64
 tolerations: []
 affinity: {}
 
-# Extra environment variables and envFrom sources are useful for model/provider
-# credentials and customer-specific runtime configuration.
+# Use these for model/provider credentials (for example ANTHROPIC_API_KEY),
+# customer configuration, and custom image mounts.
 extraEnv: []
 extraEnvFrom: []
-
-# Extend a custom runtime image with credential/config volumes as needed.
 extraVolumes: []
 extraVolumeMounts: []
 extraInitContainers: []

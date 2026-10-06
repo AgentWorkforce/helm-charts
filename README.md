@@ -7,7 +7,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | Chart | Description |
 |-------|-------------|
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
-| [relayflows](charts/relayflows) | Relayflows customer-cloud worker — runs workflow assignments inside a customer's Kubernetes cluster |
+| [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 
 ## Quick start
 
@@ -27,40 +27,22 @@ helm install relayfile agentworkforce/relayfile \
 
 See [charts/relayfile/README.md](charts/relayfile/README.md) for the full parameter reference.
 
-### Install Relayflows worker
+### Run Relayflows locally
 
-Create a Secret from a fresh worker enrollment token, then install the
-single-replica outbound worker:
+Bundle a flow and its harness CLIs into an image, then run it as a Kubernetes
+Job. This default mode does not use Agent Relay Cloud:
 
 ```bash
-set -euo pipefail
-kubectl create namespace relayflows --dry-run=client -o yaml | kubectl apply -f -
-umask 077
-token_file=$(mktemp)
-trap 'rm -f "$token_file"' EXIT
-if ! read -rsp 'Enrollment token: ' enrollment_token; then
-  printf '\nUnable to read enrollment token.\n' >&2
-  exit 1
-fi
-printf '\n'
-if [ -z "$enrollment_token" ]; then
-  echo 'Enrollment token must not be empty.' >&2
-  exit 1
-fi
-printf '%s' "$enrollment_token" >"$token_file"
-unset enrollment_token
-kubectl -n relayflows create secret generic relayflows-enrollment \
-  --from-file=AGENT_RELAY_WORKER_ENROLLMENT_TOKEN="$token_file" \
-  --dry-run=client -o yaml | kubectl apply -f -
-rm -f "$token_file"
-trap - EXIT
 helm install relayflows agentworkforce/relayflows \
-  --namespace relayflows \
-  --set credentials.existingSecret=relayflows-enrollment
+  --namespace relayflows --create-namespace \
+  --set image.repository=registry.example.com/acme/my-flow \
+  --set image.tag=sha-0123456789abcdef \
+  --set runtimeInstaller.enabled=false \
+  --set standalone.flow.path=/app/flows/customer.flow.ts
 ```
 
-See [charts/relayflows/README.md](charts/relayflows/README.md) for the runtime
-image contract, persistence requirements, and production configuration.
+See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
+flows, model credentials, resuming runs, and optional Cloud worker mode.
 
 ## Releases
 
