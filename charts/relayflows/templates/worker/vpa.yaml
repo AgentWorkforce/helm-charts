@@ -1,0 +1,16 @@
+{{- if and (eq (include "relayflows.mode" .) "cloudWorker") .Values.verticalPodAutoscaler.enabled -}}
+apiVersion: {{ include "relayflows.capabilities.vpa.apiVersion" . }}
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "relayflows.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayflows.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "relayflows.fullname" . }}
+  updatePolicy:
+    updateMode: {{ .Values.verticalPodAutoscaler.updateMode | default "Off" | quote }}
+{{- end }}

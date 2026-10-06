@@ -7,6 +7,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | Chart | Description |
 |-------|-------------|
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
+| [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 
 ## Quick start
 
@@ -25,6 +26,24 @@ helm install relayfile agentworkforce/relayfile \
 ```
 
 See [charts/relayfile/README.md](charts/relayfile/README.md) for the full parameter reference.
+
+### Run Relayflows locally
+
+Bundle a flow, the Relayflows runtime CLI, and its harness CLIs into an image,
+then run it as a Kubernetes Job. This default mode does not use Agent Relay
+Cloud:
+
+```bash
+helm install relayflows agentworkforce/relayflows \
+  --namespace relayflows --create-namespace \
+  --set image.repository=registry.example.com/acme/my-flow \
+  --set image.tag=sha-0123456789abcdef \
+  --set runtimeInstaller.enabled=false \
+  --set standalone.flow.path=/app/flows/customer.flow.ts
+```
+
+See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
+flows, model credentials, resuming runs, and optional Cloud worker mode.
 
 ## Releases
 

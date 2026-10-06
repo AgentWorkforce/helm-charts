@@ -1,0 +1,12 @@
+{{- if and (eq (include "relayflows.mode" .) "standalone") .Values.standalone.flow.content -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "relayflows.flowConfigMapName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayflows.labels" . | nindent 4 }}
+data:
+  {{ include "relayflows.flowConfigMapKey" . | quote }}: |-
+    {{- .Values.standalone.flow.content | nindent 4 }}
+{{- end }}

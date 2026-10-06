@@ -1,0 +1,13 @@
+.DS_Store
+.git/
+.gitignore
+.helmignore
+.idea/
+.project
+.tmp/
+.vscode/
+*.tmp
+*.swp
+*.swo
+*.tgz
+temp-values.yaml

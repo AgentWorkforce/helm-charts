@@ -1,0 +1,163 @@
+## Default values for Relayflows on Kubernetes.
+
+# standalone runs a flow entirely inside a Kubernetes Job and does not contact
+# Agent Relay Cloud. cloudWorker retains the optional Cloud assignment worker.
+mode: standalone
+
+# The stock chart uses the official Node image and installs pinned published
+# packages into an emptyDir. For production agent workloads, use an immutable
+# image containing relayflows, the flow source, and every required harness CLI.
+image:
+  repository: node
+  tag: "22.23.3-bookworm-slim"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+standalone:
+  # Run a flow from an image path, inline chart-managed ConfigMap, or existing
+  # ConfigMap. Set exactly one source unless resumeRunId is set.
+  flow:
+    path: ""
+    content: ""
+    existingConfigMap: ""
+    configMapKey: flow.yaml
+  # JSON passed to an authored TypeScript flow via `flows run --input`.
+  input: ""
+  # Explicitly resume this durable run instead of starting a new one.
+  resumeRunId: ""
+  # Attach in-process workers for agent steps. The image must contain each
+  # harness CLI used by the flow, such as Claude Code or Codex.
+  localAgent: true
+  agentCapacity: 1
+  dataDir: /var/lib/relayflows
+  terminationGracePeriodSeconds: 30
+  # A retry would create a second run, so failed Jobs do not retry by default.
+  backoffLimit: 0
+  activeDeadlineSeconds: null
+  ttlSecondsAfterFinished: null
+  command: []
+  args: []
+
+# Cloud-only settings. Used when mode=cloudWorker.
+worker:
+  # Stable Cloud worker name. Defaults to the Helm release fullname.
+  # Keep this and cloudUrl unchanged while reusing an enrolled PVC.
+  name: ""
+  cloudUrl: https://agentrelay.com/cloud
+  terminationGracePeriodSeconds: 60
+  command: []
+  args: []
+
+runtimeInstaller:
+  # Installs pinned CLIs at pod startup. Standalone mode installs relayflows;
+  # cloudWorker mode also installs agent-relay. Disable for immutable images.
+  enabled: true
+  agentRelayVersion: "12.4.1"
+  relayflowsVersion: "2.0.42"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+telemetry:
+  enabled: false
+
+# Cloud-worker enrollment only. Not rendered or required in standalone mode.
+credentials:
+  existingSecret: ""
+  existingSecretKey: AGENT_RELAY_WORKER_ENROLLMENT_TOKEN
+  enrollmentToken: ""
+
+persistence:
+  # Stores standalone run journals or Cloud worker registration state.
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    # Prevents an old and new standalone Job from mounting the journal at once.
+    - ReadWriteOncePod
+  size: 5Gi
+  annotations: {}
+  selector: {}
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  # Neither mode needs the Kubernetes API.
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# Cloud-worker probes. Standalone Jobs intentionally have no probes.
+startupProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        agent-relay cloud worker status
+        --name "${AGENT_RELAY_WORKER_NAME}"
+        --base-url "${AGENT_RELAY_CLOUD_URL}"
+        --json >/dev/null
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 60
+readinessProbe: {}
+livenessProbe: {}
+
+# PDB and VPA apply only to mode=cloudWorker.
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 0
+
+verticalPodAutoscaler:
+  enabled: false
+  updateMode: "Off"
+
+networkPolicy:
+  enabled: false
+  # An enabled policy denies ingress and permits DNS plus outbound HTTPS. A
+  # custom list replaces the broad HTTPS rule while DNS remains available.
+  egress: []
+
+# Published Relayflows runtime binaries currently target linux-x64.
+nodeSelector:
+  kubernetes.io/arch: amd64
+tolerations: []
+affinity: {}
+
+# Use these for model/provider credentials (for example an ESO-created Secret
+# containing ANTHROPIC_API_KEY), customer configuration, and custom mounts.
+# Standalone mode reserves FLOWS_CLOUD_MIRROR and
+# AGENT_RELAY_TELEMETRY_DISABLED to keep hosted publication disabled.
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+extraInitContainers: []
+
+nameOverride: ""
+fullnameOverride: ""
