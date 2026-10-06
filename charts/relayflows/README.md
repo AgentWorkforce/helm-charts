@@ -60,7 +60,9 @@ helm install customer-flows agentworkforce/relayflows \
 ```
 
 The token is redeemed only when the PVC has no registration. On subsequent
-pod starts, the persisted worker credential is reused.
+pod starts, the persisted worker credential is reused. After the first
+successful registration, the one-time enrollment Secret can be deleted; the
+Secret reference is optional so replacement pods can start from PVC state.
 
 Check the worker:
 

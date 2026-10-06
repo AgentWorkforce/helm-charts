@@ -39,6 +39,8 @@ telemetry:
 credentials:
   # Recommended: create a Secret with AGENT_RELAY_WORKER_ENROLLMENT_TOKEN and
   # put its name here. Enrollment tokens are one-time and expire after 15m.
+  # The Secret may be removed after registration; replacement pods reuse the
+  # durable credential on the PVC through an optional Secret reference.
   existingSecret: ""
   existingSecretKey: AGENT_RELAY_WORKER_ENROLLMENT_TOKEN
   # Development convenience only. This value is stored in Helm release data.

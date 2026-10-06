@@ -93,7 +93,7 @@ spec:
           {{- if .Values.worker.args }}
           args:
             {{- toYaml .Values.worker.args | nindent 12 }}
-          {{- else }}
+          {{- else if not .Values.worker.command }}
           args:
             - |-
               {{- include "relayflows.workerScript" . | nindent 14 }}
@@ -112,6 +112,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "relayflows.secretName" . }}
                   key: {{ .Values.credentials.existingSecretKey | quote }}
+                  # Registration state is durable, but enrollment tokens are
+                  # one-time. Permit the spent Secret to be removed after the
+                  # first successful registration.
+                  optional: true
             {{- if not .Values.telemetry.enabled }}
             - name: AGENT_RELAY_TELEMETRY_DISABLED
               value: "1"
