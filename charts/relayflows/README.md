@@ -299,6 +299,28 @@ the Helm release. A POC can therefore use the broader scope Julian requested,
 while production flow images and values can narrow filesystem, tool, Secret,
 and network access without changing execution mode.
 
+## Regulated deployment tiers and retention
+
+The Kubernetes pod is the sandbox boundary for this chart; steps do not receive
+separate pods. Teams can express dev-to-production restriction tiers as reviewed
+values files and namespace policy:
+
+- development may allow the runtime installer, broad HTTPS egress, and broader
+  flow permissions;
+- production should use a digest-pinned immutable image, disable the runtime
+  installer, enable destination-restricted egress, set resource limits, and
+  apply the cluster's admission, workload-identity, and namespace policies;
+- both tiers retain the default non-root user, read-only root filesystem,
+  dropped capabilities, `RuntimeDefault` seccomp profile, and disabled
+  Kubernetes API token.
+
+The chart does not claim to provide SOC-2 controls by itself. For required
+retention and encryption, use `persistence.existingClaim` with the customer's
+encrypted StorageClass, snapshot/backup policy, and retention lifecycle. Route
+pod logs only to the customer's in-cluster or approved logging stack. The
+chart-created PVC is deleted on `helm uninstall`, so it is inappropriate when
+run journals and attribution records must survive release deletion.
+
 ## Network policy and security
 
 `networkPolicy.enabled=true` denies ingress and permits DNS plus outbound TCP
