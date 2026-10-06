@@ -7,6 +7,6 @@ metadata:
   labels:
     {{- include "relayflows.labels" . | nindent 4 }}
 data:
-  {{ required "standalone.flow.configMapKey must not be empty" .Values.standalone.flow.configMapKey | quote }}: |-
+  {{ include "relayflows.flowConfigMapKey" . | quote }}: |-
     {{- .Values.standalone.flow.content | nindent 4 }}
 {{- end }}

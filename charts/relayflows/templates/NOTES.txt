@@ -10,7 +10,11 @@ Watch the run:
   kubectl get job --namespace {{ .Release.Namespace }} {{ include "relayflows.jobName" . }}
 
 To resume a suspended or interrupted run, upgrade the release with:
-  helm upgrade {{ .Release.Name }} <chart> --namespace {{ .Release.Namespace }} --reuse-values --set standalone.resumeRunId=<run-id>
+  helm upgrade {{ .Release.Name }} <same-chart-reference-used-for-install> --namespace {{ .Release.Namespace }} --reuse-values --set standalone.resumeRunId=<run-id>
+
+The CLI prints the run ID as `RUN <run-id> ...`. It is also the journal filename
+under {{ .Values.standalone.dataDir }}/runs/<run-id>.sqlite3 on the PVC. Record
+it before enabling completed-Job TTL cleanup, which also removes pod logs.
 {{- else }}
 Relayflows Cloud worker {{ include "relayflows.workerName" . }} was installed.
 
@@ -26,6 +30,6 @@ The enrollment token is one-time. Preserve that claim across pod replacements.
 
 {{ if .Values.runtimeInstaller.enabled -}}
 This release installs pinned npm runtime packages on pod startup. For production
-agent steps, supply an immutable image containing Relayflows and all declared
-harness CLIs, then set runtimeInstaller.enabled=false.
+agent steps, supply an immutable image containing Relayflows{{ if eq (include "relayflows.mode" .) "cloudWorker" }}, agent-relay{{ end }}, and all
+declared harness CLIs, then set runtimeInstaller.enabled=false.
 {{- end }}

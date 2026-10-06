@@ -60,6 +60,15 @@ app.kubernetes.io/component: {{ ternary "runner" "worker" (eq (include "relayflo
 {{- printf "%s-flow" (include "relayflows.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
+{{/* Validate and return a Kubernetes ConfigMap data key. */}}
+{{- define "relayflows.flowConfigMapKey" -}}
+{{- $key := required "standalone.flow.configMapKey must not be empty" .Values.standalone.flow.configMapKey -}}
+{{- if not (regexMatch "^[A-Za-z0-9._-]+$" $key) -}}
+{{- fail "standalone.flow.configMapKey may contain only letters, numbers, '-', '_' or '.'" -}}
+{{- end -}}
+{{- $key -}}
+{{- end }}
+
 {{/* Service account name. */}}
 {{- define "relayflows.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
@@ -105,8 +114,7 @@ app.kubernetes.io/component: {{ ternary "runner" "worker" (eq (include "relayflo
 {{- fail "standalone requires exactly one of standalone.flow.path, standalone.flow.content, or standalone.flow.existingConfigMap (unless standalone.resumeRunId is set)" -}}
 {{- end -}}
 {{- if or $flow.content $flow.existingConfigMap -}}
-{{- if not $flow.configMapKey -}}{{- fail "standalone.flow.configMapKey must not be empty" -}}{{- end -}}
-{{- printf "/opt/relayflows/flow/%s" $flow.configMapKey -}}
+{{- printf "/opt/relayflows/flow/%s" (include "relayflows.flowConfigMapKey" .) -}}
 {{- else -}}
 {{- $flow.path -}}
 {{- end -}}

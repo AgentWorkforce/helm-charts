@@ -29,8 +29,9 @@ See [charts/relayfile/README.md](charts/relayfile/README.md) for the full parame
 
 ### Run Relayflows locally
 
-Bundle a flow and its harness CLIs into an image, then run it as a Kubernetes
-Job. This default mode does not use Agent Relay Cloud:
+Bundle a flow, the Relayflows runtime CLI, and its harness CLIs into an image,
+then run it as a Kubernetes Job. This default mode does not use Agent Relay
+Cloud:
 
 ```bash
 helm install relayflows agentworkforce/relayflows \

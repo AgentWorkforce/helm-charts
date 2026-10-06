@@ -134,7 +134,9 @@ The Job writes run journals and its local home under
 `standalone.dataDir` (`/var/lib/relayflows` by default), backed by the release
 PVC. The Job has `backoffLimit: 0` because an automatic Kubernetes retry could
 start a second flow run. Resume an interrupted, parked, or suspended run
-explicitly:
+explicitly. The CLI prints the ID as `RUN <run-id> ...`; the same ID is the
+filename in `<data-dir>/runs/<run-id>.sqlite3` on the PVC. Record it before
+using `ttlSecondsAfterFinished`, because TTL cleanup also removes the pod logs:
 
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows \

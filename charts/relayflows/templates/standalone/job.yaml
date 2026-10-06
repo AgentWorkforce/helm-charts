@@ -5,6 +5,12 @@
 {{- if and .Values.standalone.localAgent (or (lt (int .Values.standalone.agentCapacity) 1) (gt (int .Values.standalone.agentCapacity) 32)) -}}
 {{- fail "standalone.agentCapacity must be between 1 and 32 when standalone.localAgent=true" -}}
 {{- end -}}
+{{- if and (ne .Values.standalone.activeDeadlineSeconds nil) (lt (int .Values.standalone.activeDeadlineSeconds) 1) -}}
+{{- fail "standalone.activeDeadlineSeconds must be at least 1 when set" -}}
+{{- end -}}
+{{- if and (ne .Values.standalone.ttlSecondsAfterFinished nil) (lt (int .Values.standalone.ttlSecondsAfterFinished) 0) -}}
+{{- fail "standalone.ttlSecondsAfterFinished must not be negative" -}}
+{{- end -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -14,11 +20,11 @@ metadata:
     {{- include "relayflows.labels" . | nindent 4 }}
 spec:
   backoffLimit: {{ .Values.standalone.backoffLimit }}
-  {{- with .Values.standalone.activeDeadlineSeconds }}
-  activeDeadlineSeconds: {{ . }}
+  {{- if ne .Values.standalone.activeDeadlineSeconds nil }}
+  activeDeadlineSeconds: {{ .Values.standalone.activeDeadlineSeconds }}
   {{- end }}
-  {{- with .Values.standalone.ttlSecondsAfterFinished }}
-  ttlSecondsAfterFinished: {{ . }}
+  {{- if ne .Values.standalone.ttlSecondsAfterFinished nil }}
+  ttlSecondsAfterFinished: {{ .Values.standalone.ttlSecondsAfterFinished }}
   {{- end }}
   template:
     metadata:
