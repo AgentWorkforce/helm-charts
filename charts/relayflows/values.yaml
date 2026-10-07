@@ -54,7 +54,7 @@ standalone:
     # it. Allow is rejected because overlapping runs contend for the
     # ReadWriteOncePod journal PVC.
     concurrencyPolicy: Forbid
-    # A firing missed by more than this is skipped. null leaves it unset.
+    # A firing missed by more than this many seconds is skipped.
     startingDeadlineSeconds: 300
     successfulJobsHistoryLimit: 3
     failedJobsHistoryLimit: 5

@@ -417,7 +417,7 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 | `standalone.cron.timeZone` | IANA time zone (Kubernetes 1.27+) | `""` |
 | `standalone.cron.suspend` | Stop new firings without deleting the CronJob | `false` |
 | `standalone.cron.concurrencyPolicy` | `Forbid` or `Replace`; `Allow` is rejected | `Forbid` |
-| `standalone.cron.startingDeadlineSeconds` | Skip a firing missed by more than this; `null` unsets | `300` |
+| `standalone.cron.startingDeadlineSeconds` | Skip a firing missed by more than this many seconds | `300` |
 | `standalone.cron.successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | Finished Jobs (and logs) kept | `3` / `5` |
 | `worker.*` | Cloud worker identity, URL, grace period, command | see `values.yaml` |
 | `runtimeInstaller.enabled` | Install pinned runtime CLIs at pod startup | `true` |
