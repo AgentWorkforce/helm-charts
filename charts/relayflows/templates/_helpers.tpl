@@ -68,7 +68,12 @@ Standalone CronJobs keep a stable name across revisions. Kubernetes appends an
 11-character suffix to the Jobs it spawns, so CronJob names are capped at 52.
 */}}
 {{- define "relayflows.cronJobName" -}}
-{{- include "relayflows.fullname" . | trunc 52 | trimSuffix "-" -}}
+{{- $fullname := include "relayflows.fullname" . -}}
+{{- if gt (len $fullname) 52 -}}
+{{- printf "%s-%s" ($fullname | trunc 41 | trimSuffix "-") ($fullname | sha256sum | trunc 10) -}}
+{{- else -}}
+{{- $fullname -}}
+{{- end -}}
 {{- end }}
 
 {{/* Chart-managed standalone flow ConfigMap name. */}}
