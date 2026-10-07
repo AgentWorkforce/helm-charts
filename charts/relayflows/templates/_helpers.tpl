@@ -55,6 +55,27 @@ app.kubernetes.io/component: {{ ternary "runner" "worker" (eq (include "relayflo
 {{- printf "%s%s" $base $suffix -}}
 {{- end }}
 
+{{/*
+Whether standalone runs on a schedule. Nil-safe so `helm upgrade --reuse-values`
+from a release whose stored values predate standalone.cron keeps rendering.
+*/}}
+{{- define "relayflows.cronEnabled" -}}
+{{- if dig "cron" "enabled" false .Values.standalone -}}true{{- end -}}
+{{- end }}
+
+{{/*
+Standalone CronJobs keep a stable name across revisions. Kubernetes appends an
+11-character suffix to the Jobs it spawns, so CronJob names are capped at 52.
+*/}}
+{{- define "relayflows.cronJobName" -}}
+{{- $fullname := include "relayflows.fullname" . -}}
+{{- if gt (len $fullname) 52 -}}
+{{- printf "%s-%s" ($fullname | trunc 41 | trimSuffix "-") ($fullname | sha256sum | trunc 10) -}}
+{{- else -}}
+{{- $fullname -}}
+{{- end -}}
+{{- end }}
+
 {{/* Chart-managed standalone flow ConfigMap name. */}}
 {{- define "relayflows.flowConfigMapName" -}}
 {{- printf "%s-flow" (include "relayflows.fullname" .) | trunc 63 | trimSuffix "-" -}}

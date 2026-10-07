@@ -1,0 +1,53 @@
+{{- if and (eq (include "relayflows.mode" .) "standalone") (include "relayflows.cronEnabled" .) -}}
+{{- /* Fall back to the values.yaml defaults for keys missing from reused release values. */ -}}
+{{- $cron := mergeOverwrite (dict "schedule" "" "timeZone" "" "suspend" false "concurrencyPolicy" "Forbid" "startingDeadlineSeconds" 300 "successfulJobsHistoryLimit" 3 "failedJobsHistoryLimit" 5) (deepCopy .Values.standalone.cron) -}}
+{{- if not $cron.schedule -}}
+{{- fail "standalone.cron.schedule is required when standalone.cron.enabled=true" -}}
+{{- end -}}
+{{- if not (regexMatch "^(\\S+(\\s+\\S+){4}|@(yearly|annually|monthly|weekly|daily|midnight|hourly)|@every\\s+\\S+)$" $cron.schedule) -}}
+{{- fail "standalone.cron.schedule must have 5 whitespace-separated fields or be a descriptor such as @hourly or @every 1h" -}}
+{{- end -}}
+{{- if eq $cron.concurrencyPolicy "Allow" -}}
+{{- fail "standalone.cron.concurrencyPolicy=Allow is not supported: overlapping runs would contend for the ReadWriteOncePod journal PVC and race on the same work. Use Forbid (skip a firing while a run is active) or Replace" -}}
+{{- end -}}
+{{- if and (ne $cron.concurrencyPolicy "Forbid") (ne $cron.concurrencyPolicy "Replace") -}}
+{{- fail "standalone.cron.concurrencyPolicy must be Forbid or Replace" -}}
+{{- end -}}
+{{- if .Values.standalone.resumeRunId -}}
+{{- fail "standalone.resumeRunId cannot be used with standalone.cron.enabled=true: every scheduled firing would resume the same run. Resume with a one-off Job (cron.enabled=false), or let the next firing start a fresh run" -}}
+{{- end -}}
+{{- if ne (int .Values.standalone.backoffLimit) 0 -}}
+{{- fail "standalone.backoffLimit must be 0 when standalone.cron.enabled=true: a Kubernetes retry would start a second run within one firing" -}}
+{{- end -}}
+{{- if and (ne $cron.startingDeadlineSeconds nil) (lt (int $cron.startingDeadlineSeconds) 10) -}}
+{{- fail "standalone.cron.startingDeadlineSeconds must be at least 10 when set" -}}
+{{- end -}}
+{{- if or (lt (int $cron.successfulJobsHistoryLimit) 0) (lt (int $cron.failedJobsHistoryLimit) 0) -}}
+{{- fail "standalone.cron.successfulJobsHistoryLimit and failedJobsHistoryLimit must not be negative" -}}
+{{- end -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "relayflows.cronJobName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayflows.labels" . | nindent 4 }}
+spec:
+  schedule: {{ $cron.schedule | quote }}
+  {{- with $cron.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  suspend: {{ $cron.suspend }}
+  concurrencyPolicy: {{ $cron.concurrencyPolicy }}
+  {{- if ne $cron.startingDeadlineSeconds nil }}
+  startingDeadlineSeconds: {{ $cron.startingDeadlineSeconds }}
+  {{- end }}
+  successfulJobsHistoryLimit: {{ $cron.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $cron.failedJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "relayflows.labels" . | nindent 8 }}
+    spec:
+      {{- include "relayflows.standaloneJobSpec" . | nindent 6 }}
+{{- end }}

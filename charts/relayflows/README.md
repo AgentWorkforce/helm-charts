@@ -1,9 +1,10 @@
 # Relayflows Helm Chart
 
 This chart runs Relayflows v2 directly in Kubernetes. Its default `standalone`
-mode creates a one-shot Job, starts the local `relayflowd` orchestrator inside
-that pod, executes the flow, and stores durable run journals on a PVC. It does
-not enroll with, call, or otherwise depend on Agent Relay Cloud.
+mode creates a one-shot Job (or, with `standalone.cron`, a CronJob that starts
+one per firing), starts the local `relayflowd` orchestrator inside that pod,
+executes the flow, and stores durable run journals on a PVC. It does not enroll
+with, call, or otherwise depend on Agent Relay Cloud.
 
 An optional `cloudWorker` mode keeps the existing long-lived worker integration
 for teams that want Cloud to assign runs. Neither mode creates a Service,
@@ -13,7 +14,8 @@ Ingress, or cluster-wide RBAC.
 
 In standalone mode:
 
-1. Kubernetes starts a revisioned Job.
+1. Kubernetes starts a revisioned Job, or a CronJob starts a Job on each
+   firing when `standalone.cron.enabled=true`.
 2. The Job invokes `flows run --no-observer-link` (or `flows resume`).
 3. The `flows` CLI starts and connects to `relayflowd` in the same pod.
 4. `relayflowd` is the durable orchestrator; its journals live on the PVC.
@@ -22,13 +24,15 @@ In standalone mode:
 
 Cloud is therefore not part of execution. The tradeoff is that Cloud-provided
 assignment, hosted event routing, UI observability, and centralized scheduling
-are also absent. Kubernetes, Argo, KEDA, or another local controller can create
-or upgrade releases to trigger Jobs. The current runtime runs the whole flow in
+are also absent. Set `standalone.cron` for a fixed schedule, or let Kubernetes,
+Argo, KEDA, or another local controller create or upgrade releases to trigger
+Jobs. The current runtime runs the whole flow in
 one pod; it does not create a pod per step.
 
 The chart intentionally creates no webhook listener. A cloud-free POC can run
-the Job manually, invoke a flow tick from an existing in-cluster orchestrator,
-or have the customer's scheduler/GitOps controller launch it on a cron. Hosted
+the Job manually, run it on a schedule with `standalone.cron`, invoke a flow
+tick from an existing in-cluster orchestrator, or have the customer's
+scheduler/GitOps controller launch it. Hosted
 issue-to-pickup routing and Nango are not silently pulled into this path.
 
 The default command always passes `--no-observer-link` and forces
@@ -191,6 +195,61 @@ persistence:
   existingClaim: relayflows-state
 ```
 
+## Scheduled runs
+
+Set `standalone.cron.enabled=true` to render a CronJob **instead of** the
+per-revision Job. Each firing starts a fresh run (`flows run`) in its own Job,
+using the same pod template, `backoffLimit: 0` and `restartPolicy: Never` as
+the one-shot Job. `helm upgrade` changes the schedule or pod for later firings
+and does not start a run itself.
+
+```yaml
+standalone:
+  flow:
+    path: /app/flows/tick.flow.ts
+  cron:
+    enabled: true
+    schedule: "*/15 * * * *"
+    timeZone: America/Los_Angeles
+```
+
+Runs share the release PVC, so durable state such as journals or a working
+checkout carries from one firing to the next. Runs do not overlap:
+
+- `concurrencyPolicy: Forbid` (the default) skips a firing while the previous
+  run is still active. `Replace` stops the active run and starts a new one; the
+  interrupted run's journal stays on the PVC. `Allow` is rejected because
+  overlapping runs would contend for the `ReadWriteOncePod` journal PVC.
+- A run started by hand with
+  `kubectl create job --from=cronjob/<name> <job-name>` is not covered by the
+  concurrency policy. If a scheduled run is active, the `ReadWriteOncePod`
+  claim keeps the manual pod `Pending` until that run finishes.
+
+`standalone.resumeRunId` is rejected in cron mode, because every firing would
+resume the same run. To resume an interrupted run, disable cron mode and
+resume with a one-off Job, then switch back:
+
+```bash
+helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
+  --reuse-values \
+  --set standalone.cron.enabled=false \
+  --set standalone.resumeRunId=<run-id>
+```
+
+`standalone.backoffLimit` must stay `0` in cron mode, since a Kubernetes retry
+would start a second run within one firing.
+
+`standalone.cron.suspend=true` is the kill switch: it stops new firings without
+deleting the CronJob, its history, or the PVC. Active runs continue; delete
+their Job to stop one. `successfulJobsHistoryLimit` and
+`failedJobsHistoryLimit` control how many finished Jobs, and so how many pod
+logs, are kept. Leave `standalone.ttlSecondsAfterFinished` unset unless logs are
+shipped elsewhere, because the TTL removes Jobs regardless of those limits.
+
+`timeZone` requires Kubernetes 1.27+. CronJob names are capped at 52 characters
+(Kubernetes appends a suffix to each Job), so the chart truncates the release
+fullname to 52 for the CronJob.
+
 ## Optional Cloud worker mode
 
 Set `mode: cloudWorker` to run the single-replica, outbound-only Agent Relay
@@ -338,7 +397,7 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 
 | Parameter | Description | Default |
 | --- | --- | --- |
-| `mode` | `standalone` Job or `cloudWorker` Deployment | `standalone` |
+| `mode` | `standalone` Job/CronJob or `cloudWorker` Deployment | `standalone` |
 | `image.repository` / `image.tag` | Runtime image | `node` / `22.23.3-bookworm-slim` |
 | `image.pullPolicy` / `imagePullSecrets` | Image pull configuration | `IfNotPresent` / `[]` |
 | `standalone.flow.path` | Flow path bundled in the image | `""` |
@@ -353,6 +412,13 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 | `standalone.activeDeadlineSeconds` | Optional Job deadline | `null` |
 | `standalone.ttlSecondsAfterFinished` | Optional completed-Job TTL | `null` |
 | `standalone.command` / `standalone.args` | Custom runner command | `[]` / `[]` |
+| `standalone.cron.enabled` | Render a CronJob instead of the per-revision Job | `false` |
+| `standalone.cron.schedule` | Cron schedule for new runs | `*/15 * * * *` |
+| `standalone.cron.timeZone` | IANA time zone (Kubernetes 1.27+) | `""` |
+| `standalone.cron.suspend` | Stop new firings without deleting the CronJob | `false` |
+| `standalone.cron.concurrencyPolicy` | `Forbid` or `Replace`; `Allow` is rejected | `Forbid` |
+| `standalone.cron.startingDeadlineSeconds` | Skip a firing missed by more than this many seconds | `300` |
+| `standalone.cron.successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | Finished Jobs (and logs) kept | `3` / `5` |
 | `worker.*` | Cloud worker identity, URL, grace period, command | see `values.yaml` |
 | `runtimeInstaller.enabled` | Install pinned runtime CLIs at pod startup | `true` |
 | `runtimeInstaller.relayflowsVersion` | Relayflows package version | `2.0.42` |

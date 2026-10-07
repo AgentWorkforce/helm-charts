@@ -1,4 +1,21 @@
-{{- if eq (include "relayflows.mode" .) "standalone" }}
+{{- if and (eq (include "relayflows.mode" .) "standalone") (include "relayflows.cronEnabled" .) }}
+{{- $name := include "relayflows.cronJobName" . }}
+Relayflows standalone CronJob {{ $name }} was installed with schedule
+"{{ .Values.standalone.cron.schedule }}"{{ with .Values.standalone.cron.timeZone }} ({{ . }}){{ end }}.{{ if .Values.standalone.cron.suspend }} It is SUSPENDED: no runs will start.{{ end }}
+
+Each firing starts a fresh run in its own Job. Runs are local to Kubernetes
+and store durable journals on PVC {{ include "relayflows.pvcName" . }}.
+
+Watch runs:
+  kubectl get jobs --namespace {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} --sort-by=.metadata.creationTimestamp
+  kubectl logs --namespace {{ .Release.Namespace }} job/<job-name> -c runner --follow
+
+Start a run now, outside the schedule:
+  kubectl create job --namespace {{ .Release.Namespace }} --from=cronjob/{{ $name }} {{ $name | trunc 45 | trimSuffix "-" }}-manual-$(date +%s)
+
+Stop new firings (kill switch):
+  helm upgrade {{ .Release.Name }} <same-chart-reference-used-for-install> --namespace {{ .Release.Namespace }} --reuse-values --set standalone.cron.suspend=true
+{{- else if eq (include "relayflows.mode" .) "standalone" }}
 Relayflows standalone Job {{ include "relayflows.jobName" . }} was installed.
 
 This run is local to Kubernetes. It does not register with or depend on Agent
