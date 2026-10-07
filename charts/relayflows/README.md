@@ -226,7 +226,7 @@ checkout carries from one firing to the next. Runs do not overlap:
   claim keeps the manual pod `Pending` until that run finishes.
 
 `standalone.resumeRunId` is rejected in cron mode, because every firing would
-resume the same run. To resume an interrupted run, suspend the schedule and
+resume the same run. To resume an interrupted run, disable cron mode and
 resume with a one-off Job, then switch back:
 
 ```bash
