@@ -1,6 +1,6 @@
 {{- if and (eq (include "relayflows.mode" .) "standalone") (include "relayflows.cronEnabled" .) -}}
 {{- /* Fall back to the values.yaml defaults for keys missing from reused release values. */ -}}
-{{- $cron := mergeOverwrite (dict "schedule" "" "timeZone" "" "suspend" false "concurrencyPolicy" "Forbid" "successfulJobsHistoryLimit" 3 "failedJobsHistoryLimit" 5) (deepCopy .Values.standalone.cron) -}}
+{{- $cron := mergeOverwrite (dict "schedule" "" "timeZone" "" "suspend" false "concurrencyPolicy" "Forbid" "startingDeadlineSeconds" 300 "successfulJobsHistoryLimit" 3 "failedJobsHistoryLimit" 5) (deepCopy .Values.standalone.cron) -}}
 {{- if not $cron.schedule -}}
 {{- fail "standalone.cron.schedule is required when standalone.cron.enabled=true" -}}
 {{- end -}}
