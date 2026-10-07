@@ -4,6 +4,9 @@
 {{- if not $cron.schedule -}}
 {{- fail "standalone.cron.schedule is required when standalone.cron.enabled=true" -}}
 {{- end -}}
+{{- if not (regexMatch "^\\S+(\\s+\\S+){4,6}$" $cron.schedule) -}}
+{{- fail "standalone.cron.schedule must be a valid cron expression (5 to 7 whitespace-separated fields)" -}}
+{{- end -}}
 {{- if eq $cron.concurrencyPolicy "Allow" -}}
 {{- fail "standalone.cron.concurrencyPolicy=Allow is not supported: overlapping runs would contend for the ReadWriteOncePod journal PVC and race on the same work. Use Forbid (skip a firing while a run is active) or Replace" -}}
 {{- end -}}
