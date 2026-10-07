@@ -11,7 +11,7 @@ Watch runs:
   kubectl logs --namespace {{ .Release.Namespace }} job/<job-name> -c runner --follow
 
 Start a run now, outside the schedule:
-  kubectl create job --namespace {{ .Release.Namespace }} --from=cronjob/{{ $name }} {{ $name | trunc 45 | trimSuffix "-" }}-manual
+  kubectl create job --namespace {{ .Release.Namespace }} --from=cronjob/{{ $name }} {{ $name | trunc 45 | trimSuffix "-" }}-manual-$(date +%s)
 
 Stop new firings (kill switch):
   helm upgrade {{ .Release.Name }} <same-chart-reference-used-for-install> --namespace {{ .Release.Namespace }} --reuse-values --set standalone.cron.suspend=true
