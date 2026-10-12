@@ -75,7 +75,7 @@ runtimeInstaller:
   # cloudWorker mode also installs agent-relay. Disable for immutable images.
   enabled: true
   agentRelayVersion: "12.4.1"
-  relayflowsVersion: "2.0.42"
+  relayflowsVersion: "2.0.49"
   resources:
     requests:
       cpu: 100m
