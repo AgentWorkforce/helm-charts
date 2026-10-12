@@ -404,7 +404,7 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 | `standalone.flow.content` | Flow stored in a generated ConfigMap | `""` |
 | `standalone.flow.existingConfigMap` | Existing flow ConfigMap | `""` |
 | `standalone.flow.configMapKey` | Flow key and mounted filename | `flow.yaml` |
-| `standalone.input` | JSON input for a new run | `""` |
+| `standalone.input` | JSON input for a new run; requires an authored `*.flow.ts`/`.mts`/`.js`/`.mjs` flow | `""` |
 | `standalone.resumeRunId` | Durable run ID to resume instead of starting | `""` |
 | `standalone.localAgent` / `agentCapacity` | Run local agent workers and capacity | `true` / `1` |
 | `standalone.dataDir` | PVC-backed relayflowd data directory | `/var/lib/relayflows` |
