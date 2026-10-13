@@ -153,6 +153,12 @@ exec flows resume \
   --agent-capacity "${RELAYFLOWS_AGENT_CAPACITY}"{{ end }} \
   "${RELAYFLOWS_RUN_ID}"
 {{- else }}
+{{- if .Values.standalone.input }}
+{{- $flowPath := include "relayflows.standaloneFlowPath" . }}
+{{- if not (regexMatch "\\.flow\\.(ts|mts|js|mjs)$" $flowPath) }}
+{{- fail (printf "standalone.input requires an authored flow (*.flow.ts, .mts, .js or .mjs); %s is not one, and flows run would refuse --input" $flowPath) -}}
+{{- end }}
+{{- end }}
 exec flows run \
   --no-observer-link \
   --data-dir "${RELAYFLOWS_DATA_DIR}"{{ if .Values.standalone.localAgent }} \

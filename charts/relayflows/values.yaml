@@ -22,7 +22,8 @@ standalone:
     content: ""
     existingConfigMap: ""
     configMapKey: flow.yaml
-  # JSON passed to an authored TypeScript flow via `flows run --input`.
+  # JSON passed via `flows run --input`. Only an authored flow
+  # (*.flow.ts, .mts, .js or .mjs) accepts input; rendering fails otherwise.
   input: ""
   # Explicitly resume this durable run instead of starting a new one.
   resumeRunId: ""
