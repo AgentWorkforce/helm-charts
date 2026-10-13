@@ -60,7 +60,7 @@ harness CLIs in an immutable image:
 
 ```dockerfile
 FROM node:22.23.3-bookworm-slim
-ARG RELAYFLOWS_VERSION=2.0.49
+ARG RELAYFLOWS_VERSION=2.0.50
 ARG CLAUDE_CODE_VERSION
 RUN test -n "${CLAUDE_CODE_VERSION}" && \
     npm install -g --ignore-scripts --no-audit --no-fund \
@@ -395,6 +395,22 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 
 ## Upgrading
 
+### From 0.2.2 (relayflows 2.0.49) to 0.2.3 (relayflows 2.0.50)
+
+Only the default runtime moves. The templates are unchanged, and journals need
+no migration. A 0.2.2 release that left `runtimeInstaller.relayflowsVersion`
+empty moves to 2.0.50 even with `--reuse-values`. With an immutable image,
+rebuild it with `RELAYFLOWS_VERSION=2.0.50`.
+
+Runtime changes in relayflows 2.0.50 (flows #660):
+
+- **A one-line hint on stderr.** A local `flows run` with no observer
+  workspace key prints a single hint naming `RELAYCAST_WORKSPACE_KEY` and
+  `--cloud-mirror`. Standalone pods usually have no workspace key, so expect
+  this line in the runner logs. It does not change the run.
+- **Cloud run budgets.** `flows run --cloud --budget-minutes <n>` (30–180)
+  forwards a run budget to Cloud. The chart does not pass it in either mode.
+
 ### From 0.2.0 or 0.2.1 (relayflows 2.0.42) to 0.2.2 (relayflows 2.0.49)
 
 **Do not upgrade with plain `--reuse-values`.** Helm's `--reuse-values` keeps
@@ -495,7 +511,7 @@ still `node:22.23.3-bookworm-slim`.
 | `standalone.cron.successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | Finished Jobs (and logs) kept | `3` / `5` |
 | `worker.*` | Cloud worker identity, URL, grace period, command | see `values.yaml` |
 | `runtimeInstaller.enabled` | Install pinned runtime CLIs at pod startup | `true` |
-| `runtimeInstaller.relayflowsVersion` | Relayflows package version; empty uses the chart `appVersion` | `""` (2.0.49) |
+| `runtimeInstaller.relayflowsVersion` | Relayflows package version; empty uses the chart `appVersion` | `""` (2.0.50) |
 | `runtimeInstaller.agentRelayVersion` | Cloud-mode agent-relay version | `12.4.1` |
 | `credentials.*` | Cloud-mode enrollment Secret or token | unset |
 | `persistence.existingClaim` | Existing durable-state PVC | `""` |
