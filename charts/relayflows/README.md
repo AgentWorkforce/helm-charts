@@ -180,7 +180,7 @@ using `ttlSecondsAfterFinished`, because TTL cleanup also removes the pod logs:
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows \
   --namespace relayflows \
-  --reset-then-reuse-values \
+  --reuse-values \
   --set standalone.resumeRunId=<run-id>
 ```
 
@@ -231,7 +231,7 @@ resume with a one-off Job, then switch back:
 
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
-  --reset-then-reuse-values \
+  --reuse-values \
   --set standalone.cron.enabled=false \
   --set standalone.resumeRunId=<run-id>
 ```
@@ -408,12 +408,16 @@ helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
   --reset-then-reuse-values
 ```
 
-On Helm older than 3.14, keep `--reuse-values` and add
-`--set runtimeInstaller.relayflowsVersion=2.0.49`. If an upgrade still installs
+On Helm older than 3.14, keep `--reuse-values` and clear the carried value
+with `--set runtimeInstaller.relayflowsVersion=` (empty, not a version), so the
+runtime follows the chart's `appVersion` now and on later upgrades. Setting a
+concrete version instead pins it, and later chart upgrades keep that pin. If an upgrade still installs
 an older runtime than the chart's `appVersion`, the release notes print a
 warning. From 0.2.2 on, `runtimeInstaller.relayflowsVersion` defaults to empty,
 which means the chart's `appVersion`, so later chart upgrades move the runtime
-even with `--reuse-values` unless you pinned it.
+even with `--reuse-values` unless you pinned it. That is why the resume and suspend
+commands elsewhere in this README keep `--reuse-values`: once a release is on
+0.2.2 or later, it no longer carries an old runtime forward.
 
 
 Apart from how the runtime version is resolved, the rendered Job/CronJob, the
