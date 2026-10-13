@@ -50,3 +50,14 @@ This release installs pinned npm runtime packages on pod startup. For production
 agent steps, supply an immutable image containing Relayflows{{ if eq (include "relayflows.mode" .) "cloudWorker" }}, agent-relay{{ end }}, and all
 declared harness CLIs, then set runtimeInstaller.enabled=false.
 {{- end }}
+{{- $runtime := include "relayflows.runtimeVersion" . }}
+{{- if and .Values.runtimeInstaller.enabled (ne $runtime .Chart.AppVersion) }}
+
+WARNING: this release installs relayflows {{ $runtime }}, but chart
+{{ .Chart.Version }} defaults to relayflows {{ .Chart.AppVersion }}. If you did not pin
+runtimeInstaller.relayflowsVersion yourself, an upgrade with --reuse-values
+carried an older chart's default forward. Upgrade again with
+--reset-then-reuse-values (Helm 3.14+), or with --reuse-values add
+--set runtimeInstaller.relayflowsVersion= (empty) so the runtime follows the
+chart's appVersion. Setting a concrete version pins it across later upgrades.
+{{- end }}

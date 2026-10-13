@@ -62,7 +62,7 @@ spec:
             - name: AGENT_RELAY_VERSION
               value: {{ .Values.runtimeInstaller.agentRelayVersion | quote }}
             - name: RELAYFLOWS_VERSION
-              value: {{ .Values.runtimeInstaller.relayflowsVersion | quote }}
+              value: {{ include "relayflows.runtimeVersion" . | quote }}
             - name: HOME
               value: /tmp
             - name: NPM_CONFIG_CACHE

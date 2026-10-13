@@ -60,7 +60,7 @@ harness CLIs in an immutable image:
 
 ```dockerfile
 FROM node:22.23.3-bookworm-slim
-ARG RELAYFLOWS_VERSION=2.0.42
+ARG RELAYFLOWS_VERSION=2.0.49
 ARG CLAUDE_CODE_VERSION
 RUN test -n "${CLAUDE_CODE_VERSION}" && \
     npm install -g --ignore-scripts --no-audit --no-fund \
@@ -393,6 +393,80 @@ and do not mount a Kubernetes API token by default. Writable PVC and `/tmp`
 mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 `extraVolumeMounts` pass customer credentials and configuration to the runtime.
 
+## Upgrading
+
+### From 0.2.0 or 0.2.1 (relayflows 2.0.42) to 0.2.2 (relayflows 2.0.49)
+
+**Do not upgrade with plain `--reuse-values`.** Helm's `--reuse-values` keeps
+the previous chart's defaults as well as your own values, so 0.2.0 and 0.2.1's
+default `runtimeInstaller.relayflowsVersion: "2.0.42"` is carried forward and
+new pods keep installing 2.0.42. Use `--reset-then-reuse-values` (Helm 3.14+),
+which keeps your values but takes this chart's defaults:
+
+```bash
+helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
+  --reset-then-reuse-values
+```
+
+On Helm older than 3.14, keep `--reuse-values` and clear the carried value
+with `--set runtimeInstaller.relayflowsVersion=` (empty, not a version), so the
+runtime follows the chart's `appVersion` now and on later upgrades. Setting a
+concrete version instead pins it, and later chart upgrades keep that pin. If an upgrade still installs
+an older runtime than the chart's `appVersion`, the release notes print a
+warning. From 0.2.2 on, `runtimeInstaller.relayflowsVersion` defaults to empty,
+which means the chart's `appVersion`, so later chart upgrades move the runtime
+even with `--reuse-values` unless you pinned it. That is why the resume and suspend
+commands elsewhere in this README keep `--reuse-values`: once a release is on
+0.2.2 or later, it no longer carries an old runtime forward.
+
+
+Apart from how the runtime version is resolved, the rendered Job/CronJob, the
+`flows run`/`flows resume` command and its flags, and the forced
+`FLOWS_CLOUD_MIRROR=0` / `AGENT_RELAY_TELEMETRY_DISABLED=1` are identical. Only
+the default runtime moves. With an immutable image, the runtime is whatever
+the image installs, so rebuild it with `RELAYFLOWS_VERSION=2.0.49`; bumping the
+chart alone changes nothing for you.
+
+Journals on the PVC need no migration. The journal storage format did not
+change between these versions, and an interrupted 2.0.42 run can be resumed
+by 2.0.49 with `standalone.resumeRunId`. Runtime behavior changes you should
+know about:
+
+- **Deterministic commands default to a 10 minute timeout, not 30 seconds.**
+  This covers `f.run` and declarative `type: deterministic` steps with no
+  explicit timeout. Commands that took longer than 30s, and used to fail with
+  `timeout`, now succeed. A hung command (for example `glab` waiting on the
+  network) now holds the pod for up to 10 minutes. The `f.run` maximum is still
+  15 minutes. Pass an explicit `timeout` to keep a tighter bound, and size
+  `standalone.activeDeadlineSeconds` and the cron interval for the longer
+  default.
+- **An agent step that hits its `timeout` is continued once by default.**
+  The second attempt runs in the same dirty workspace and sees the first
+  attempt's edits. A second deadline ends the step. Worst-case wall time and
+  model spend for a timed-out agent step are about twice its `timeout`. Set
+  `transportRetries: 0` on the step to keep the old behavior, where the
+  deadline is the result. With `concurrencyPolicy: Forbid`, a longer run skips
+  more cron firings.
+- **Claude Code receives the task after `--`.** The worker now runs
+  `claude -p --dangerously-skip-permissions ... -- <task>`. Before, the task
+  was a bare final word, so a task beginning with `-` was parsed as an option.
+  Check that the Claude Code version pinned in your image accepts `--`.
+- **`f.run` gets the environment of the `flows` process that started the
+  run.** It no longer gets the environment of whichever process started
+  `relayflowd`. Each pod has one CLI, so in this chart deterministic steps
+  still see the pod environment (`extraEnv`/`extraEnvFrom`), as before.
+  `f.run` calls within one run still execute one at a time.
+- **A slow daemon no longer kills the run.** Under CPU throttling, a read that
+  exceeds its budget now exits 1 with `daemon_unresponsive`, and the run stays
+  resumable. Resume it with `standalone.resumeRunId`.
+- **`--detach` is new and must not be used here.** It returns before the run
+  finishes, so the pod would exit and stop `relayflowd`. The chart never
+  passes it. If you use a custom `standalone.command`, do not add it there
+  either.
+
+The Node.js requirement is unchanged (`>=20`), and the default image is
+still `node:22.23.3-bookworm-slim`.
+
 ## Parameters
 
 | Parameter | Description | Default |
@@ -421,7 +495,7 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 | `standalone.cron.successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | Finished Jobs (and logs) kept | `3` / `5` |
 | `worker.*` | Cloud worker identity, URL, grace period, command | see `values.yaml` |
 | `runtimeInstaller.enabled` | Install pinned runtime CLIs at pod startup | `true` |
-| `runtimeInstaller.relayflowsVersion` | Relayflows package version | `2.0.42` |
+| `runtimeInstaller.relayflowsVersion` | Relayflows package version; empty uses the chart `appVersion` | `""` (2.0.49) |
 | `runtimeInstaller.agentRelayVersion` | Cloud-mode agent-relay version | `12.4.1` |
 | `credentials.*` | Cloud-mode enrollment Secret or token | unset |
 | `persistence.existingClaim` | Existing durable-state PVC | `""` |

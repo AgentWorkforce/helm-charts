@@ -17,6 +17,11 @@
 {{- end }}
 {{- end }}
 
+{{/* Relayflows runtime version: the explicit value, else the chart appVersion. */}}
+{{- define "relayflows.runtimeVersion" -}}
+{{- default .Chart.AppVersion .Values.runtimeInstaller.relayflowsVersion }}
+{{- end }}
+
 {{/* Chart label. */}}
 {{- define "relayflows.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}

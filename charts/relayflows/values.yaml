@@ -75,7 +75,10 @@ runtimeInstaller:
   # cloudWorker mode also installs agent-relay. Disable for immutable images.
   enabled: true
   agentRelayVersion: "12.4.1"
-  relayflowsVersion: "2.0.42"
+  # Empty means the chart's appVersion. Leave it empty unless you need a
+  # specific runtime: a pinned value is carried forward by `--reuse-values`
+  # and keeps old pods on that runtime after a chart upgrade.
+  relayflowsVersion: ""
   resources:
     requests:
       cpu: 100m
