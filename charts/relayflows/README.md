@@ -62,13 +62,27 @@ harness CLIs in an immutable image:
 FROM node:22.23.3-bookworm-slim
 ARG RELAYFLOWS_VERSION=2.0.50
 ARG CLAUDE_CODE_VERSION
+# The slim image has neither git nor a CA bundle; agent steps and glab need both.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 RUN test -n "${CLAUDE_CODE_VERSION}" && \
     npm install -g --ignore-scripts --no-audit --no-fund \
       "relayflows@${RELAYFLOWS_VERSION}" \
-      "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && \
+    # --ignore-scripts skips Claude Code's postinstall, which installs its
+    # native binary; without this step `claude` exits "native binary not installed".
+    node /usr/local/lib/node_modules/@anthropic-ai/claude-code/install.cjs
+# An authored flow imports @relayflows/surface. Node resolves it upward from the
+# flow file, never from the global prefix, so expose the global install's
+# dependencies to /app.
+RUN mkdir -p /app \
+ && ln -s /usr/local/lib/node_modules/relayflows/node_modules /app/node_modules
 COPY flows/ /app/flows/
 USER node
 ```
+
+Add `glab` or any other CLI the flow calls in the same image.
 
 Create the model credential without putting it in Helm release data:
 
@@ -109,6 +123,10 @@ helm install customer-flow agentworkforce/relayflows \
   --values local-values.yaml
 kubectl -n relayflows logs job/customer-flow-relayflows-1 -c runner -f
 ```
+
+An authored `*.flow.ts` run directly requires input: with `standalone.input`
+unset, every run is refused with `input_missing`. Use `'{}'` when the flow takes
+no input.
 
 `ANTHROPIC_API_KEY` is inherited by the in-pod Claude Code process. The key is
 not sent to Agent Relay Cloud; in standalone mode there is no Cloud process or
@@ -175,7 +193,14 @@ PVC. The Job has `backoffLimit: 0` because an automatic Kubernetes retry could
 start a second flow run. Resume an interrupted, parked, or suspended run
 explicitly. The CLI prints the ID as `RUN <run-id> ...`; the same ID is the
 filename in `<data-dir>/runs/<run-id>.sqlite3` on the PVC. Record it before
-using `ttlSecondsAfterFinished`, because TTL cleanup also removes the pod logs:
+using `ttlSecondsAfterFinished`, because TTL cleanup also removes the pod logs.
+If the run is interrupted mid-step, the log may show only child step run IDs
+(`Run "<id>" step "<step>"`); those are not the ID to resume. Find the root run
+from a pod that mounts the PVC: list `<data-dir>/runs/*.sqlite3` and check each
+with `flows status --data-dir <data-dir> <run-id>`.
+
+The run's own status is authoritative, not the Job's. A pod deleted with a grace
+period can finish its run successfully while the Job is still marked `Failed`.
 
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows \
@@ -227,7 +252,10 @@ checkout carries from one firing to the next. Runs do not overlap:
 
 `standalone.resumeRunId` is rejected in cron mode, because every firing would
 resume the same run. To resume an interrupted run, disable cron mode and
-resume with a one-off Job, then switch back:
+resume with a one-off Job, then switch back. Save the logs you need first:
+disabling cron deletes the CronJob, and Kubernetes then deletes every Job it
+owns, including ones created with `kubectl create job --from=cronjob/...`.
+Re-enabling cron likewise deletes the one-off resume Job.
 
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
