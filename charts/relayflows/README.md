@@ -180,7 +180,7 @@ using `ttlSecondsAfterFinished`, because TTL cleanup also removes the pod logs:
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows \
   --namespace relayflows \
-  --reuse-values \
+  --reset-then-reuse-values \
   --set standalone.resumeRunId=<run-id>
 ```
 
@@ -231,7 +231,7 @@ resume with a one-off Job, then switch back:
 
 ```bash
 helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
-  --reuse-values \
+  --reset-then-reuse-values \
   --set standalone.cron.enabled=false \
   --set standalone.resumeRunId=<run-id>
 ```
@@ -395,9 +395,28 @@ mounts are provided. `extraEnv`, `extraEnvFrom`, `extraVolumes`, and
 
 ## Upgrading
 
-### From 0.2.0 (relayflows 2.0.42) to 0.2.1 (relayflows 2.0.49)
+### From 0.2.0 or 0.2.1 (relayflows 2.0.42) to 0.2.2 (relayflows 2.0.49)
 
-The chart's templates are unchanged: the rendered Job/CronJob, the
+**Do not upgrade with plain `--reuse-values`.** Helm's `--reuse-values` keeps
+the previous chart's defaults as well as your own values, so 0.2.0 and 0.2.1's
+default `runtimeInstaller.relayflowsVersion: "2.0.42"` is carried forward and
+new pods keep installing 2.0.42. Use `--reset-then-reuse-values` (Helm 3.14+),
+which keeps your values but takes this chart's defaults:
+
+```bash
+helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
+  --reset-then-reuse-values
+```
+
+On Helm older than 3.14, keep `--reuse-values` and add
+`--set runtimeInstaller.relayflowsVersion=2.0.49`. If an upgrade still installs
+an older runtime than the chart's `appVersion`, the release notes print a
+warning. From 0.2.2 on, `runtimeInstaller.relayflowsVersion` defaults to empty,
+which means the chart's `appVersion`, so later chart upgrades move the runtime
+even with `--reuse-values` unless you pinned it.
+
+
+Apart from how the runtime version is resolved, the rendered Job/CronJob, the
 `flows run`/`flows resume` command and its flags, and the forced
 `FLOWS_CLOUD_MIRROR=0` / `AGENT_RELAY_TELEMETRY_DISABLED=1` are identical. Only
 the default runtime moves. With an immutable image, the runtime is whatever
@@ -472,7 +491,7 @@ still `node:22.23.3-bookworm-slim`.
 | `standalone.cron.successfulJobsHistoryLimit` / `failedJobsHistoryLimit` | Finished Jobs (and logs) kept | `3` / `5` |
 | `worker.*` | Cloud worker identity, URL, grace period, command | see `values.yaml` |
 | `runtimeInstaller.enabled` | Install pinned runtime CLIs at pod startup | `true` |
-| `runtimeInstaller.relayflowsVersion` | Relayflows package version | `2.0.49` |
+| `runtimeInstaller.relayflowsVersion` | Relayflows package version; empty uses the chart `appVersion` | `""` (2.0.49) |
 | `runtimeInstaller.agentRelayVersion` | Cloud-mode agent-relay version | `12.4.1` |
 | `credentials.*` | Cloud-mode enrollment Secret or token | unset |
 | `persistence.existingClaim` | Existing durable-state PVC | `""` |

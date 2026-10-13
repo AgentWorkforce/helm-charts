@@ -66,7 +66,7 @@ template:
             "relayflows@${RELAYFLOWS_VERSION}"
         env:
           - name: RELAYFLOWS_VERSION
-            value: {{ .Values.runtimeInstaller.relayflowsVersion | quote }}
+            value: {{ include "relayflows.runtimeVersion" . | quote }}
           - name: HOME
             value: /tmp
           - name: NPM_CONFIG_CACHE
