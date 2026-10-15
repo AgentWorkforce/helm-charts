@@ -274,6 +274,28 @@ their Job to stop one. `successfulJobsHistoryLimit` and
 logs, are kept. Leave `standalone.ttlSecondsAfterFinished` unset unless logs are
 shipped elsewhere, because the TTL removes Jobs regardless of those limits.
 
+If someone changes the CronJob's suspend flag directly, for example with
+`kubectl patch cronjob <name> -p '{"spec":{"suspend":true}}'`, kubectl becomes
+an owner of `.spec.suspend`. For a release managed with server-side apply (the
+Helm 4 default for new installs; releases installed with Helm 3 stay on
+client-side apply unless upgraded with `--server-side=true`), a later
+`helm upgrade` that sets `standalone.cron.suspend` to a different value fails
+with a field-manager conflict on `.spec.suspend`. For example, resuming after a
+`kubectl patch` suspend needs `--force-conflicts` so Helm can take the field
+back:
+
+```bash
+helm upgrade customer-flow agentworkforce/relayflows --namespace relayflows \
+  --reuse-values \
+  --set standalone.cron.suspend=false \
+  --force-conflicts
+```
+
+An upgrade that sets the same value kubectl already wrote does not conflict,
+but kubectl stays a co-owner, so the next change to the field conflicts. Use
+the Helm command for the kill switch where you can, so the release stays the
+only owner of the field.
+
 `timeZone` requires Kubernetes 1.27+. CronJob names are capped at 52 characters
 (Kubernetes appends a suffix to each Job), so the chart truncates the release
 fullname to 52 for the CronJob.
