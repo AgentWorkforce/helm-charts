@@ -1,0 +1,9 @@
+# cloudnative-pg/cloudnative-pg 0.29.1 (operator 1.30.1). Install it as its own
+# release BEFORE anything that renders a postgresql.cnpg.io Cluster: it ships
+# 11 CRDs. No Helm hooks, so it is safe under `helm template --no-hooks`.
+crds:
+  create: true
+config:
+  clusterWide: true
+resources:
+  requests: { cpu: 50m, memory: 128Mi }

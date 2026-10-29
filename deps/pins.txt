@@ -1,0 +1,7 @@
+# name          chart                                     version  values
+# The single source of chart versions: scripts/ci/deps.sh (CI) and every
+# ci/<suite>/smoke.sh read this file. See PINS.md for the why of each pin.
+cnpg-operator   cnpg/cloudnative-pg                       0.29.1   cnpg-operator-values.yaml
+hoopdb          cnpg/cluster                              0.9.0    cnpg-cluster-values.yaml
+locker          minio/minio                               5.4.0    minio-values.yaml
+otel            open-telemetry/opentelemetry-collector    0.178.0  otel-values.yaml

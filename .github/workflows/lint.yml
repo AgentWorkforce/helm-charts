@@ -35,6 +35,9 @@ jobs:
       - name: Static chart checks
         run: scripts/ci/charts.sh static
 
+      - name: Dependency pins are hook-free
+        run: scripts/ci/deps.sh
+
       - name: Chart version bumped
         if: github.event_name == 'pull_request'
         run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"

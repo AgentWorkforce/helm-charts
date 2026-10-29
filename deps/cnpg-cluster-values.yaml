@@ -1,0 +1,38 @@
+# cloudnative-pg/cluster 0.9.0: the HoopDb Postgres. Its only hook is a Helm
+# test, which --no-hooks drops harmlessly.
+#
+# Image: CNPG "standard" Postgres 17 (17.11), digest-pinned. Verified to ship
+# the `vector` and `pg_trgm` extensions that History and HoopDb need.
+fullnameOverride: hoopdb
+type: postgresql
+mode: standalone
+version:
+  postgresql: "17"
+cluster:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3
+  storage:
+    size: 2Gi
+  walStorage:
+    enabled: false
+  enableSuperuserAccess: false
+  monitoring:
+    enabled: false
+  initdb:
+    database: hoopdb
+    owner: hoop
+    postInitApplicationSQL:
+      # Extensions need a superuser; create them at bootstrap so the app
+      # role's migrations only see IF NOT EXISTS no-ops.
+      - CREATE EXTENSION IF NOT EXISTS vector
+      - CREATE EXTENSION IF NOT EXISTS pg_trgm
+      # Roles a Supabase project already has, which the migrations GRANT to.
+      # Created here as superuser (service_role needs BYPASSRLS), so the app
+      # role keeps least privilege and the migration's role shim
+      # (HOOPDB_SUPABASE_SHIM, IF NOT EXISTS) is a no-op. postInit SQL runs once,
+      # on a fresh cluster, and CNPG mangles $$ quoting, so plain statements.
+      - CREATE ROLE anon NOLOGIN NOINHERIT
+      - CREATE ROLE authenticated NOLOGIN NOINHERIT
+      - CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS
+backups:
+  enabled: false
