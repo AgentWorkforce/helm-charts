@@ -2,6 +2,7 @@
 # kind smoke test for the 96Bulls charts, installed the way Alchemy's
 # Kubernetes.HelmChart does it: `helm template --no-hooks` + server-side apply.
 # No Helm release, no hooks. Usage: ci/96bulls/smoke.sh [image]
+# Dependencies come from deps/ (CloudNativePG, MinIO, OpenTelemetry).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CLUSTER=${CLUSTER:-96bulls-smoke}
@@ -18,22 +19,36 @@ kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER"
 kind load docker-image "$IMAGE" --name "$CLUSTER"
 kubectl --context "kind-$CLUSTER" create namespace "$NS" --dry-run=client -o yaml | kubectl --context "kind-$CLUSTER" apply -f -
 
+# Dependencies and their pins live in deps/ (see deps/PINS.md).
+helm repo add cnpg https://cloudnative-pg.github.io/charts >/dev/null 2>&1 || true
 helm repo add minio https://charts.min.io >/dev/null 2>&1 || true
 helm repo add otel https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
-helm repo update minio otel >/dev/null
+helm repo update cnpg minio otel >/dev/null
+DEPS="$ROOT/deps"
 
-# Secrets (kind-only throwaway values).
+# HoopDb: the CloudNativePG operator (its own release, CRDs first), then the
+# Cluster. The operator runs in cnpg-system.
+kubectl --context "kind-$CLUSTER" create namespace cnpg-system --dry-run=client -o yaml | kubectl --context "kind-$CLUSTER" apply -f -
+helm template cnpg cnpg/cloudnative-pg --version 0.29.1 --namespace cnpg-system --no-hooks --include-crds \
+    -f "$DEPS/cnpg-operator-values.yaml" \
+  | kubectl --context "kind-$CLUSTER" -n cnpg-system apply --server-side --force-conflicts --field-manager=smoke -f -
+kubectl --context "kind-$CLUSTER" -n cnpg-system rollout status deploy --timeout=300s
+apply hoopdb cnpg/cluster --version 0.9.0 -f "$DEPS/cnpg-cluster-values.yaml"
+$K wait cluster.postgresql.cnpg.io/hoopdb --for=condition=Ready --timeout=600s
+
+# Secrets (kind-only throwaway values). HOOPDB_URL comes from the app-user
+# Secret that CNPG generates.
+HOOPDB_URL=$($K get secret hoopdb-app -o jsonpath='{.data.uri}' | base64 -d)
 $K create secret generic locker-root --from-literal=rootUser=locker --from-literal=rootPassword=locker-kind-only \
   --dry-run=client -o yaml | $K apply -f -
 $K create secret generic 96bulls \
-  --from-literal=HOOPDB_URL=postgres://hoop:hoop-kind-only@hoopdb:5432/hoopdb \
+  --from-literal=HOOPDB_URL="$HOOPDB_URL" \
   --from-literal=LOCKER_ACCESS_KEY_ID=locker --from-literal=LOCKER_SECRET_ACCESS_KEY=locker-kind-only \
   --from-literal=JWKS_JSON='{"keys":[]}' --dry-run=client -o yaml | $K apply -f -
+unset HOOPDB_URL
 
-# Dependencies.
-$K apply --server-side --field-manager=smoke -f "$ROOT/ci/96bulls/postgres.yaml"
-apply locker minio/minio --version 5.4.0 -f "$ROOT/ci/96bulls/minio-values.yaml"
-apply otel otel/opentelemetry-collector --version 0.178.0 -f "$ROOT/ci/96bulls/otel-values.yaml"
+apply locker minio/minio --version 5.4.0 -f "$DEPS/minio-values.yaml"
+apply otel otel/opentelemetry-collector --version 0.178.0 -f "$DEPS/otel-values.yaml"
 
 # Charts under test, all at once: workloads must tolerate any apply order.
 # The image under test (argument 1) overrides the values file.
