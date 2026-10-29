@@ -31,6 +31,8 @@ shared: &shared
     endpoint: http://locker:9000
     bucket: locker
     region: us-east-1
+    credentials:
+      mode: secret
   tenant:
     orgId: ""          # empty = global.tenant.orgId
     workspaceId: default

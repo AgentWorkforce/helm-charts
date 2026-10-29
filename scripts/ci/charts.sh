@@ -23,6 +23,17 @@ render() { # chart valuesfile [extra helm args]
   helm template ci "charts/$chart" --namespace ci --no-hooks --include-crds "${args[@]}" "$@"
 }
 
+expect_render_failure() { # chart valuesfile label expected-error [extra helm args]
+  local chart=$1 v=$2 label=$3 expected=$4 output; shift 4
+  echo "--- static: $chart (reject $label)"
+  if output=$(render "$chart" "$v" "$@" 2>&1); then
+    err "$chart: $label unexpectedly rendered successfully"
+  elif ! grep -Fq "$expected" <<<"$output"; then
+    err "$chart: $label failed without expected error: $expected"
+    echo "$output"
+  fi
+}
+
 for chart in "${charts[@]}"; do
   [ -f "charts/$chart/Chart.yaml" ] || { err "$chart: no Chart.yaml"; continue; }
   if [ -f "charts/$chart/Chart.lock" ] || grep -q '^dependencies:' "charts/$chart/Chart.yaml"; then
@@ -42,6 +53,9 @@ for chart in "${charts[@]}"; do
         args=(); [ -n "$v" ] && args=(-f "$v")
         helm lint --strict "charts/$chart" "${args[@]}" >/dev/null || { helm lint --strict "charts/$chart" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
         out=$(render "$chart" "$v") || { err "$label: render failed"; continue; }
+        if [[ "$v" == *pod-identity-values.yaml ]] && grep -Eq '^[[:space:]]*- name: LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*$' <<<"$out"; then
+          err "$label: podIdentity mode renders a static Locker credential environment variable"
+        fi
         # --no-hooks drops hooked objects, so ban hooks on a full render.
         # Helm test hooks are allowed (e.g. in third-party subcharts): dropping them is harmless.
         if helm template ci "charts/$chart" --namespace ci "${args[@]}" | grep -E '^\s*"?helm\.sh/hook"?\s*:' | grep -vE ':\s*"?test(-success)?"?\s*$'; then
@@ -59,5 +73,22 @@ for chart in "${charts[@]}"; do
       *) echo "unknown mode $mode" >&2; exit 2 ;;
     esac
   done
+  if [ "$mode" = static ]; then
+    case $chart in
+      96bulls-worker)
+        v=charts/96bulls-worker/ci/pod-identity-values.yaml
+        expect_render_failure "$chart" "$v" "unknown credential mode" "locker.credentials.mode must be secret or podIdentity" --set locker.credentials.mode=invalid
+        expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
+        expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
+        ;;
+      alleyoop)
+        v=charts/alleyoop/ci/pod-identity-values.yaml
+        expect_render_failure "$chart" "$v" "unknown credential mode" "locker.credentials.mode must be secret or podIdentity" --set locker.credentials.mode=invalid
+        expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
+        expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
+        expect_render_failure "$chart" "$v" "local JWKS without Secret" "existingSecret is required when auth.localJwks=true" --set auth.jwksUrl= --set auth.localJwks=true
+        ;;
+    esac
+  fi
 done
 exit $fail
