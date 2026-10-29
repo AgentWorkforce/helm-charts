@@ -7,7 +7,7 @@ replicas: 1
 existingSecret: locker-root
 # MinIO no longer publishes public images (minio/minio and quay.io/minio
 # both 404). Chainguard's image is public, signed and digest-pinned (free tier
-# is :latest only, so pin the digest). Production choice: plan D6.
+# is :latest only, so pin the digest). Chainguard is the recommended production image too.
 image:
   repository: cgr.dev/chainguard/minio
   tag: latest@sha256:e70b2b1e74d79457f808710483bd726ff364529ca30736eaa15a6ab547d3a5a7
