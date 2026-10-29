@@ -29,12 +29,21 @@ kubectl --context "$CTX" -n cnpg-system rollout status deploy --timeout=300s
 
 kubectl --context "$CTX" create namespace "$NS" --dry-run=client -o yaml | kubectl --context "$CTX" apply -f -
 # The one Secret the umbrella needs (kind-only throwaway values).
-SUMMARY_MASTER_KEYS=$($K get secret 96bulls-locker -o jsonpath='{.data.SUMMARY_MASTER_KEYS}' 2>/dev/null | base64 -d || true)
-SUMMARY_MASTER_KEYS=${SUMMARY_MASTER_KEYS:-"kind1:$(openssl rand -hex 32)"}
+summary_secret=$($K get secret 96bulls-locker --ignore-not-found -o name)
+if [ -n "$summary_secret" ]; then
+  summary_key_b64=$($K get secret 96bulls-locker -o jsonpath='{.data.SUMMARY_MASTER_KEYS}')
+  if [ -n "$summary_key_b64" ]; then
+    SUMMARY_MASTER_KEYS=$(printf %s "$summary_key_b64" | base64 -d)
+  else
+    SUMMARY_MASTER_KEYS="kind1:$(openssl rand -hex 32)"
+  fi
+else
+  SUMMARY_MASTER_KEYS="kind1:$(openssl rand -hex 32)"
+fi
 printf %s "$SUMMARY_MASTER_KEYS" | $K create secret generic 96bulls-locker --from-literal=rootUser=locker --from-literal=rootPassword=locker-kind-only \
   --from-file=SUMMARY_MASTER_KEYS=/dev/stdin \
   --from-literal=JWKS_JSON='{"keys":[]}' --dry-run=client -o yaml | $K apply -f -
-unset SUMMARY_MASTER_KEYS
+unset SUMMARY_MASTER_KEYS summary_key_b64 summary_secret
 
 helm dependency build "$ROOT/charts/96bulls" >/dev/null
 IMG_REPO=${IMAGE%:*} IMG_TAG=${IMAGE##*:}

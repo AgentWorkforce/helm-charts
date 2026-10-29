@@ -56,10 +56,12 @@ One release runs everything. Prerequisite: the CloudNativePG operator (see
 
 ```bash
 kubectl create namespace 96bulls
-kubectl -n 96bulls create secret generic 96bulls-locker \
+read -rsp 'SUMMARY_MASTER_KEYS (<key-id>:<64-hex>): ' SUMMARY_MASTER_KEYS; printf '\n'
+printf %s "$SUMMARY_MASTER_KEYS" | kubectl -n 96bulls create secret generic 96bulls-locker \
   --from-literal=rootUser=<user> \
   --from-literal=rootPassword=<password> \
-  --from-literal=SUMMARY_MASTER_KEYS='<key-id>:<64-hex-characters>'
+  --from-file=SUMMARY_MASTER_KEYS=/dev/stdin
+unset SUMMARY_MASTER_KEYS
 helm install bulls agentworkforce/96bulls -n 96bulls \
   --set global.tenant.orgId=<org> \
   --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
