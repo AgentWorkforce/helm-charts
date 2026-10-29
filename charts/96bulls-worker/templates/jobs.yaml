@@ -1,0 +1,18 @@
+{{- include "96bulls-worker.validate" . -}}
+{{- $jobs := list -}}
+{{- if .Values.migrations.enabled }}{{ $jobs = append $jobs (dict "job" "migrate" "service" "hoopdb-migrate" "config" .Values.migrations) }}{{ end -}}
+{{- if .Values.lockerInit.enabled }}{{ $jobs = append $jobs (dict "job" "locker-init" "service" "locker-init" "config" .Values.lockerInit) }}{{ end -}}
+{{- range $jobs }}
+{{- $spec := include "96bulls-worker.jobSpec" (dict "context" $ "job" .job "service" .service "config" .config) }}
+---
+# Plain Job, not a Helm hook. Name is content-addressed; see _names.tpl.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "96bulls-worker.jobName" (dict "context" $ "job" .job "spec" $spec) }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "96bulls-worker.componentLabels" (dict "context" $ "component" .service) | nindent 4 }}
+spec:
+  {{- $spec | nindent 2 }}
+{{- end }}

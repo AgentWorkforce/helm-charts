@@ -1,0 +1,23 @@
+apiVersion: v2
+name: 96bulls-worker
+type: application
+version: 0.1.0
+# appVersion tracks the default services image tag. Pin image.digest in
+# production values.
+appVersion: "0.1.0"
+description: >
+  96Bulls sessions-pipeline workers: the HoopDb migration Job, the Locker
+  bucket init Job, and the stage workers (hoopdb-indexer, referee,
+  bob-costas). Hook-free: safe to render with `helm template --no-hooks` and
+  apply with server-side apply (Alchemy Kubernetes.HelmChart).
+home: https://github.com/AgentWorkforce/96BullSessions
+keywords:
+  - 96bulls
+  - sessions
+  - pipeline
+  - agentworkforce
+maintainers:
+  - name: AgentWorkforce
+    url: https://github.com/AgentWorkforce/helm-charts
+sources:
+  - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/96bulls-worker

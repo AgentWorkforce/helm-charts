@@ -1,0 +1,16 @@
+# open-telemetry/opentelemetry-collector 0.178.0. Customers bring their own
+# backend; kind just logs spans.
+mode: deployment
+image:
+  repository: otel/opentelemetry-collector-contrib
+  # Must track the chart's appVersion: chart 0.178.0 renders telemetry config
+  # that collector 0.137.0 cannot parse (service.telemetry.resource).
+  tag: "0.163.2"
+config:
+  exporters:
+    debug: { verbosity: basic }
+  service:
+    pipelines:
+      traces: { receivers: [otlp], exporters: [debug] }
+      metrics: { receivers: [otlp], exporters: [debug] }
+      logs: { receivers: [otlp], exporters: [debug] }
