@@ -49,6 +49,32 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/alleyoop-0.1.0/alleyoop-0.1.0.tgz
     version: 0.1.0
+  relayfile:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-10-29T01:47:22.2709815Z"
+    description: 'Relayfile — virtual filesystem sync for agents. A single Go binary
+      that serves a workspace file-sync API over HTTP, backed by Postgres in production
+      or in-memory for development. '
+    digest: f48cfa6fdc9d1051e6f557cce5afcf3a54ec2fb220ec40351439f4a6421d4eb9
+    home: https://github.com/AgentWorkforce/relayfile
+    keywords:
+    - relayfile
+    - vfs
+    - filesystem
+    - sync
+    - agents
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relayfile
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayfile
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relayfile-0.1.1/relayfile-0.1.1.tgz
+    version: 0.1.1
   relayflows:
   - apiVersion: v2
     appVersion: 2.0.50
@@ -180,4 +206,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relayflows-0.1.0/relayflows-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-29T01:09:27.888211994Z"
+generated: "2026-10-29T01:47:22.514413927Z"
