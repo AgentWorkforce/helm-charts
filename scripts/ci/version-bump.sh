@@ -15,6 +15,14 @@ for chart in $(git diff --name-only "$base"...HEAD -- charts/ | cut -d/ -f2 | so
   if [ -n "$old" ] && [ "$old" = "$new" ]; then
     echo "::error::$chart changed but its version is still $new; bump charts/$chart/Chart.yaml"
     fail=1
+  elif [ -n "$old" ] && [ "$(printf '%s\n%s\n' "$old" "$new" | sort -V | tail -1)" != "$new" ]; then
+    # A lower version may already be released; chart-releaser (skip_existing)
+    # would then silently skip the change.
+    echo "::error::$chart version went backwards ($old -> $new); it must increase"
+    fail=1
+  elif git tag -l "$chart-$new" | grep -q .; then
+    echo "::error::$chart $new is already released (tag $chart-$new); pick a new version"
+    fail=1
   else
     echo "$chart: ${old:-new} -> $new"
   fi

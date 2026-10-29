@@ -58,18 +58,31 @@ jobs:
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
-      # Also publish every chart released above as an OCI artifact:
+      # Also publish every chart as an OCI artifact:
       #   helm install <name> oci://ghcr.io/agentworkforce/charts/<chart> --version <v>
+      # Pushes any chart version that is not in GHCR yet, not just this run's
+      # changed charts, so a failed push is retried by the next run (or a
+      # manual workflow_dispatch) without another version bump.
       # Auth is the built-in GITHUB_TOKEN; no registry credential to store.
       # A package created by Actions starts PRIVATE; set each one public once.
-      - name: Push released charts to GHCR (OCI)
-        if: steps.cr.outputs.changed_charts != ''
+      - name: Push charts to GHCR (OCI)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          registry="oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
           printf '%s' "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          for pkg in .cr-release-packages/*.tgz; do
-            helm push "$pkg" "oci://ghcr.io/${owner}/charts"
+          mkdir -p .oci-packages
+          for dir in charts/*/; do
+            chart=$(basename "$dir")
+            version=$(sed -n 's/^version: *//p' "$dir/Chart.yaml" | tr -d '"')
+            # Only versions chart-releaser has published to the Pages repo.
+            git ls-remote --exit-code --tags origin "refs/tags/$chart-$version" >/dev/null || continue
+            if helm show chart "$registry/$chart" --version "$version" >/dev/null 2>&1; then
+              echo "$chart $version already in GHCR"
+              continue
+            fi
+            helm dependency build "$dir" >/dev/null 2>&1 || true
+            helm package "$dir" --destination .oci-packages >/dev/null
+            helm push ".oci-packages/$chart-$version.tgz" "$registry"
           done

@@ -1,0 +1,7 @@
+# CI render/dry-run values: standalone flow on a schedule (CronJob).
+standalone:
+  flow:
+    path: /app/flows/ci.flow.ts
+  cron:
+    enabled: true
+    schedule: "*/15 * * * *"
