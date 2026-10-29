@@ -22,7 +22,7 @@ template:
     {{- end }}
   spec:
     restartPolicy: Never
-    {{- include "96bulls-worker.podSpecCommon" $ | nindent 4 }}
+    {{- include "96bulls-worker.podSpecCommon" (dict "context" $ "component" .service) | nindent 4 }}
     containers:
       - name: {{ .job }}
         image: {{ include "96bulls-worker.image" $ | quote }}

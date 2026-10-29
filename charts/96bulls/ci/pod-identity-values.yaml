@@ -3,6 +3,8 @@ global:
     orgId: org_ci
 worker:
   existingSecret: ""
+  summaryEncryption:
+    existingSecret: 96bulls-summary
   hoopdb:
     existingSecret: hoopdb-app
     key: uri

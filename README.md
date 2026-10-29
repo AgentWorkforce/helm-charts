@@ -56,8 +56,12 @@ One release runs everything. Prerequisite: the CloudNativePG operator (see
 
 ```bash
 kubectl create namespace 96bulls
-kubectl -n 96bulls create secret generic 96bulls-locker \
-  --from-literal=rootUser=<user> --from-literal=rootPassword=<password>
+read -rsp 'SUMMARY_MASTER_KEYS (<key-id>:<64-hex>): ' SUMMARY_MASTER_KEYS; printf '\n'
+printf %s "$SUMMARY_MASTER_KEYS" | kubectl -n 96bulls create secret generic 96bulls-locker \
+  --from-literal=rootUser=<user> \
+  --from-literal=rootPassword=<password> \
+  --from-file=SUMMARY_MASTER_KEYS=/dev/stdin
+unset SUMMARY_MASTER_KEYS
 helm install bulls agentworkforce/96bulls -n 96bulls \
   --set global.tenant.orgId=<org> \
   --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
@@ -77,6 +81,12 @@ does not need an image pull Secret. The OpenTelemetry collector is off by defaul
 `global.otel.endpoint=http://otel-collector:4318` to use the bundled collector.
 Its safe default exporter drops telemetry; replace `otel.config.exporters` and
 the pipeline exporters with your backend configuration outside local testing.
+
+Bob Costas reads `SUMMARY_MASTER_KEYS` from a Secret and stores only encrypted
+summary objects in the Locker; no key value belongs in Helm values. The worker
+chart projects that Secret key as a read-only file into Bob Costas only. Set
+`worker.summaryEncryption.existingSecret` when the key is not in the shared
+Secret (required for pod-identity installs with no `worker.existingSecret`).
 
 HoopDb credentials come from the Secret CloudNativePG generates
 (`hoopdb-app`). Bring your own Postgres or S3 by disabling `hoopdb` or
@@ -100,8 +110,9 @@ versioning.
 
 Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a
-Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
-first (or enable `externalSecrets`).
+Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID`,
+`LOCKER_SECRET_ACCESS_KEY` and `SUMMARY_MASTER_KEYS` first (or enable
+`externalSecrets`). `SUMMARY_MASTER_KEYS` is referenced only by Bob Costas.
 
 For workload identity, set `locker.credentials.mode=podIdentity` and provide
 `hoopdb.existingSecret`; `existingSecret` may then be empty. This suppresses

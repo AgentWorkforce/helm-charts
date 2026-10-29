@@ -17,6 +17,14 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
 {{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}
+{{- $bob := index .Values.components "bob-costas" -}}
+{{- if and $bob.enabled (not (.Values.summaryEncryption.existingSecret | default .Values.existingSecret)) }}{{ fail "96bulls-worker: summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" }}{{ end -}}
+{{- if and $bob.enabled (not .Values.summaryEncryption.key) }}{{ fail "96bulls-worker: summaryEncryption.key is required when bob-costas is enabled" }}{{ end -}}
+{{- if and $bob.enabled (not .Values.summaryEncryption.mountPath) }}{{ fail "96bulls-worker: summaryEncryption.mountPath is required when bob-costas is enabled" }}{{ end -}}
+{{- if and $bob.enabled (not .Values.summaryEncryption.fileName) }}{{ fail "96bulls-worker: summaryEncryption.fileName is required when bob-costas is enabled" }}{{ end -}}
+{{- range $entry := $bob.env }}
+{{- if or (eq ($entry.name | default "") "SUMMARY_MASTER_KEYS") (eq ($entry.name | default "") "SUMMARY_MASTER_KEYS_FILE") }}{{ fail "96bulls-worker: configure summaryEncryption instead of components.bob-costas.env SUMMARY_MASTER_KEYS/SUMMARY_MASTER_KEYS_FILE" }}{{ end -}}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -62,6 +70,12 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ $v.deployment.id | default (printf "%s/%s" .context.Release.Namespace .context.Release.Name) | quote }}
 - name: ENVIRONMENT
   value: {{ $v.environment | quote }}
+{{- if eq .service "bob-costas" }}
+# The Secret is projected as a file into Bob Costas only; the key material is
+# never copied into the Pod spec's environment values.
+- name: SUMMARY_MASTER_KEYS_FILE
+  value: {{ printf "%s/%s" $v.summaryEncryption.mountPath $v.summaryEncryption.fileName | quote }}
+{{- end }}
 {{- if $v.global.otel.endpoint }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ $v.global.otel.endpoint | quote }}
@@ -82,26 +96,38 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
 Pod-level boilerplate shared by every workload and Job.
 */}}
 {{- define "96bulls-worker.podSpecCommon" -}}
-{{- include "96bulls-worker.pullSecrets" . }}
-serviceAccountName: {{ include "96bulls-worker.serviceAccountName" . }}
-automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
-{{- with .Values.podSecurityContext }}
+{{- $ctx := .context -}}
+{{- include "96bulls-worker.pullSecrets" $ctx }}
+serviceAccountName: {{ include "96bulls-worker.serviceAccountName" $ctx }}
+automountServiceAccountToken: {{ $ctx.Values.automountServiceAccountToken }}
+{{- with $ctx.Values.podSecurityContext }}
 securityContext:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.nodeSelector }}
+{{- with $ctx.Values.nodeSelector }}
 nodeSelector:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.tolerations }}
+{{- with $ctx.Values.tolerations }}
 tolerations:
   {{- toYaml . | nindent 2 }}
 {{- end }}
-{{- with .Values.affinity }}
+{{- with $ctx.Values.affinity }}
 affinity:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 volumes:
   - name: tmp
     emptyDir: {}
+{{- if eq .component "bob-costas" }}
+  - name: summary-master-keys
+    secret:
+      secretName: {{ $ctx.Values.summaryEncryption.existingSecret | default $ctx.Values.existingSecret | quote }}
+      # Kubernetes projects this for the Pod's fsGroup: Bob can read it, but
+      # it is not world-readable inside the Pod.
+      defaultMode: 0440
+      items:
+        - key: {{ $ctx.Values.summaryEncryption.key | quote }}
+          path: {{ $ctx.Values.summaryEncryption.fileName | quote }}
+{{- end }}
 {{- end }}

@@ -32,7 +32,7 @@ spec:
       {{- end }}
     spec:
       terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
-      {{- include "96bulls-worker.podSpecCommon" $ | nindent 6 }}
+      {{- include "96bulls-worker.podSpecCommon" (dict "context" $ "component" $component) | nindent 6 }}
       containers:
         - name: {{ $component }}
           image: {{ include "96bulls-worker.image" $ | quote }}
@@ -83,5 +83,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if eq $component "bob-costas" }}
+            - name: summary-master-keys
+              mountPath: {{ $.Values.summaryEncryption.mountPath }}
+              readOnly: true
+            {{- end }}
 {{- end }}
 {{- end }}

@@ -1,7 +1,7 @@
 dependencies:
 - name: 96bulls-worker
   repository: file://../96bulls-worker
-  version: 0.3.0
+  version: 0.4.0
 - name: alleyoop
   repository: file://../alleyoop
   version: 0.3.0
@@ -14,5 +14,5 @@ dependencies:
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   version: 0.178.0
-digest: sha256:5dc76acc3abf36ae5b99a193194d002820c84a7d23e9c162e597d8e382ed9f25
-generated: "2026-10-28T23:14:28.461508298-07:00"
+digest: sha256:49f35a8dc6ac1e9d277639ce6db0f92b7bdd68aa496186216fdf13396a3f2793
+generated: "2026-10-29T12:08:33.214183824-07:00"

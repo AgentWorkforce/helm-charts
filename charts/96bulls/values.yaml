@@ -1,9 +1,11 @@
 ## 96bulls: the sessions pipeline in one release.
 ##
-## Before installing, create one Secret (name: lockerSecret below) with keys
-## rootUser and rootPassword. It is both MinIO's root credential and the
-## workers' Locker credential. With hoopdb.enabled, HOOPDB_URL comes from the
-## Secret CloudNativePG generates ("hoopdb-app", key "uri"); nothing to create.
+## Before installing, create one Secret (name: existingSecret below) with keys
+## rootUser, rootPassword and SUMMARY_MASTER_KEYS. It supplies MinIO's root
+## credential, the workers' Locker credential, and Bob Costas's summary object
+## encryption key. Only Bob Costas receives SUMMARY_MASTER_KEYS. With
+## hoopdb.enabled, HOOPDB_URL comes from the Secret CloudNativePG generates
+## ("hoopdb-app", key "uri"); nothing else to create.
 ##
 ## One release per namespace: dependency objects use fixed names (hoopdb,
 ## locker, otel-collector) so the app charts can address them.
@@ -24,6 +26,11 @@ shared: &shared
     hoopdbUrl: HOOPDB_URL
     lockerAccessKeyId: rootUser
     lockerSecretAccessKey: rootPassword
+  summaryEncryption:
+    # Empty follows worker.existingSecret, including user overrides. Set a
+    # name only when summary custody belongs in a separate Secret.
+    existingSecret: ""
+    key: SUMMARY_MASTER_KEYS
   hoopdb:
     existingSecret: hoopdb-app
     key: uri
