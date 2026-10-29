@@ -71,8 +71,9 @@ helm install alleyoop agentworkforce/alleyoop -n 96bulls \
   --set auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
 ```
 
-`ci/96bulls/smoke.sh` runs the whole pipeline on kind, with Postgres 17
-(pgvector), MinIO and an OpenTelemetry collector.
+`ci/96bulls/smoke.sh` runs the whole pipeline on kind, with CloudNativePG
+(Postgres 17), MinIO and an OpenTelemetry collector. Third-party charts and
+images are pinned once, in [`deps/`](deps/PINS.md).
 
 ## Releases
 
