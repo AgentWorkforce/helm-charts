@@ -6,7 +6,7 @@ It is designed for both `helm install` and Alchemy's deterministic
 
 ## Required inputs
 
-RelayAuth images and credentials are deliberately external to the chart:
+RelayAuth credentials are deliberately external to the chart:
 
 ```bash
 kubectl create namespace auth
@@ -17,12 +17,14 @@ kubectl -n auth create secret generic relayauth \
 
 helm install relayauth oci://ghcr.io/agentworkforce/charts/relayauth \
   --namespace auth \
-  --set existingSecret=relayauth \
-  --set image.digest=sha256:<released-image-digest>
+  --set existingSecret=relayauth
 ```
 
 The Secret is mounted as files; no secret value or private key is accepted in
-chart values. The image must be selected by an immutable SHA-256 digest.
+chart values. The chart defaults to the public multi-platform RelayAuth image
+at `sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df`.
+Image overrides must also use an immutable SHA-256 digest; mutable tags are
+rejected during rendering.
 
 ## Runtime contract
 

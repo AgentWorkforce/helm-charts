@@ -4,9 +4,10 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/agentworkforce/relayauth
-  # Required immutable OCI digest, including the sha256: prefix. Tags are not
-  # accepted by this chart. Obtain the digest from the RelayAuth image release.
-  digest: ""
+  # Immutable multi-platform release manifest (linux/amd64 and linux/arm64).
+  # Tags are not accepted by this chart. Override only with another sha256
+  # digest published by the RelayAuth image release workflow.
+  digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
