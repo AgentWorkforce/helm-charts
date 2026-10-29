@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Helm build artifacts. Anchored to the chart root: an unanchored *.tgz would
+# also exclude the vendored subchart archives in charts/.
+/*.tgz
+
+# Temp files from testing
+temp-values.yaml
+*.tmp
+
+# CI artifacts
+.cr-release-packages/
+.cr-index/

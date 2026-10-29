@@ -10,6 +10,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 | [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
 | [alleyoop](charts/alleyoop) | 96Bulls ingest: receives session manifests and chunks and lands them in the Locker (S3) |
+| [relaycast-cloud](charts/relaycast-cloud) | Multi-tenant, self-hostable RelayCast engine (single replica on SQLite today; Cloudflare optional) |
 
 ## Quick start
 

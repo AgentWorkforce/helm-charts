@@ -1,0 +1,26 @@
+relaycast:
+  baseUrl: https://relay.example.com
+  workspaces:
+    bootstrapProofRequired: true
+secrets:
+  existingSecret: relaycast-secrets
+persistence:
+  existingClaim: relaycast-data
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+global:
+  otel:
+    endpoint: http://otel-collector.observability.svc:4317
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: relay.example.com
+      paths:
+        - path: /
+  tls:
+    - hosts: [relay.example.com]
+      secretName: relay-example-tls

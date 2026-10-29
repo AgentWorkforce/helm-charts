@@ -1,0 +1,17 @@
+RelayCast Cloud {{ .Chart.AppVersion }} ({{ include "relaycast-cloud.images.server" . }})
+
+Public origin: {{ .Values.relaycast.baseUrl }}
+In-cluster:    http://{{ include "relaycast-cloud.server.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+Health:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "relaycast-cloud.server.fullname" . }} 8787:{{ .Values.service.port }}
+  curl -s http://127.0.0.1:8787/health
+
+Tenants are workspaces. Create one with POST /v1/workspaces
+{{- if .Values.relaycast.workspaces.bootstrapProofRequired }}
+(operator-only: send X-Workspace-Bootstrap-Secret with the value stored in
+Secret {{ include "relaycast-cloud.secretName" . }}, key {{ .Values.secrets.keys.workspaceBootstrapSecret }}).
+{{- end }}
+
+Limits of this release: single replica, SQLite on PVC {{ include "relaycast-cloud.claimName" . }}.
+Back up that volume; it holds every tenant's data and files.

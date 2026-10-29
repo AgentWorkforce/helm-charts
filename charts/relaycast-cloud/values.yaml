@@ -1,0 +1,226 @@
+## Default values for relaycast-cloud.
+##
+## RelayCast Cloud is a multi-tenant RelayCast engine: every tenant is a
+## workspace created through POST /v1/workspaces and isolated by its own API
+## key. This chart runs the engine without any Cloudflare dependency.
+##
+## CURRENT ENGINE LIMITS (engine 12.1.0):
+##   - Storage is SQLite on a ReadWriteOnce volume, so exactly one replica runs.
+##   - Presence, rate limits, idempotency and realtime fan-out are in-process.
+##   - File blobs are written to the same volume.
+## The Postgres (CloudNativePG), MinIO and multi-replica paths are declared but
+## disabled until the engine has Postgres/S3 adapters. See README.md.
+
+global:
+  # Registry prefix for every image this chart renders.
+  imageRegistry: ghcr.io
+  otel:
+    # OTLP endpoint exported to workloads as OTEL_EXPORTER_OTLP_ENDPOINT.
+    # Customers bring their own stack. Empty means telemetry export is off.
+    # NOTE: engine 12.1.0 has no OTel exporter yet; the variable is set so
+    # the wiring is in place when it does.
+    endpoint: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------
+# Image
+# ---------------------------------------------------------------------------
+image:
+  repository: agentworkforce/relaycast
+  # Defaults to Chart.appVersion when empty.
+  tag: ""
+  # Immutable digest (sha256:...). Wins over tag when set. Recommended.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# ---------------------------------------------------------------------------
+# Engine configuration
+# ---------------------------------------------------------------------------
+relaycast:
+  # REQUIRED. Public HTTPS origin clients use, e.g. https://relay.example.com.
+  baseUrl: ""
+  # RELAYCAST_ENV.
+  environment: production
+  port: 8787
+  workspaces:
+    # Workspace creation (POST /v1/workspaces) is open to anyone by default.
+    # Set true to make it operator-only: callers must then send
+    # X-Workspace-Bootstrap-Secret matching the bootstrap secret.
+    bootstrapProofRequired: false
+  # Optional retention/mailbox tuning. Empty means engine default.
+  messageTtlDays: ""
+  mailboxTtlMs: ""
+  mailboxDepthCap: ""
+
+# Storage backend. Only "sqlite" works with engine 12.1.0.
+database:
+  # sqlite | postgres
+  mode: sqlite
+  sqlite:
+    path: /data/relaycast.db
+
+# File blob storage. Only "local" (the data volume) works with engine 12.1.0.
+objectStorage:
+  # local | s3
+  mode: local
+
+# ---------------------------------------------------------------------------
+# Secrets. The chart never renders secret values.
+# ---------------------------------------------------------------------------
+secrets:
+  # Name of an existing Secret holding the keys below. Recommended even with
+  # open workspace creation: without the bootstrap secret the engine fails
+  # closed on anonymous POST /v1/workspaces retries that send an
+  # Idempotency-Key (503 workspace_create_idempotency_unavailable).
+  # Required when relaycast.workspaces.bootstrapProofRequired=true, unless
+  # externalSecrets is enabled (the chart then names the target Secret).
+  existingSecret: ""
+  keys:
+    # Stable server-only derivation secret (openssl rand -hex 32).
+    workspaceBootstrapSecret: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET
+
+# Optional: External Secrets Operator. Off by default; the default self-host
+# path uses plain existingSecret refs and renders nothing here. Requires ESO
+# (external-secrets.io/v1) and a configured (Cluster)SecretStore, e.g. one
+# backed by 1Password.
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: ""
+  # Remote reference per secret key. Values are paths, never secret values.
+  data:
+    workspaceBootstrapSecret:
+      key: ""
+      property: ""
+
+# ---------------------------------------------------------------------------
+# Persistence (SQLite database + file blobs)
+# ---------------------------------------------------------------------------
+persistence:
+  # Name of a PVC you manage. This is the default path: a chart-created PVC
+  # can be deleted with the release, and tools that ignore
+  # helm.sh/resource-policy (e.g. Alchemy) will not protect it.
+  existingClaim: ""
+  # Set true to let the chart create the PVC instead (dev/test).
+  create: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Workload
+# ---------------------------------------------------------------------------
+# Must be 1 while database.mode=sqlite (single-writer file on an RWO volume).
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 5
+  failureThreshold: 60
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 4
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+# Allow in-flight WebSocket sessions to drain.
+terminationGracePeriodSeconds: 30
+
+extraEnv: []
+extraEnvFrom: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ---------------------------------------------------------------------------
+# Networking
+# ---------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8787
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  # Agents hold long-lived WebSockets (/v1/node/ws and observer streams).
+  # Raise proxy timeouts for your controller, e.g. for ingress-nginx:
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  annotations: {}
+  hosts: []
+  #  - host: relay.example.com
+  #    paths:
+  #      - path: /
+  #        pathType: Prefix
+  tls: []
+
+# ---------------------------------------------------------------------------
+# Subcharts (all off; see Chart.yaml)
+# ---------------------------------------------------------------------------
+cloudnative-pg:
+  enabled: false
+
+postgres:
+  enabled: false
+
+minio:
+  enabled: false
+  # Bucket creation is done by this chart's init Job, not MinIO's post-install
+  # hook (hooks are not applied by Alchemy / --no-hooks installs).
+  buckets: []
+
+opentelemetry-collector:
+  enabled: false
+  mode: deployment
+  image:
+    repository: otel/opentelemetry-collector-k8s

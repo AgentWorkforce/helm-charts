@@ -1,0 +1,8 @@
+# Renders and installs on a fresh kind cluster with zero edits.
+# The base URL only has to be a syntactically valid https origin; the engine
+# mints identifiers under it and does not resolve it at boot.
+relaycast:
+  baseUrl: https://relaycast.kind.invalid
+persistence:
+  create: true
+  size: 1Gi
