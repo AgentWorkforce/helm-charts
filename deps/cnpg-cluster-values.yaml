@@ -16,6 +16,12 @@ cluster:
   walStorage:
     enabled: false
   enableSuperuserAccess: false
+  # Non-empty on purpose: with no parameters the chart renders
+  # `postgresql:` as null, which the CRD rejects without the operator's
+  # defaulting webhook (CI dry-run, or the operator not yet running).
+  postgresql:
+    parameters:
+      max_connections: "200"
   monitoring:
     enabled: false
   initdb:
