@@ -9,13 +9,14 @@ It is designed for both `helm install` and Alchemy's deterministic
 RelayAuth images and credentials are deliberately external to the chart:
 
 ```bash
+kubectl create namespace auth
 kubectl -n auth create secret generic relayauth \
   --from-file=internal-secret=./internal-secret \
   --from-file=signing-key.pem=./signing-key.pem \
   --from-file=bootstrap-api-key=./bootstrap-api-key
 
 helm install relayauth oci://ghcr.io/agentworkforce/charts/relayauth \
-  --namespace auth --create-namespace \
+  --namespace auth \
   --set existingSecret=relayauth \
   --set image.digest=sha256:<released-image-digest>
 ```

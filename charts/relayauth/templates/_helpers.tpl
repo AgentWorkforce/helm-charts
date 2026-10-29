@@ -87,6 +87,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and .Values.jwksIngress.enabled (not .Values.jwksIngress.hosts) }}
 {{- fail "jwksIngress.enabled=true requires at least one host" }}
 {{- end }}
+{{- if and .Values.jwksIngress.enabled (not .Values.baseUrl) }}
+{{- fail "jwksIngress.enabled=true requires an explicit externally reachable baseUrl" }}
+{{- end }}
 {{- if and .Values.jwksIngress.enabled .Values.networkPolicy.enabled (not .Values.networkPolicy.ingressFrom) }}
 {{- fail "jwksIngress with networkPolicy requires networkPolicy.ingressFrom to allow the ingress controller explicitly" }}
 {{- end }}

@@ -53,7 +53,9 @@ service:
   annotations: {}
 
 # Optional ingress exposing only the well-known discovery/JWKS paths. Token
-# and administration APIs remain unexposed by this ingress.
+# and administration APIs remain unexposed by this ingress. Enabling it
+# requires an explicit externally reachable baseUrl so discovery never
+# advertises the in-cluster Service URL to public verifiers.
 jwksIngress:
   enabled: false
   className: ""
