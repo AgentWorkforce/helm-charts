@@ -123,6 +123,9 @@ volumes:
   - name: summary-master-keys
     secret:
       secretName: {{ $ctx.Values.summaryEncryption.existingSecret | default $ctx.Values.existingSecret }}
+      # Kubernetes projects this for the Pod's fsGroup: Bob can read it, but
+      # it is not world-readable inside the Pod.
+      defaultMode: 0440
       items:
         - key: {{ $ctx.Values.summaryEncryption.key }}
           path: {{ $ctx.Values.summaryEncryption.fileName }}
