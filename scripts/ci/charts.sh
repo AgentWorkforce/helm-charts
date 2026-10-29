@@ -42,6 +42,9 @@ for chart in "${charts[@]}"; do
         args=(); [ -n "$v" ] && args=(-f "$v")
         helm lint --strict "charts/$chart" "${args[@]}" >/dev/null || { helm lint --strict "charts/$chart" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
         out=$(render "$chart" "$v") || { err "$label: render failed"; continue; }
+        if [[ "$v" == *pod-identity-values.yaml ]] && grep -Eq '^[[:space:]]*- name: LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*$' <<<"$out"; then
+          err "$label: podIdentity mode renders a static Locker credential environment variable"
+        fi
         # --no-hooks drops hooked objects, so ban hooks on a full render.
         # Helm test hooks are allowed (e.g. in third-party subcharts): dropping them is harmless.
         if helm template ci "charts/$chart" --namespace ci "${args[@]}" | grep -E '^\s*"?helm\.sh/hook"?\s*:' | grep -vE ':\s*"?test(-success)?"?\s*$'; then

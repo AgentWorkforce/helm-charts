@@ -1,7 +1,7 @@
 apiVersion: v2
 name: alleyoop
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "0.1.0"
 description: >
   AlleyOop ingest for the 96Bulls sessions pipeline: receives session

@@ -1,0 +1,31 @@
+global:
+  tenant:
+    orgId: org_ci
+worker:
+  existingSecret: ""
+  hoopdb:
+    existingSecret: hoopdb-app
+    key: uri
+  locker:
+    endpoint: https://s3.us-west-2.amazonaws.com
+    bucket: 96bulls-ci
+    region: us-west-2
+    credentials:
+      mode: podIdentity
+alleyoop:
+  existingSecret: ""
+  hoopdb:
+    existingSecret: hoopdb-app
+    key: uri
+  locker:
+    endpoint: https://s3.us-west-2.amazonaws.com
+    bucket: 96bulls-ci
+    region: us-west-2
+    credentials:
+      mode: podIdentity
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+hoopdb:
+  enabled: false
+locker:
+  enabled: false

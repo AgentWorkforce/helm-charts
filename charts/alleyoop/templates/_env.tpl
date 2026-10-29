@@ -9,11 +9,15 @@ Tenant org id: tenant.orgId, else global.tenant.orgId (set once by an umbrella).
 Fail early on missing required values (render time, not crash-loop time).
 */}}
 {{- define "alleyoop.validate" -}}
-{{- if not .Values.existingSecret }}{{ fail "alleyoop: existingSecret is required (Secret with HOOPDB_URL, LOCKER_ACCESS_KEY_ID, LOCKER_SECRET_ACCESS_KEY)" }}{{ end -}}
+{{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
+{{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "alleyoop: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}
+{{- if and (eq $credentialsMode "secret") (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when locker.credentials.mode=secret" }}{{ end -}}
+{{- if and (not .Values.hoopdb.existingSecret) (not .Values.existingSecret) }}{{ fail "alleyoop: hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" }}{{ end -}}
 {{- if not .Values.locker.endpoint }}{{ fail "alleyoop: locker.endpoint is required" }}{{ end -}}
 {{- if not (include "alleyoop.orgId" .) }}{{ fail "alleyoop: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
+{{- if and .Values.auth.localJwks (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when auth.localJwks=true" }}{{ end -}}
 {{- end }}
 
 {{/*
@@ -37,6 +41,7 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
   value: {{ $v.locker.bucket | quote }}
 - name: LOCKER_REGION
   value: {{ $v.locker.region | quote }}
+{{- if eq ($v.locker.credentials.mode | default "secret") "secret" }}
 - name: LOCKER_ACCESS_KEY_ID
   valueFrom:
     secretKeyRef:
@@ -47,6 +52,7 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
     secretKeyRef:
       name: {{ $v.existingSecret }}
       key: {{ $v.secretKeys.lockerSecretAccessKey }}
+{{- end }}
 - name: TENANT_ORG_ID
   value: {{ include "alleyoop.orgId" .context | quote }}
 - name: WORKSPACE_ID

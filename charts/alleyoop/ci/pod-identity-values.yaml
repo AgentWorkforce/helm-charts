@@ -1,0 +1,13 @@
+hoopdb:
+  existingSecret: hoopdb-app
+  key: uri
+locker:
+  endpoint: https://s3.us-west-2.amazonaws.com
+  bucket: 96bulls-ci
+  region: us-west-2
+  credentials:
+    mode: podIdentity
+tenant:
+  orgId: org_ci
+auth:
+  jwksUrl: https://relayauth.example.com/.well-known/jwks.json

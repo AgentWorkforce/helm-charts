@@ -27,7 +27,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# REQUIRED. Name of an existing Secret in the release namespace.
+# Secret containing Locker credentials in secret mode and, unless
+# hoopdb.existingSecret is set, HOOPDB_URL. May be empty in podIdentity mode
+# when HoopDb uses its own Secret.
 existingSecret: ""
 secretKeys:
   hoopdbUrl: HOOPDB_URL
@@ -40,6 +42,11 @@ locker:
   endpoint: ""        # REQUIRED, e.g. http://minio:9000
   bucket: locker
   region: us-east-1
+  credentials:
+    # secret reads LOCKER_* keys from existingSecret; podIdentity omits both
+    # static credential environment variables so the AWS SDK can use its
+    # workload identity credential chain.
+    mode: secret
 tenant:
   orgId: ""           # REQUIRED
   workspaceId: default

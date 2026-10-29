@@ -79,7 +79,13 @@ the pipeline exporters with your backend configuration outside local testing.
 
 HoopDb credentials come from the Secret CloudNativePG generates
 (`hoopdb-app`). Bring your own Postgres or S3 by disabling `hoopdb` or
-`locker` and pointing `worker.*` / `alleyoop.*` at your Secret.
+`locker` and pointing `worker.*` / `alleyoop.*` at your infrastructure. On EKS,
+set both app charts' `locker.credentials.mode=podIdentity` to omit
+`LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`; the AWS SDK then uses its
+workload identity credential chain. Associate the rendered worker and
+alleyoop ServiceAccounts with their IAM roles. If the S3 bucket is already
+created and versioned, also set `worker.lockerInit.enabled=false`; otherwise
+the worker role needs permission to create the bucket and enable versioning.
 `ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
 
 ### Install the 96Bulls app charts individually
@@ -88,6 +94,11 @@ Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a
 Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
 first (or enable `externalSecrets`).
+
+For workload identity, set `locker.credentials.mode=podIdentity` and provide
+`hoopdb.existingSecret`; `existingSecret` may then be empty. This suppresses
+both static Locker credential environment variables in every workload and in
+the worker's locker-init Job.
 
 > The default image `ghcr.io/agentworkforce/96bulls-services` (pinned by
 > digest) is private: add `--set imagePullSecrets[0].name=<secret>` to both
