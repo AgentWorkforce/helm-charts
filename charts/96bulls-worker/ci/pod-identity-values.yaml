@@ -1,6 +1,8 @@
 hoopdb:
   existingSecret: hoopdb-app
   key: uri
+summaryEncryption:
+  existingSecret: 96bulls-summary
 locker:
   endpoint: ""
   bucket: 96bulls-ci

@@ -56,6 +56,10 @@ for chart in "${charts[@]}"; do
         if [[ "$v" == *pod-identity-values.yaml ]] && grep -Eq '^[[:space:]]*- name: LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*$' <<<"$out"; then
           err "$label: podIdentity mode renders a static Locker credential environment variable"
         fi
+        if [ "$chart" = "96bulls-worker" ]; then
+          summary_key_refs=$(grep -Ec '^[[:space:]]*- name: SUMMARY_MASTER_KEYS[[:space:]]*$' <<<"$out" || true)
+          [ "$summary_key_refs" -eq 1 ] || err "$label: SUMMARY_MASTER_KEYS must be injected exactly once (Bob Costas only), found $summary_key_refs"
+        fi
         # --no-hooks drops hooked objects, so ban hooks on a full render.
         # Helm test hooks are allowed (e.g. in third-party subcharts): dropping them is harmless.
         if helm template ci "charts/$chart" --namespace ci "${args[@]}" | grep -E '^\s*"?helm\.sh/hook"?\s*:' | grep -vE ':\s*"?test(-success)?"?\s*$'; then
@@ -79,6 +83,7 @@ for chart in "${charts[@]}"; do
         v=charts/96bulls-worker/ci/pod-identity-values.yaml
         expect_render_failure "$chart" "$v" "unknown credential mode" "locker.credentials.mode must be secret or podIdentity" --set locker.credentials.mode=invalid
         expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
+        expect_render_failure "$chart" "$v" "missing summary Secret" "summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" --set summaryEncryption.existingSecret=
         expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
         ;;
       alleyoop)

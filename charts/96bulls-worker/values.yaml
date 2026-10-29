@@ -36,6 +36,15 @@ secretKeys:
   lockerAccessKeyId: LOCKER_ACCESS_KEY_ID
   lockerSecretAccessKey: LOCKER_SECRET_ACCESS_KEY
 
+# Bob Costas encrypts summary objects before they reach the Locker. The value
+# is never accepted in values.yaml: it is read from a Kubernetes Secret and is
+# injected into Bob Costas only. Empty existingSecret falls back to the shared
+# existingSecret above; set it explicitly when using pod identity without a
+# shared application Secret.
+summaryEncryption:
+  existingSecret: ""
+  key: SUMMARY_MASTER_KEYS
+
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).
 locker:

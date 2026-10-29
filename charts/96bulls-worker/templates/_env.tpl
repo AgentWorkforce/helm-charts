@@ -17,6 +17,9 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
 {{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}
+{{- $bob := index .Values.components "bob-costas" -}}
+{{- if and $bob.enabled (not (.Values.summaryEncryption.existingSecret | default .Values.existingSecret)) }}{{ fail "96bulls-worker: summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" }}{{ end -}}
+{{- if and $bob.enabled (not .Values.summaryEncryption.key) }}{{ fail "96bulls-worker: summaryEncryption.key is required when bob-costas is enabled" }}{{ end -}}
 {{- end }}
 
 {{/*
@@ -62,6 +65,15 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ $v.deployment.id | default (printf "%s/%s" .context.Release.Namespace .context.Release.Name) | quote }}
 - name: ENVIRONMENT
   value: {{ $v.environment | quote }}
+{{- if eq .service "bob-costas" }}
+# Summary key custody stays in a Secret and the key is exposed only to Bob
+# Costas; no other worker or Job receives this environment variable.
+- name: SUMMARY_MASTER_KEYS
+  valueFrom:
+    secretKeyRef:
+      name: {{ $v.summaryEncryption.existingSecret | default $v.existingSecret }}
+      key: {{ $v.summaryEncryption.key }}
+{{- end }}
 {{- if $v.global.otel.endpoint }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ $v.global.otel.endpoint | quote }}

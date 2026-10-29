@@ -29,8 +29,12 @@ kubectl --context "$CTX" -n cnpg-system rollout status deploy --timeout=300s
 
 kubectl --context "$CTX" create namespace "$NS" --dry-run=client -o yaml | kubectl --context "$CTX" apply -f -
 # The one Secret the umbrella needs (kind-only throwaway values).
-$K create secret generic 96bulls-locker --from-literal=rootUser=locker --from-literal=rootPassword=locker-kind-only \
+SUMMARY_MASTER_KEYS=$($K get secret 96bulls-locker -o jsonpath='{.data.SUMMARY_MASTER_KEYS}' 2>/dev/null | base64 -d || true)
+SUMMARY_MASTER_KEYS=${SUMMARY_MASTER_KEYS:-"kind1:$(openssl rand -hex 32)"}
+printf %s "$SUMMARY_MASTER_KEYS" | $K create secret generic 96bulls-locker --from-literal=rootUser=locker --from-literal=rootPassword=locker-kind-only \
+  --from-file=SUMMARY_MASTER_KEYS=/dev/stdin \
   --from-literal=JWKS_JSON='{"keys":[]}' --dry-run=client -o yaml | $K apply -f -
+unset SUMMARY_MASTER_KEYS
 
 helm dependency build "$ROOT/charts/96bulls" >/dev/null
 IMG_REPO=${IMAGE%:*} IMG_TAG=${IMAGE##*:}

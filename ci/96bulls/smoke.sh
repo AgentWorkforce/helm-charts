@@ -43,13 +43,16 @@ $K wait cluster.postgresql.cnpg.io/hoopdb --for=condition=Ready --timeout=600s
 # Secrets (kind-only throwaway values). HOOPDB_URL comes from the app-user
 # Secret that CNPG generates.
 HOOPDB_URL=$($K get secret hoopdb-app -o jsonpath='{.data.uri}' | base64 -d)
+SUMMARY_MASTER_KEYS=$($K get secret 96bulls -o jsonpath='{.data.SUMMARY_MASTER_KEYS}' 2>/dev/null | base64 -d || true)
+SUMMARY_MASTER_KEYS=${SUMMARY_MASTER_KEYS:-"kind1:$(openssl rand -hex 32)"}
 $K create secret generic locker-root --from-literal=rootUser=locker --from-literal=rootPassword=locker-kind-only \
   --dry-run=client -o yaml | $K apply -f -
-$K create secret generic 96bulls \
+printf %s "$SUMMARY_MASTER_KEYS" | $K create secret generic 96bulls \
   --from-literal=HOOPDB_URL="$HOOPDB_URL" \
   --from-literal=LOCKER_ACCESS_KEY_ID=locker --from-literal=LOCKER_SECRET_ACCESS_KEY=locker-kind-only \
+  --from-file=SUMMARY_MASTER_KEYS=/dev/stdin \
   --from-literal=JWKS_JSON='{"keys":[]}' --dry-run=client -o yaml | $K apply -f -
-unset HOOPDB_URL
+unset HOOPDB_URL SUMMARY_MASTER_KEYS
 
 apply locker $(pin locker)
 apply otel $(pin otel)
