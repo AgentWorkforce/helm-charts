@@ -52,10 +52,15 @@ flows, model credentials, resuming runs, and optional Cloud worker mode.
 Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a
 Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
-first (or enable `externalSecrets` in one of the two charts):
+first (or enable `externalSecrets`).
+
+> The default image `ghcr.io/agentworkforce/96bulls-services` is not published
+> yet. Until it is, add `--set image.repository=<repo> --set image.tag=<tag>`
+> to both commands (`ci/96bulls/smoke.sh` builds and loads one for kind).
+
 
 ```bash
-helm install bulls agentworkforce/96bulls-worker -n 96bulls \
+helm install bulls agentworkforce/96bulls-worker -n 96bulls --create-namespace \
   --set existingSecret=96bulls \
   --set locker.endpoint=http://locker:9000 \
   --set tenant.orgId=<org>
