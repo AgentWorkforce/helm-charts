@@ -1,0 +1,20 @@
+# Shared kind values for 96bulls-worker and alleyoop.
+global:
+  imageRegistry: ghcr.io
+  otel:
+    endpoint: http://otel-opentelemetry-collector:4318
+image:
+  repository: agentworkforce/96bulls-services
+  tag: kind
+  pullPolicy: Never
+existingSecret: 96bulls
+locker:
+  endpoint: http://locker:9000
+  bucket: locker
+tenant:
+  orgId: org_kind
+  workspaceId: ws_kind
+deployment:
+  name: selfhost
+  id: kind
+environment: local

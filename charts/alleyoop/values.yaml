@@ -1,0 +1,124 @@
+## Default values for alleyoop (96Bulls ingest).
+## Secrets are NEVER set here: point existingSecret at a Secret you create.
+
+global:
+  # Registry prefixed to image.repository. Public, so no pull secret is needed.
+  imageRegistry: ghcr.io
+  otel:
+    # OTLP/HTTP endpoint; rendered as OTEL_EXPORTER_OTLP_ENDPOINT. Empty = unset.
+    endpoint: ""
+
+# One image for every component; SERVICE= selects the entry point.
+image:
+  repository: agentworkforce/96bulls-services
+  # Defaults to Chart.appVersion when empty.
+  tag: ""
+  # Optional sha256 digest ("sha256:..."); when set it wins over tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Optional; passed to every workload and Job.
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# REQUIRED. Name of an existing Secret in the release namespace.
+existingSecret: ""
+secretKeys:
+  hoopdbUrl: HOOPDB_URL
+  lockerAccessKeyId: LOCKER_ACCESS_KEY_ID
+  lockerSecretAccessKey: LOCKER_SECRET_ACCESS_KEY
+  # Optional (local/kind only): JWKS JSON used when auth.jwksUrl is empty.
+  jwksJson: JWKS_JSON
+
+# Non-secret environment shared by every component (names are the services'
+# env contract; do not rename).
+locker:
+  endpoint: ""        # REQUIRED, e.g. http://minio:9000
+  bucket: locker
+  region: us-east-1
+tenant:
+  orgId: ""           # REQUIRED
+  workspaceId: default
+deployment:
+  name: selfhost      # DEPLOYMENT
+  id: ""              # DEPLOYMENT_ID; defaults to the release namespace/name
+environment: production
+# Extra env for every component: [{ name: X, value: y }].
+extraEnv: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+automountServiceAccountToken: false
+
+# Auth for couriers. Hosted and customer installs point jwksUrl at RelayAuth.
+# For kind/local only, put a JWKS document in the Secret (secretKeys.jwksJson)
+# and leave jwksUrl empty.
+auth:
+  jwksUrl: ""
+  issuer: https://96bulls.local
+  audience: relayhistory
+
+ingest:
+  replicas: 1
+  port: 8080
+  env: []
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+startupProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 2
+  failureThreshold: 60
+livenessProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 20
+  timeoutSeconds: 3
+# 503 until HoopDb answers and sessions.__96bulls_migrations matches the image.
+readinessProbe:
+  httpGet: { path: /readyz, port: http }
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# OPTIONAL: External Secrets Operator (e.g. a 1Password ClusterSecretStore).
+# Off by default; customers create existingSecret themselves. When enabled the
+# chart renders an ExternalSecret whose target IS existingSecret, so workloads
+# are unchanged. Remote key names only, never secret values.
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: ""
+  # Secret key -> remote reference, e.g.
+  # HOOPDB_URL: { key: 96bulls-hoopdb, property: url }
+  data: {}

@@ -1,0 +1,22 @@
+# minio/minio 5.4.0, standalone, kind-only sizes. No buckets/users/policies:
+# the chart's post-install bucket Job is a Helm hook (dropped under
+# --no-hooks); 96bulls-worker's locker-init Job creates the bucket instead.
+fullnameOverride: locker
+mode: standalone
+replicas: 1
+existingSecret: locker-root
+# MinIO no longer publishes public images (minio/minio and quay.io/minio
+# both 404, including topology.ts's RELEASE.2025-09-07 pin). pgsty/minio is a
+# maintained community rebuild. Production choice is pending (see plan D6).
+image:
+  repository: pgsty/minio
+  tag: RELEASE.2026-08-04T00-00-00Z
+persistence:
+  enabled: false
+resources:
+  requests: { memory: 256Mi }
+buckets: []
+users: []
+policies: []
+svcaccts: []
+consoleService: { type: ClusterIP }

@@ -1,0 +1,57 @@
+{{- include "96bulls-worker.validate" . -}}
+{{- $jobs := list -}}
+{{- if .Values.migrations.enabled }}{{ $jobs = append $jobs (dict "job" "migrate" "service" "hoopdb-migrate" "config" .Values.migrations) }}{{ end -}}
+{{- if .Values.lockerInit.enabled }}{{ $jobs = append $jobs (dict "job" "locker-init" "service" "locker-init" "config" .Values.lockerInit) }}{{ end -}}
+{{- range $jobs }}
+{{- $component := .service }}
+---
+# Plain Job, not a Helm hook. Name is content-addressed; see _names.tpl.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "96bulls-worker.jobName" (dict "context" $ "job" .job "config" .config) }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "96bulls-worker.componentLabels" (dict "context" $ "component" $component) | nindent 4 }}
+spec:
+  backoffLimit: {{ .config.backoffLimit }}
+  activeDeadlineSeconds: {{ .config.activeDeadlineSeconds }}
+  {{- if .config.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ .config.ttlSecondsAfterFinished }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "96bulls-worker.componentSelectorLabels" (dict "context" $ "component" $component) | nindent 8 }}
+        {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- include "96bulls-worker.podSpecCommon" $ | nindent 6 }}
+      containers:
+        - name: {{ .job }}
+          image: {{ include "96bulls-worker.image" $ | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            {{- include "96bulls-worker.env" (dict "context" $ "service" .service) | nindent 12 }}
+            {{- if eq .job "migrate" }}
+            - name: HOOPDB_SUPABASE_SHIM
+              value: {{ ternary "true" "false" $.Values.migrations.supabaseShim | quote }}
+            {{- end }}
+          {{- with $.Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .config.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+{{- end }}

@@ -1,0 +1,57 @@
+{{- include "96bulls-worker.validate" . -}}
+{{- range $component, $c := .Values.components }}
+{{- if $c.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "96bulls-worker.componentName" (dict "context" $ "component" $component) }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "96bulls-worker.componentLabels" (dict "context" $ "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $c.replicas }}
+  {{- if eq $component "hoopdb-indexer" }}
+  # Never two indexers at once: the reconcile loop is not leader-elected.
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "96bulls-worker.componentSelectorLabels" (dict "context" $ "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "96bulls-worker.componentSelectorLabels" (dict "context" $ "component" $component) | nindent 8 }}
+        {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      {{- include "96bulls-worker.podSpecCommon" $ | nindent 6 }}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "96bulls-worker.image" $ | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            {{- include "96bulls-worker.env" (dict "context" $ "service" $component) | nindent 12 }}
+            {{- with $c.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+{{- end }}
+{{- end }}

@@ -1,0 +1,5 @@
+96bulls-worker {{ .Chart.Version }} (image {{ include "96bulls-worker.image" . }})
+
+Workers wait for HoopDb and a complete migration ledger before starting work.
+Check progress:
+  kubectl -n {{ .Release.Namespace }} get jobs,deploy -l app.kubernetes.io/instance={{ .Release.Name }}
