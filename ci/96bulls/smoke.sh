@@ -57,7 +57,7 @@ apply otel $(pin otel)
 # Charts under test, all at once: workloads must tolerate any apply order.
 # The image under test (argument 1) overrides the values file.
 IMG_REPO=${IMAGE%:*} IMG_TAG=${IMAGE##*:}
-IMG_ARGS=(--set global.imageRegistry= --set "image.repository=$IMG_REPO" --set "image.tag=$IMG_TAG")
+IMG_ARGS=(--set global.imageRegistry= --set "image.repository=$IMG_REPO" --set "image.tag=$IMG_TAG" --set image.digest=)
 apply bulls "$ROOT/charts/96bulls-worker" -f "$ROOT/ci/96bulls/values.yaml" "${IMG_ARGS[@]}"
 apply oop "$ROOT/charts/alleyoop" -f "$ROOT/ci/96bulls/values.yaml" "${IMG_ARGS[@]}"
 

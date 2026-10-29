@@ -13,8 +13,9 @@ global:
   tenant:
     orgId: ""          # REQUIRED: your Agent Relay org id
   otel:
-    # In-release collector; set "" to disable export, or point at your own.
-    endpoint: http://otel-collector:4318
+    # OTLP/HTTP endpoint of YOUR observability backend or collector. Empty =
+    # no export. With otel.enabled below: http://otel-collector:4318
+    endpoint: ""
 
 # Shared by both app charts (YAML anchors keep one copy).
 shared: &shared
@@ -119,11 +120,13 @@ locker:
   consoleService: { type: ClusterIP }
 
 # ---------------------------------------------------------------------------
-# OpenTelemetry collector. Customers bring their own backend: replace the
-# debug exporter with yours, or disable and set global.otel.endpoint.
+# OpenTelemetry collector. OFF by default: customers bring their own
+# observability stack (set global.otel.endpoint). Enable it to run a collector
+# in the release; it then only logs a summary of each batch (debug exporter,
+# basic verbosity) until you replace the exporters with your backend.
 # ---------------------------------------------------------------------------
 otel:
-  enabled: true
+  enabled: false
   fullnameOverride: otel-collector
   mode: deployment
   image:

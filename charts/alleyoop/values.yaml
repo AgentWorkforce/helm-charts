@@ -13,8 +13,10 @@ image:
   repository: agentworkforce/96bulls-services
   # Defaults to Chart.appVersion when empty.
   tag: ""
-  # Optional sha256 digest ("sha256:..."); when set it wins over tag.
-  digest: ""
+  # sha256 digest; when set it wins over tag. Default: the services image
+  # built from 96BullSessions main 4703c8e (linux/amd64+arm64). The package
+  # is PRIVATE for now: add imagePullSecrets until it is made public.
+  digest: "sha256:46cf380ea95c246bc3f1c08470de2e7f333fa719cef0c6730d0cc660707b149b"
   pullPolicy: IfNotPresent
 
 # Optional; passed to every workload and Job.

@@ -1,5 +1,7 @@
 # kind: small volumes, local JWKS, images loaded into kind (pullPolicy Never).
 global:
+  otel:
+    endpoint: http://otel-collector:4318
   tenant:
     orgId: org_kind
 worker:
@@ -19,3 +21,5 @@ locker:
   persistence: { enabled: false }
   resources:
     requests: { memory: 256Mi }
+otel:
+  enabled: true

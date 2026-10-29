@@ -39,9 +39,39 @@ spec:
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
             {{- include "96bulls-worker.env" (dict "context" $ "service" $component) | nindent 12 }}
+            {{- with $.Values.workerHealth }}
+            {{- if .enabled }}
+            - name: WORKER_HEALTH_PORT
+              value: {{ .port | quote }}
+            - name: WORKER_UNHEALTHY_AFTER_FAILURES
+              value: {{ .unhealthyAfterFailures | quote }}
+            - name: WORKER_MAX_TICK_AGE_MS
+              value: {{ .maxTickAgeMs | quote }}
+            {{- end }}
+            {{- end }}
             {{- with $c.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          {{- with $.Values.workerHealth }}
+          {{- if .enabled }}
+          ports:
+            - name: health
+              containerPort: {{ .port }}
+              protocol: TCP
+          {{- with .startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
           {{- with $.Values.containerSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}

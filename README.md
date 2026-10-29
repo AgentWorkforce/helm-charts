@@ -62,6 +62,12 @@ helm install bulls agentworkforce/96bulls -n 96bulls \
   --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
 ```
 
+The charts default to `ghcr.io/agentworkforce/96bulls-services`, pinned by
+digest. That package is private for now: until it is public, create a
+docker-registry Secret and add `--set worker.imagePullSecrets[0].name=<secret>
+--set alleyoop.imagePullSecrets[0].name=<secret>`. The OpenTelemetry collector is off by default; set
+`global.otel.endpoint` to your backend, or `otel.enabled=true` to run one.
+
 HoopDb credentials come from the Secret CloudNativePG generates
 (`hoopdb-app`). Bring your own Postgres or S3 by disabling `hoopdb` or
 `locker` and pointing `worker.*` / `alleyoop.*` at your Secret.
@@ -74,9 +80,9 @@ Both charts are hook-free, so `helm install` and Alchemy's
 Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
 first (or enable `externalSecrets`).
 
-> The default image `ghcr.io/agentworkforce/96bulls-services` is not published
-> yet. Until it is, add `--set image.repository=<repo> --set image.tag=<tag>`
-> to both commands (`ci/96bulls/smoke.sh` builds and loads one for kind).
+> The default image `ghcr.io/agentworkforce/96bulls-services` (pinned by
+> digest) is private for now: add `--set imagePullSecrets[0].name=<secret>`
+> to both commands until it is public.
 
 
 ```bash

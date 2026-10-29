@@ -16,8 +16,11 @@ kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER"
 kind load docker-image "$IMAGE" --name "$CLUSTER"
 
 # CloudNativePG operator (cluster-wide prerequisite).
+# Every repository the operator and the umbrella's Chart.lock need.
 helm repo add cnpg https://cloudnative-pg.github.io/charts >/dev/null 2>&1 || true
-helm repo update cnpg >/dev/null
+helm repo add minio https://charts.min.io/ >/dev/null 2>&1 || true
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
+helm repo update cnpg minio open-telemetry >/dev/null
 read -r _ chart version values < <(grep '^cnpg-operator ' "$ROOT/deps/pins.txt")
 kubectl --context "$CTX" create namespace cnpg-system --dry-run=client -o yaml | kubectl --context "$CTX" apply -f -
 helm template cnpg "$chart" --version "$version" -f "$ROOT/deps/$values" --namespace cnpg-system --no-hooks --include-crds \
@@ -34,8 +37,8 @@ IMG_REPO=${IMAGE%:*} IMG_TAG=${IMAGE##*:}
 helm template bulls "$ROOT/charts/96bulls" --namespace "$NS" --no-hooks --include-crds \
     -f "$ROOT/charts/96bulls/ci/kind-values.yaml" \
     --set global.imageRegistry= \
-    --set "worker.image.repository=$IMG_REPO" --set "worker.image.tag=$IMG_TAG" \
-    --set "alleyoop.image.repository=$IMG_REPO" --set "alleyoop.image.tag=$IMG_TAG" \
+    --set "worker.image.repository=$IMG_REPO" --set "worker.image.tag=$IMG_TAG" --set worker.image.digest= \
+    --set "alleyoop.image.repository=$IMG_REPO" --set "alleyoop.image.tag=$IMG_TAG" --set alleyoop.image.digest= \
   | $K apply --server-side --field-manager=smoke -f -
 
 $K wait cluster.postgresql.cnpg.io/hoopdb --for=condition=Ready --timeout=600s
