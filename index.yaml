@@ -1,5 +1,54 @@
 apiVersion: v1
 entries:
+  96bulls-worker:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-10-29T01:09:27.527834304Z"
+    description: '96Bulls sessions-pipeline workers: the HoopDb migration Job, the
+      Locker bucket init Job, and the stage workers (hoopdb-indexer, referee, bob-costas).
+      Hook-free: safe to render with `helm template --no-hooks` and apply with server-side
+      apply (Alchemy Kubernetes.HelmChart). '
+    digest: 3cc83e27b019b329a176daa4b7aa707202409c1fdf7b1d7988d7ad5ce6bf96d2
+    home: https://github.com/AgentWorkforce/96BullSessions
+    keywords:
+    - 96bulls
+    - sessions
+    - pipeline
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: 96bulls-worker
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/96bulls-worker
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/96bulls-worker-0.1.0/96bulls-worker-0.1.0.tgz
+    version: 0.1.0
+  alleyoop:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-10-29T01:09:27.712119022Z"
+    description: 'AlleyOop ingest for the 96Bulls sessions pipeline: receives session
+      manifests and chunks from couriers and lands them in the Locker (S3). Hook-free;
+      ready only once the HoopDb migration ledger matches the image. '
+    digest: db57adb99a870d0b0b02c81e9637ca87e883af45e30b97e75563de30d54ccd13
+    home: https://github.com/AgentWorkforce/96BullSessions
+    keywords:
+    - 96bulls
+    - alleyoop
+    - ingest
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: alleyoop
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/alleyoop
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/alleyoop-0.1.0/alleyoop-0.1.0.tgz
+    version: 0.1.0
   relayflows:
   - apiVersion: v2
     appVersion: 2.0.50
@@ -131,4 +180,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relayflows-0.1.0/relayflows-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-13T07:43:15.736709715Z"
+generated: "2026-10-29T01:09:27.888211994Z"
