@@ -44,11 +44,7 @@ Name of the Secret holding engine credentials. The chart never renders this
 Secret: it is either customer-managed or written by External Secrets Operator.
 */}}
 {{- define "relaycast-cloud.secretName" -}}
-{{- if .Values.secrets.existingSecret -}}
-{{- .Values.secrets.existingSecret -}}
-{{- else if .Values.externalSecrets.enabled -}}
-{{- printf "%s-secrets" (include "relaycast-cloud.fullname" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
+{{- .Values.existingSecret -}}
 {{- end }}
 
 {{/*
@@ -89,13 +85,20 @@ silently does something other than what the values ask for.
 {{- fail "Set only one of persistence.existingClaim and persistence.create." -}}
 {{- end -}}
 {{- if and .Values.relaycast.workspaces.bootstrapProofRequired (not (include "relaycast-cloud.secretName" .)) -}}
-{{- fail "relaycast.workspaces.bootstrapProofRequired=true needs the bootstrap secret: set secrets.existingSecret, or enable externalSecrets." -}}
+{{- fail "relaycast.workspaces.bootstrapProofRequired=true needs the bootstrap secret: set existingSecret (optionally written by externalSecrets)." -}}
+{{- end -}}
+{{- if and .Values.externalSecrets.enabled (not .Values.existingSecret) -}}
+{{- fail "externalSecrets.enabled=true requires existingSecret: the name of the Secret ESO writes." -}}
 {{- end -}}
 {{- if and .Values.externalSecrets.enabled (not .Values.externalSecrets.secretStoreRef.name) -}}
 {{- fail "externalSecrets.enabled=true requires externalSecrets.secretStoreRef.name." -}}
 {{- end -}}
-{{- if and .Values.externalSecrets.enabled (not .Values.externalSecrets.data.workspaceBootstrapSecret.key) -}}
-{{- fail "externalSecrets.enabled=true requires externalSecrets.data.workspaceBootstrapSecret.key (a remote reference, never a secret value)." -}}
+{{- if .Values.externalSecrets.enabled -}}
+{{- range (list .Values.secretKeys.workspaceBootstrapSecret) -}}
+{{- if not (hasKey $.Values.externalSecrets.data .) -}}
+{{- fail (printf "externalSecrets.data must map %s (a remote reference, never a secret value)." .) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- if or (index .Values "cloudnative-pg" "enabled") .Values.postgres.enabled .Values.minio.enabled -}}
 {{- fail "cloudnative-pg, postgres and minio subcharts are reserved for the Postgres/S3 path, which engine 12.1.0 does not support yet. Leave them disabled." -}}

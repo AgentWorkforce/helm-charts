@@ -15,7 +15,7 @@ Engine environment. Secret values are only ever referenced, never rendered.
   valueFrom:
     secretKeyRef:
       name: {{ . }}
-      key: {{ $.Values.secrets.keys.workspaceBootstrapSecret }}
+      key: {{ $.Values.secretKeys.workspaceBootstrapSecret }}
 {{- end }}
 {{- with .Values.relaycast.messageTtlDays }}
 - name: RELAYCAST_MESSAGE_TTL_DAYS

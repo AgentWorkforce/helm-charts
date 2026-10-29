@@ -10,7 +10,7 @@ Health:
 Tenants are workspaces. Create one with POST /v1/workspaces
 {{- if .Values.relaycast.workspaces.bootstrapProofRequired }}
 (operator-only: send X-Workspace-Bootstrap-Secret with the value stored in
-Secret {{ include "relaycast-cloud.secretName" . }}, key {{ .Values.secrets.keys.workspaceBootstrapSecret }}).
+Secret {{ include "relaycast-cloud.secretName" . }}, key {{ .Values.secretKeys.workspaceBootstrapSecret }}).
 {{- end }}
 
 Limits of this release: single replica, SQLite on PVC {{ include "relaycast-cloud.claimName" . }}.

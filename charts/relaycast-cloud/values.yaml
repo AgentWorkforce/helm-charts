@@ -71,17 +71,16 @@ objectStorage:
 # ---------------------------------------------------------------------------
 # Secrets. The chart never renders secret values.
 # ---------------------------------------------------------------------------
-secrets:
-  # Name of an existing Secret holding the keys below. Recommended even with
-  # open workspace creation: without the bootstrap secret the engine fails
-  # closed on anonymous POST /v1/workspaces retries that send an
-  # Idempotency-Key (503 workspace_create_idempotency_unavailable).
-  # Required when relaycast.workspaces.bootstrapProofRequired=true, unless
-  # externalSecrets is enabled (the chart then names the target Secret).
-  existingSecret: ""
-  keys:
-    # Stable server-only derivation secret (openssl rand -hex 32).
-    workspaceBootstrapSecret: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET
+# Name of an existing Secret in the release namespace. Recommended even with
+# open workspace creation: without the bootstrap secret the engine fails
+# closed on anonymous POST /v1/workspaces retries that send an
+# Idempotency-Key (503 workspace_create_idempotency_unavailable).
+# Required when relaycast.workspaces.bootstrapProofRequired=true or when
+# externalSecrets is enabled (ESO then writes this Secret).
+existingSecret: ""
+secretKeys:
+  # Stable server-only derivation secret (openssl rand -hex 32).
+  workspaceBootstrapSecret: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET
 
 # Optional: External Secrets Operator. Off by default; the default self-host
 # path uses plain existingSecret refs and renders nothing here. Requires ESO
@@ -90,14 +89,15 @@ secrets:
 externalSecrets:
   enabled: false
   refreshInterval: 1h
+  # Owner: this release owns the target Secret. If another release shares the
+  # same existingSecret, use Merge there (or enable ESO in only one release).
+  creationPolicy: Owner
   secretStoreRef:
     kind: ClusterSecretStore
     name: ""
-  # Remote reference per secret key. Values are paths, never secret values.
-  data:
-    workspaceBootstrapSecret:
-      key: ""
-      property: ""
+  # Secret key -> remote reference. Paths only, never secret values, e.g.
+  # RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET: { key: relaycast-cloud, property: workspace-bootstrap-secret }
+  data: {}
 
 # ---------------------------------------------------------------------------
 # Persistence (SQLite database + file blobs)

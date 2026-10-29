@@ -44,7 +44,7 @@ kubectl -n relaycast apply -f my-relaycast-pvc.yaml        # PVC "relaycast-data
 helm install relaycast agentworkforce/relaycast-cloud -n relaycast \
   --set relaycast.baseUrl=https://relay.example.com \
   --set persistence.existingClaim=relaycast-data \
-  --set secrets.existingSecret=relaycast-secrets
+  --set existingSecret=relaycast-secrets
 ```
 
 `relaycast.baseUrl` must be the public `https://` origin, with no path. The
@@ -63,10 +63,11 @@ creates that send an `Idempotency-Key`.
 
 The chart never renders secret values. Choose one of:
 
-- `secrets.existingSecret`: a Secret you manage (default path).
+- `existingSecret`: a Secret you manage (default path).
 - `externalSecrets.enabled=true`: renders an `ExternalSecret`
   (`external-secrets.io/v1`) against your `(Cluster)SecretStore`, for example
-  one backed by 1Password. Only remote references go in values.
+  one backed by 1Password, and ESO writes the `existingSecret` Secret. Only
+  remote references go in values, and every required key must be mapped.
 
 ### Storage
 

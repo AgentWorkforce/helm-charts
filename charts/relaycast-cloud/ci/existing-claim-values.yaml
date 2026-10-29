@@ -2,8 +2,7 @@ relaycast:
   baseUrl: https://relay.example.com
   workspaces:
     bootstrapProofRequired: true
-secrets:
-  existingSecret: relaycast-secrets
+existingSecret: relaycast-secrets
 persistence:
   existingClaim: relaycast-data
 image:
