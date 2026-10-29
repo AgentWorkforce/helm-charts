@@ -122,8 +122,8 @@ locker:
 # ---------------------------------------------------------------------------
 # OpenTelemetry collector. OFF by default: customers bring their own
 # observability stack (set global.otel.endpoint). Enable it to run a collector
-# in the release; it then only logs a summary of each batch (debug exporter,
-# basic verbosity) until you replace the exporters with your backend.
+# in the release. Its safe default drops telemetry; replace the exporter and
+# pipeline configuration with your backend outside local testing.
 # ---------------------------------------------------------------------------
 otel:
   enabled: false
@@ -135,9 +135,9 @@ otel:
     tag: "0.163.2"
   config:
     exporters:
-      debug: { verbosity: basic }
+      nop: {}
     service:
       pipelines:
-        traces: { receivers: [otlp], exporters: [debug] }
-        metrics: { receivers: [otlp], exporters: [debug] }
-        logs: { receivers: [otlp], exporters: [debug] }
+        traces: { receivers: [otlp], exporters: [nop] }
+        metrics: { receivers: [otlp], exporters: [nop] }
+        logs: { receivers: [otlp], exporters: [nop] }

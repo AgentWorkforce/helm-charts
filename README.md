@@ -65,8 +65,14 @@ helm install bulls agentworkforce/96bulls -n 96bulls \
 The charts default to `ghcr.io/agentworkforce/96bulls-services`, pinned by
 digest. That package is private for now: until it is public, create a
 docker-registry Secret and add `--set worker.imagePullSecrets[0].name=<secret>
---set alleyoop.imagePullSecrets[0].name=<secret>`. The OpenTelemetry collector is off by default; set
-`global.otel.endpoint` to your backend, or `otel.enabled=true` to run one.
+--set alleyoop.imagePullSecrets[0].name=<secret>`. When overriding either app's
+image repository or tag, also clear its shipped digest with
+`--set worker.image.digest= --set alleyoop.image.digest=` (or supply matching
+digests). The OpenTelemetry collector is off by default; set
+`global.otel.endpoint` to your backend, or set both `otel.enabled=true` and
+`global.otel.endpoint=http://otel-collector:4318` to use the bundled collector.
+Its safe default exporter drops telemetry; replace `otel.config.exporters` and
+the pipeline exporters with your backend configuration outside local testing.
 
 HoopDb credentials come from the Secret CloudNativePG generates
 (`hoopdb-app`). Bring your own Postgres or S3 by disabling `hoopdb` or
@@ -82,7 +88,8 @@ first (or enable `externalSecrets`).
 
 > The default image `ghcr.io/agentworkforce/96bulls-services` (pinned by
 > digest) is private for now: add `--set imagePullSecrets[0].name=<secret>`
-> to both commands until it is public.
+> to both commands until it is public. If you override `image.repository` or
+> `image.tag`, also set `image.digest=` or supply the matching digest.
 
 
 ```bash
