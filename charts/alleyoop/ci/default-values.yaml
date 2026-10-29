@@ -1,0 +1,7 @@
+existingSecret: 96bulls
+locker:
+  endpoint: http://locker:9000
+tenant:
+  orgId: org_ci
+auth:
+  jwksUrl: https://relayauth.example.com/.well-known/jwks.json

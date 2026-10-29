@@ -1,0 +1,4 @@
+# CI render/dry-run values: Cloud worker Deployment enrolled from an existing Secret.
+mode: cloudWorker
+credentials:
+  existingSecret: relayflows-enrollment

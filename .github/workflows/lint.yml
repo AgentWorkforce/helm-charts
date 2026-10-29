@@ -1,0 +1,66 @@
+name: Lint Charts
+
+on:
+  pull_request:
+  workflow_call:  # release.yml runs the same checks before publishing
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v4.3.1
+  KUBECONFORM_VERSION: v0.8.0
+  # ExternalSecret CRDs, so ci/*-values.yaml that enable ESO dry-run cleanly.
+  ESO_VERSION: v2.14.0
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # version-bump check diffs against the base branch and reads release tags
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin kubeconform
+
+      # helm lint --strict, hook ban, render determinism, kubeconform; once per
+      # charts/<chart>/ci/*-values.yaml.
+      - name: Static chart checks
+        run: scripts/ci/charts.sh static
+
+      - name: Chart version bumped
+        if: github.event_name == 'pull_request'
+        run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"
+
+  kind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: helm/kind-action@v1.15.1
+        with:
+          cluster_name: ci
+
+      - name: Prepare cluster
+        run: |
+          kubectl apply --server-side -f "https://raw.githubusercontent.com/external-secrets/external-secrets/${ESO_VERSION}/deploy/crds/bundle.yaml"
+          # A created CRD is not served until Established.
+          kubectl wait --for=condition=Established crd --all --timeout=120s
+          kubectl create namespace ci
+
+      # Renders exactly the way Alchemy's Kubernetes.HelmChart installs
+      # (helm template --no-hooks) and server-side dry-run applies the result,
+      # so the API server validates every object.
+      - name: Server-side dry-run apply
+        run: scripts/ci/charts.sh dryrun

@@ -1,0 +1,3 @@
+# CI render/dry-run values: production profile against an existing Secret.
+secrets:
+  existingSecret: relayfile

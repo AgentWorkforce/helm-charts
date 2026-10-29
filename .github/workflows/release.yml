@@ -7,10 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Same checks as pull requests; nothing publishes unless they pass on main.
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   release:
+    needs: lint
     runs-on: ubuntu-latest
     permissions:
       contents: write  # needed to create GitHub Releases and update gh-pages
+      packages: write  # needed to push charts to ghcr.io as OCI artifacts
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,9 +31,20 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: v4.3.1
+
+      # chart-releaser runs `helm dependency build`, which only resolves
+      # repositories that are already added. Keep in sync with every
+      # charts/*/Chart.yaml dependencies block.
+      - name: Add dependency repositories
+        run: |
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm repo add minio https://charts.min.io/
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
 
       - name: Run chart-releaser
+        id: cr
         uses: helm/chart-releaser-action@v1.6.0
         with:
           # charts_dir scans all subdirectories of charts/ — each service chart
@@ -40,3 +57,32 @@ jobs:
           skip_existing: true
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Also publish every chart as an OCI artifact:
+      #   helm install <name> oci://ghcr.io/agentworkforce/charts/<chart> --version <v>
+      # Pushes any chart version that is not in GHCR yet, not just this run's
+      # changed charts, so a failed push is retried by the next run (or a
+      # manual workflow_dispatch) without another version bump.
+      # Auth is the built-in GITHUB_TOKEN; no registry credential to store.
+      # A package created by Actions starts PRIVATE; set each one public once.
+      - name: Push charts to GHCR (OCI)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          registry="oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+          printf '%s' "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          mkdir -p .oci-packages
+          for dir in charts/*/; do
+            chart=$(basename "$dir")
+            version=$(sed -n 's/^version: *//p' "$dir/Chart.yaml" | tr -d '"')
+            # Only versions chart-releaser has published to the Pages repo.
+            git ls-remote --exit-code --tags origin "refs/tags/$chart-$version" >/dev/null || continue
+            if helm show chart "$registry/$chart" --version "$version" >/dev/null 2>&1; then
+              echo "$chart $version already in GHCR"
+              continue
+            fi
+            helm dependency build "$dir" >/dev/null 2>&1 || true
+            helm package "$dir" --destination .oci-packages >/dev/null
+            helm push ".oci-packages/$chart-$version.tgz" "$registry"
+          done
