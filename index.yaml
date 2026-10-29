@@ -3,6 +3,54 @@ entries:
   96bulls:
   - apiVersion: v2
     appVersion: 0.1.0
+    created: "2026-10-29T19:26:37.034632031Z"
+    dependencies:
+    - alias: worker
+      name: 96bulls-worker
+      repository: file://../96bulls-worker
+      version: 0.4.0
+    - name: alleyoop
+      repository: file://../alleyoop
+      version: 0.3.0
+    - alias: hoopdb
+      condition: hoopdb.enabled
+      name: cluster
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.9.0
+    - alias: locker
+      condition: locker.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - alias: otel
+      condition: otel.enabled
+      name: opentelemetry-collector
+      repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+      version: 0.178.0
+    description: 'The 96Bulls sessions pipeline in one release: the 96bulls-worker
+      and alleyoop app charts, plus optional HoopDb (CloudNativePG Cluster), Locker
+      (MinIO) and an OpenTelemetry collector. Hook-free, so `helm install` and Alchemy''s
+      `helm template --no-hooks` + server-side apply behave the same. Requires the
+      CloudNativePG operator when hoopdb.enabled (see deps/PINS.md). '
+    digest: 7f6b75f8ed439c0230a4b5e78980cc6aba281f7209ad5bc0b6fe2b4210c419d4
+    home: https://github.com/AgentWorkforce/96BullSessions
+    keywords:
+    - 96bulls
+    - sessions
+    - pipeline
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: 96bulls
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/96bulls
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/96bulls-0.3.0/96bulls-0.3.0.tgz
+    version: 0.3.0
+  - apiVersion: v2
+    appVersion: 0.1.0
     created: "2026-10-29T06:33:18.50033144Z"
     dependencies:
     - alias: worker
@@ -98,6 +146,30 @@ entries:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/96bulls-0.1.0/96bulls-0.1.0.tgz
     version: 0.1.0
   96bulls-worker:
+  - apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-10-29T19:26:37.192417853Z"
+    description: '96Bulls sessions-pipeline workers: the HoopDb migration Job, the
+      Locker bucket init Job, and the stage workers (hoopdb-indexer, referee, bob-costas).
+      Hook-free: safe to render with `helm template --no-hooks` and apply with server-side
+      apply (Alchemy Kubernetes.HelmChart). '
+    digest: b913d73e9f3f287c18f98c892d91e50ba75e802a62c7858475214380aebc6bd2
+    home: https://github.com/AgentWorkforce/96BullSessions
+    keywords:
+    - 96bulls
+    - sessions
+    - pipeline
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: 96bulls-worker
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/96bulls-worker
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/96bulls-worker-0.4.0/96bulls-worker-0.4.0.tgz
+    version: 0.4.0
   - apiVersion: v2
     appVersion: 0.1.0
     created: "2026-10-29T06:33:18.897437858Z"
@@ -421,4 +493,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relayflows-0.1.0/relayflows-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-29T17:04:59.547948688Z"
+generated: "2026-10-29T19:26:37.192465963Z"
