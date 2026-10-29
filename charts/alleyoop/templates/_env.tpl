@@ -13,7 +13,7 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "alleyoop: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}
 {{- if and (eq $credentialsMode "secret") (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if and (not .Values.hoopdb.existingSecret) (not .Values.existingSecret) }}{{ fail "alleyoop: hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" }}{{ end -}}
-{{- if not .Values.locker.endpoint }}{{ fail "alleyoop: locker.endpoint is required" }}{{ end -}}
+{{- if and (eq $credentialsMode "secret") (not .Values.locker.endpoint) }}{{ fail "alleyoop: locker.endpoint is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if not (include "alleyoop.orgId" .) }}{{ fail "alleyoop: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}

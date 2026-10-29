@@ -82,7 +82,8 @@ HoopDb credentials come from the Secret CloudNativePG generates
 `locker` and pointing `worker.*` / `alleyoop.*` at your infrastructure. On EKS,
 set both app charts' `locker.credentials.mode=podIdentity` to omit
 `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`; the AWS SDK then uses its
-workload identity credential chain. Associate the rendered worker and
+workload identity credential chain. Leave `locker.endpoint` empty to use the
+native AWS S3 endpoint for `locker.region`. Associate the rendered worker and
 alleyoop ServiceAccounts with their IAM roles. If the S3 bucket is already
 created and versioned, also set `worker.lockerInit.enabled=false`; otherwise
 the worker role needs permission to create the bucket and enable versioning.
@@ -98,7 +99,8 @@ first (or enable `externalSecrets`).
 For workload identity, set `locker.credentials.mode=podIdentity` and provide
 `hoopdb.existingSecret`; `existingSecret` may then be empty. This suppresses
 both static Locker credential environment variables in every workload and in
-the worker's locker-init Job.
+the worker's locker-init Job. `locker.endpoint` may also be empty to select the
+native AWS S3 endpoint.
 
 > The default image `ghcr.io/agentworkforce/96bulls-services` (pinned by
 > digest) is private: add `--set imagePullSecrets[0].name=<secret>` to both

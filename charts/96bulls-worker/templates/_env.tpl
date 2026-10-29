@@ -13,7 +13,7 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "96bulls-worker: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}
 {{- if and (eq $credentialsMode "secret") (not .Values.existingSecret) }}{{ fail "96bulls-worker: existingSecret is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if and (not .Values.hoopdb.existingSecret) (not .Values.existingSecret) }}{{ fail "96bulls-worker: hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" }}{{ end -}}
-{{- if not .Values.locker.endpoint }}{{ fail "96bulls-worker: locker.endpoint is required" }}{{ end -}}
+{{- if and (eq $credentialsMode "secret") (not .Values.locker.endpoint) }}{{ fail "96bulls-worker: locker.endpoint is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
 {{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}

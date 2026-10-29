@@ -7,7 +7,7 @@ worker:
     existingSecret: hoopdb-app
     key: uri
   locker:
-    endpoint: https://s3.us-west-2.amazonaws.com
+    endpoint: ""
     bucket: 96bulls-ci
     region: us-west-2
     credentials:
@@ -18,7 +18,7 @@ alleyoop:
     existingSecret: hoopdb-app
     key: uri
   locker:
-    endpoint: https://s3.us-west-2.amazonaws.com
+    endpoint: ""
     bucket: 96bulls-ci
     region: us-west-2
     credentials:

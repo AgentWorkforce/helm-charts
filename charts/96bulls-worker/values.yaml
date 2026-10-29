@@ -39,7 +39,9 @@ secretKeys:
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).
 locker:
-  endpoint: ""        # REQUIRED, e.g. http://minio:9000
+  # Required in secret mode, e.g. http://minio:9000. In podIdentity mode,
+  # leave empty to use the AWS SDK's native S3 endpoint for locker.region.
+  endpoint: ""
   bucket: locker
   region: us-east-1
   credentials:
