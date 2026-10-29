@@ -38,12 +38,14 @@ secretKeys:
 
 # Bob Costas encrypts summary objects before they reach the Locker. The value
 # is never accepted in values.yaml: it is read from a Kubernetes Secret and is
-# injected into Bob Costas only. Empty existingSecret falls back to the shared
-# existingSecret above; set it explicitly when using pod identity without a
-# shared application Secret.
+# projected as a read-only file into Bob Costas only. Empty existingSecret
+# falls back to the shared existingSecret above; set it explicitly when using
+# pod identity without a shared application Secret.
 summaryEncryption:
   existingSecret: ""
   key: SUMMARY_MASTER_KEYS
+  mountPath: /var/run/secrets/96bulls
+  fileName: summary-master-keys
 
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).

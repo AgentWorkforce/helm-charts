@@ -82,7 +82,7 @@ the pipeline exporters with your backend configuration outside local testing.
 
 Bob Costas reads `SUMMARY_MASTER_KEYS` from a Secret and stores only encrypted
 summary objects in the Locker; no key value belongs in Helm values. The worker
-chart injects that key into Bob Costas only. Set
+chart projects that Secret key as a read-only file into Bob Costas only. Set
 `worker.summaryEncryption.existingSecret` when the key is not in the shared
 Secret (required for pod-identity installs with no `worker.existingSecret`).
 
