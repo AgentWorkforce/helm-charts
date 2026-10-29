@@ -14,10 +14,10 @@ image:
   # Defaults to Chart.appVersion when empty.
   tag: ""
   # sha256 digest; when set it wins over tag. Default: the services image
-  # built from 96BullSessions main 4703c8e (linux/amd64+arm64). The package
+  # built from 96BullSessions main db2663d (linux/amd64+arm64). The package
   # is PRIVATE for now: add imagePullSecrets until it is made public. When
   # overriding repository or tag, clear digest or set the matching digest.
-  digest: "sha256:46cf380ea95c246bc3f1c08470de2e7f333fa719cef0c6730d0cc660707b149b"
+  digest: "sha256:245a75f9d7abdbd2167108db6e4fa852df844b41a22eaebcd64b4dd7b753b2aa"
   pullPolicy: IfNotPresent
 
 # Optional; passed to every workload and Job.
