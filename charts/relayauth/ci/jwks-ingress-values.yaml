@@ -1,0 +1,25 @@
+image:
+  digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+existingSecret: relayauth-ci
+baseUrl: https://auth.example.com
+issuer: https://issuer.example.com
+cors:
+  allowedOrigins: https://sessions.example.com
+jwksIngress:
+  enabled: true
+  className: nginx
+  hosts:
+    - auth.example.com
+  tls:
+    - secretName: auth-example-com-tls
+      hosts:
+        - auth.example.com
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: controller

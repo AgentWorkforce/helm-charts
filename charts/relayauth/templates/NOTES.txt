@@ -1,0 +1,11 @@
+RelayAuth {{ include "relayauth.fullname" . }} is configured as one SQLite writer (Recreate).
+
+  Issuer: {{ include "relayauth.issuer" . }}
+  JWKS:   {{ include "relayauth.baseUrl" . }}/.well-known/jwks.json
+  Secret: {{ .Values.existingSecret }}
+  PVC:    {{ include "relayauth.claimName" . }}
+
+Signing keys and the bootstrap API key are read only at startup. After rotating
+the externally managed Secret, restart the Deployment:
+
+  kubectl -n {{ .Release.Namespace }} rollout restart deployment/{{ include "relayauth.fullname" . }}

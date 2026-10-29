@@ -1,0 +1,35 @@
+{{- include "relayauth.validate" . }}
+{{- if .Values.jwksIngress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "relayauth.fullname" . }}-jwks
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayauth.labels" . | nindent 4 }}
+  {{- with .Values.jwksIngress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.jwksIngress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.jwksIngress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.jwksIngress.hosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "relayauth.fullname" $ }}
+                port:
+                  name: http
+    {{- end }}
+{{- end }}
