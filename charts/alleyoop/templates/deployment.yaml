@@ -45,7 +45,7 @@ spec:
             {{- if .Values.auth.jwksUrl }}
             - name: RELAYAUTH_JWKS_URL
               value: {{ .Values.auth.jwksUrl | quote }}
-            {{- else }}
+            {{- else if .Values.auth.localJwks }}
             - name: JWKS_JSON
               valueFrom:
                 secretKeyRef:

@@ -129,11 +129,16 @@ affinity: {}
 
 # OPTIONAL: External Secrets Operator (e.g. a 1Password ClusterSecretStore).
 # Off by default; customers create existingSecret themselves. When enabled the
-# chart renders an ExternalSecret whose target IS existingSecret, so workloads
-# are unchanged. Remote key names only, never secret values.
+# chart renders an ExternalSecret (named after the release) whose target IS
+# existingSecret, so workloads are unchanged. Every key in secretKeys must be
+# mapped in data. Remote key names only, never secret values.
 externalSecrets:
   enabled: false
   refreshInterval: 1h
+  # Owner: this release owns the target Secret. When 96bulls-worker and
+  # alleyoop share one existingSecret, enable ESO in both only if the second
+  # uses Merge (or enable it in just one release).
+  creationPolicy: Owner
   secretStoreRef:
     kind: ClusterSecretStore
     name: ""

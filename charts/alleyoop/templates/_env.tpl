@@ -5,7 +5,8 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not .Values.existingSecret }}{{ fail "alleyoop: existingSecret is required (Secret with HOOPDB_URL, LOCKER_ACCESS_KEY_ID, LOCKER_SECRET_ACCESS_KEY)" }}{{ end -}}
 {{- if not .Values.locker.endpoint }}{{ fail "alleyoop: locker.endpoint is required" }}{{ end -}}
 {{- if not .Values.tenant.orgId }}{{ fail "alleyoop: tenant.orgId is required" }}{{ end -}}
-{{- if and (not .Values.auth.jwksUrl) (not .Values.secretKeys.jwksJson) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth) or secretKeys.jwksJson" }}{{ end -}}
+{{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
+{{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
 {{- end }}
 
 {{/*

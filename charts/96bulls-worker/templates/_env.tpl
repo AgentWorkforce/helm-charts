@@ -5,6 +5,8 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not .Values.existingSecret }}{{ fail "96bulls-worker: existingSecret is required (Secret with HOOPDB_URL, LOCKER_ACCESS_KEY_ID, LOCKER_SECRET_ACCESS_KEY)" }}{{ end -}}
 {{- if not .Values.locker.endpoint }}{{ fail "96bulls-worker: locker.endpoint is required" }}{{ end -}}
 {{- if not .Values.tenant.orgId }}{{ fail "96bulls-worker: tenant.orgId is required" }}{{ end -}}
+{{- $idx := index .Values.components "hoopdb-indexer" -}}
+{{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}
 {{- end }}
 
 {{/*

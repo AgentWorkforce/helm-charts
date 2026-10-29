@@ -36,8 +36,11 @@ apply locker minio/minio --version 5.4.0 -f "$ROOT/ci/96bulls/minio-values.yaml"
 apply otel otel/opentelemetry-collector --version 0.178.0 -f "$ROOT/ci/96bulls/otel-values.yaml"
 
 # Charts under test, all at once: workloads must tolerate any apply order.
-apply bulls "$ROOT/charts/96bulls-worker" -f "$ROOT/ci/96bulls/values.yaml"
-apply oop "$ROOT/charts/alleyoop" -f "$ROOT/ci/96bulls/values.yaml"
+# The image under test (argument 1) overrides the values file.
+IMG_REPO=${IMAGE%:*} IMG_TAG=${IMAGE##*:}
+IMG_ARGS=(--set global.imageRegistry= --set "image.repository=$IMG_REPO" --set "image.tag=$IMG_TAG")
+apply bulls "$ROOT/charts/96bulls-worker" -f "$ROOT/ci/96bulls/values.yaml" "${IMG_ARGS[@]}"
+apply oop "$ROOT/charts/alleyoop" -f "$ROOT/ci/96bulls/values.yaml" "${IMG_ARGS[@]}"
 
 $K wait --for=condition=complete job -l app.kubernetes.io/component=hoopdb-migrate --timeout=300s
 $K wait --for=condition=complete job -l app.kubernetes.io/component=locker-init --timeout=300s

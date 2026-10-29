@@ -29,7 +29,7 @@ secretKeys:
   hoopdbUrl: HOOPDB_URL
   lockerAccessKeyId: LOCKER_ACCESS_KEY_ID
   lockerSecretAccessKey: LOCKER_SECRET_ACCESS_KEY
-  # Optional (local/kind only): JWKS JSON used when auth.jwksUrl is empty.
+  # Used only when auth.localJwks=true (local/kind).
   jwksJson: JWKS_JSON
 
 # Non-secret environment shared by every component (names are the services'
@@ -55,10 +55,11 @@ serviceAccount:
 automountServiceAccountToken: false
 
 # Auth for couriers. Hosted and customer installs point jwksUrl at RelayAuth.
-# For kind/local only, put a JWKS document in the Secret (secretKeys.jwksJson)
-# and leave jwksUrl empty.
+# For kind/local only, set localJwks=true and put a JWKS document in
+# existingSecret under secretKeys.jwksJson. Exactly one of the two is required.
 auth:
   jwksUrl: ""
+  localJwks: false
   issuer: https://96bulls.local
   audience: relayhistory
 
@@ -111,11 +112,16 @@ affinity: {}
 
 # OPTIONAL: External Secrets Operator (e.g. a 1Password ClusterSecretStore).
 # Off by default; customers create existingSecret themselves. When enabled the
-# chart renders an ExternalSecret whose target IS existingSecret, so workloads
-# are unchanged. Remote key names only, never secret values.
+# chart renders an ExternalSecret (named after the release) whose target IS
+# existingSecret, so workloads are unchanged. Every key in secretKeys must be
+# mapped in data. Remote key names only, never secret values.
 externalSecrets:
   enabled: false
   refreshInterval: 1h
+  # Owner: this release owns the target Secret. When 96bulls-worker and
+  # alleyoop share one existingSecret, enable ESO in both only if the second
+  # uses Merge (or enable it in just one release).
+  creationPolicy: Owner
   secretStoreRef:
     kind: ClusterSecretStore
     name: ""

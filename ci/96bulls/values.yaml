@@ -18,3 +18,5 @@ deployment:
   name: selfhost
   id: kind
 environment: local
+auth:
+  localJwks: true
