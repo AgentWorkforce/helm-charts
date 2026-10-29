@@ -8,8 +8,8 @@
 ##   - Storage is SQLite on a ReadWriteOnce volume, so exactly one replica runs.
 ##   - Presence, rate limits, idempotency and realtime fan-out are in-process.
 ##   - File blobs are written to the same volume.
-## The Postgres (CloudNativePG), MinIO and multi-replica paths are declared but
-## disabled until the engine has Postgres/S3 adapters. See README.md.
+## The Postgres, S3 and multi-replica paths are refused at render time until
+## the engine has Postgres/S3 adapters. See README.md.
 
 global:
   # Registry prefix for every image this chart renders.
@@ -203,24 +203,3 @@ ingress:
   #      - path: /
   #        pathType: Prefix
   tls: []
-
-# ---------------------------------------------------------------------------
-# Subcharts (all off; see Chart.yaml)
-# ---------------------------------------------------------------------------
-cloudnative-pg:
-  enabled: false
-
-postgres:
-  enabled: false
-
-minio:
-  enabled: false
-  # Bucket creation is done by this chart's init Job, not MinIO's post-install
-  # hook (hooks are not applied by Alchemy / --no-hooks installs).
-  buckets: []
-
-opentelemetry-collector:
-  enabled: false
-  mode: deployment
-  image:
-    repository: otel/opentelemetry-collector-k8s

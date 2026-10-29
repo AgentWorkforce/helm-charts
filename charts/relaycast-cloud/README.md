@@ -14,22 +14,24 @@ Kubernetes cluster with no Cloudflare dependency.
 
 | Area | Today | Planned (needs engine work) |
 |------|-------|------------------------------|
-| Database | SQLite file on a ReadWriteOnce PVC | Postgres via CloudNativePG (`cloudnative-pg` 0.29.1, `cnpg/cluster` 0.9.0) |
-| File blobs | Same PVC (`/data/relaycast-files`) | S3 / MinIO (`minio` 5.4.0, bucket created by an init Job) |
-| Replicas | Exactly 1, `Recreate` strategy, no HA | Multiple, with workspace-affinity routing |
+| Database | SQLite file on a ReadWriteOnce PVC | Postgres (`RELAYCAST_DB_DRIVER=postgres`) |
+| File blobs | Same PVC (`/data/relaycast-files`) | S3 / MinIO (`RELAYCAST_FILES_DRIVER=s3`) |
+| Replicas | Exactly 1, `Recreate` strategy, no HA | Multiple, once the HA model is decided |
 | Presence, rate limits, idempotency, realtime | In-process memory | Postgres-backed, cross-pod |
-| Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` is wired; the engine does not export yet | OTel exporter; optional `opentelemetry-collector` 0.178.0 subchart |
+| Telemetry | `OTEL_EXPORTER_OTLP_ENDPOINT` is wired; the engine does not export yet | Standard `OTEL_*` exporter |
 
-The Postgres and MinIO subcharts are declared in `Chart.yaml` so the pins are
-shared with the 96BullSessions charts. Enabling them, or setting
-`database.mode=postgres` / `objectStorage.mode=s3`, **fails at render time**
-until the engine supports them. This stops a release from looking
-Postgres-backed while it actually writes to SQLite.
+This is an app-only chart. Postgres (CloudNativePG), MinIO and an
+OpenTelemetry collector are installed separately, from the shared pins in
+this repository's `deps/` directory. Setting `database.mode=postgres` or
+`objectStorage.mode=s3` **fails at render time** until the engine supports
+them. This stops a release from looking Postgres-backed while it actually
+writes to SQLite.
 
 The engine applies its SQLite migrations on startup, so this release has no
 migration Job. When the Postgres path lands, migrations will be a plain Job
-named `<fullname>-migrate-<sha8(image ref + migration config)>`, with no hooks
-and no `ttlSecondsAfterFinished`.
+named from a hash of its rendered spec, with no hooks and no
+`ttlSecondsAfterFinished`. Pods will wait on `migrate --check-schema` and
+`/readyz`.
 
 ## Install
 

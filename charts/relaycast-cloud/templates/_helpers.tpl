@@ -100,7 +100,4 @@ silently does something other than what the values ask for.
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- if or (index .Values "cloudnative-pg" "enabled") .Values.postgres.enabled .Values.minio.enabled -}}
-{{- fail "cloudnative-pg, postgres and minio subcharts are reserved for the Postgres/S3 path, which engine 12.1.0 does not support yet. Leave them disabled." -}}
-{{- end -}}
 {{- end }}
