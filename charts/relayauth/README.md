@@ -34,6 +34,10 @@ chart values. The image must be selected by an immutable SHA-256 digest.
   release's in-cluster Service URL. `issuer` defaults to `baseUrl`.
 - `jwksIngress` optionally exposes only `/.well-known/*`; it does not expose
   token or administration APIs.
+- When `jwksIngress` and `networkPolicy` are both enabled,
+  `networkPolicy.ingressFrom` must explicitly select the ingress controller.
+  The chart refuses an ingress whose backend would be blocked by its own
+  default policy.
 - `cors.allowedOrigins` configures CORS. It is not a token audience allowlist.
   A RelayHistory assertion's sole audience is the canonical `historyOrigin`
   supplied by its authorized minting client. The current RelayAuth runtime has

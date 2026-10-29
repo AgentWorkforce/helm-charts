@@ -16,3 +16,10 @@ jwksIngress:
         - auth.example.com
 networkPolicy:
   enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: controller

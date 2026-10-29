@@ -127,8 +127,10 @@ readinessProbe:
 
 networkPolicy:
   enabled: false
-  # Empty means only pods in the release namespace. Add explicit Kubernetes
-  # NetworkPolicy peers when cross-namespace callers need access.
+  # Empty means only pods in the release namespace. When jwksIngress is also
+  # enabled, this must explicitly include the ingress controller namespace and
+  # pod selectors or rendering fails: a public Ingress with a blocked backend
+  # is never a safe default.
   ingressFrom: []
 
 terminationGracePeriodSeconds: 30
