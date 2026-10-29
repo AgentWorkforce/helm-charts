@@ -22,18 +22,22 @@ kubectl --context "kind-$CLUSTER" create namespace "$NS" --dry-run=client -o yam
 # Dependencies and their pins live in deps/ (see deps/PINS.md).
 helm repo add cnpg https://cloudnative-pg.github.io/charts >/dev/null 2>&1 || true
 helm repo add minio https://charts.min.io >/dev/null 2>&1 || true
-helm repo add otel https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
-helm repo update cnpg minio otel >/dev/null
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
+helm repo update cnpg minio open-telemetry >/dev/null
 DEPS="$ROOT/deps"
+# pin <name> -> "<chart> --version <v> -f <values>" from deps/pins.txt
+pin() {
+  awk -v n="$1" -v d="$DEPS" '$1==n {print $2, "--version", $3, "-f", d"/"$4; f=1} END {exit !f}' "$DEPS/pins.txt" \
+    || { echo "smoke: $1 not in deps/pins.txt" >&2; exit 1; }
+}
 
 # HoopDb: the CloudNativePG operator (its own release, CRDs first), then the
 # Cluster. The operator runs in cnpg-system.
 kubectl --context "kind-$CLUSTER" create namespace cnpg-system --dry-run=client -o yaml | kubectl --context "kind-$CLUSTER" apply -f -
-helm template cnpg cnpg/cloudnative-pg --version 0.29.1 --namespace cnpg-system --no-hooks --include-crds \
-    -f "$DEPS/cnpg-operator-values.yaml" \
+helm template cnpg $(pin cnpg-operator) --namespace cnpg-system --no-hooks --include-crds \
   | kubectl --context "kind-$CLUSTER" -n cnpg-system apply --server-side --force-conflicts --field-manager=smoke -f -
 kubectl --context "kind-$CLUSTER" -n cnpg-system rollout status deploy --timeout=300s
-apply hoopdb cnpg/cluster --version 0.9.0 -f "$DEPS/cnpg-cluster-values.yaml"
+apply hoopdb $(pin hoopdb)
 $K wait cluster.postgresql.cnpg.io/hoopdb --for=condition=Ready --timeout=600s
 
 # Secrets (kind-only throwaway values). HOOPDB_URL comes from the app-user
@@ -47,8 +51,8 @@ $K create secret generic 96bulls \
   --from-literal=JWKS_JSON='{"keys":[]}' --dry-run=client -o yaml | $K apply -f -
 unset HOOPDB_URL
 
-apply locker minio/minio --version 5.4.0 -f "$DEPS/minio-values.yaml"
-apply otel otel/opentelemetry-collector --version 0.178.0 -f "$DEPS/otel-values.yaml"
+apply locker $(pin locker)
+apply otel $(pin otel)
 
 # Charts under test, all at once: workloads must tolerate any apply order.
 # The image under test (argument 1) overrides the values file.

@@ -2,7 +2,7 @@
 # Render every pinned dependency in deps/ with its values and fail if it needs
 # Helm hooks for correctness (hooks never run under Alchemy's
 # `helm template --no-hooks`). Helm test hooks are allowed: dropping them is
-# harmless. Keep in sync with deps/PINS.md.
+# harmless. Versions come from deps/pins.txt.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 helm repo add cnpg https://cloudnative-pg.github.io/charts >/dev/null 2>&1 || true
@@ -20,10 +20,5 @@ while read -r name chart version values; do
     echo "::error::$name: renders non-test Helm hooks with deps/$values; they never run under --no-hooks"
     fail=1
   fi
-done <<'PINS'
-cnpg-operator cnpg/cloudnative-pg 0.29.1 cnpg-operator-values.yaml
-hoopdb cnpg/cluster 0.9.0 cnpg-cluster-values.yaml
-locker minio/minio 5.4.0 minio-values.yaml
-otel open-telemetry/opentelemetry-collector 0.178.0 otel-values.yaml
-PINS
+done < <(grep -vE '^\s*(#|$)' deps/pins.txt)
 exit $fail

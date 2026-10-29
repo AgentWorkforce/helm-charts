@@ -1,7 +1,8 @@
 # Dependency pins
 
 One place for the third-party charts and images that AgentWorkforce charts run
-against. Every smoke test (`ci/<suite>/smoke.sh`) and the umbrella charts use
+against. Chart versions live in [`pins.txt`](pins.txt), the one file that CI
+(`scripts/ci/deps.sh`) and every smoke test read. Every smoke test (`ci/<suite>/smoke.sh`) and the umbrella charts use
 these files. Bump a pin here, re-run the smoke tests, then update the consumers.
 
 | Dependency | Chart (version) | Image | Values | Notes |
