@@ -63,12 +63,15 @@ helm install bulls agentworkforce/96bulls -n 96bulls \
 ```
 
 The charts default to `ghcr.io/agentworkforce/96bulls-services`, pinned by
-digest. That package is private for now: until it is public, create a
+digest. That hosted-service package is private. For direct installs, create a
 docker-registry Secret and add `--set worker.imagePullSecrets[0].name=<secret>
 --set alleyoop.imagePullSecrets[0].name=<secret>`. When overriding either app's
 image repository or tag, also clear its shipped digest with
 `--set worker.image.digest= --set alleyoop.image.digest=` (or supply matching
-digests). The OpenTelemetry collector is off by default; set
+digests). Hosted EKS installs instead set both `worker.image.repository` and
+`alleyoop.image.repository` to the fully qualified ECR repository plus its
+matching digest; EKS nodes authenticate through their node role, so that path
+does not need an image pull Secret. The OpenTelemetry collector is off by default; set
 `global.otel.endpoint` to your backend, or set both `otel.enabled=true` and
 `global.otel.endpoint=http://otel-collector:4318` to use the bundled collector.
 Its safe default exporter drops telemetry; replace `otel.config.exporters` and
@@ -87,8 +90,8 @@ Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
 first (or enable `externalSecrets`).
 
 > The default image `ghcr.io/agentworkforce/96bulls-services` (pinned by
-> digest) is private for now: add `--set imagePullSecrets[0].name=<secret>`
-> to both commands until it is public. If you override `image.repository` or
+> digest) is private: add `--set imagePullSecrets[0].name=<secret>` to both
+> commands. If you override `image.repository` or
 > `image.tag`, also set `image.digest=` or supply the matching digest.
 
 
