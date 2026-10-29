@@ -83,10 +83,16 @@ HoopDb credentials come from the Secret CloudNativePG generates
 set both app charts' `locker.credentials.mode=podIdentity` to omit
 `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`; the AWS SDK then uses its
 workload identity credential chain. Leave `locker.endpoint` empty to use the
-native AWS S3 endpoint for `locker.region`. Associate the rendered worker and
-alleyoop ServiceAccounts with their IAM roles. If the S3 bucket is already
-created and versioned, also set `worker.lockerInit.enabled=false`; otherwise
-the worker role needs permission to create the bucket and enable versioning.
+native AWS S3 endpoint for `locker.region`. Unless the cluster uses EKS Auto
+Mode, first install the
+[EKS Pod Identity Agent](https://docs.aws.amazon.com/eks/latest/userguide/pod-id-agent-setup.html).
+Create the IAM associations for the rendered worker and alleyoop
+ServiceAccounts before deploying the workloads, because EKS injects the Pod
+Identity configuration when each Pod starts. If associations are added later,
+restart the app Pods and recreate any failed locker-init Job. If the S3 bucket
+is already created and versioned, also set `worker.lockerInit.enabled=false`;
+otherwise the worker role needs permission to create the bucket and enable
+versioning.
 `ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
 
 ### Install the 96Bulls app charts individually
