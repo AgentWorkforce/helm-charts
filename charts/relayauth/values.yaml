@@ -1,0 +1,138 @@
+# RelayAuth is a single-writer SQLite service. The chart rejects any replica
+# count other than one and always uses the Recreate deployment strategy.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/agentworkforce/relayauth
+  # Required immutable OCI digest, including the sha256: prefix. Tags are not
+  # accepted by this chart. Obtain the digest from the RelayAuth image release.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+server:
+  port: 8787
+
+# Public URL used in discovery metadata and as the JWKS base URL. Empty means
+# http://<fullname>.<namespace>.svc:<server.port>.
+baseUrl: ""
+
+# `iss` on minted tokens and the issuer RelayAuth requires when verifying its
+# own tokens. Empty means baseUrl. Verifiers must pin the same value.
+issuer: ""
+
+cors:
+  # Comma-separated CORS allowlist (ALLOWED_ORIGINS). This is not a JWT
+  # audience allowlist; RelayHistory assertions bind their audience to the
+  # historyOrigin supplied by the authorized minting client.
+  allowedOrigins: ""
+
+relayhistory:
+  # Permit assertion historyOrigin values that use plain HTTP on private IPs
+  # and internal Kubernetes DNS names. Public origins still require HTTPS.
+  allowPrivateHttpOrigin: false
+  bootstrapApiKeyOrg: org_selfhost
+
+# Required pre-created Kubernetes Secret. The chart never renders secret or
+# key material. Each entry names one key in this Secret.
+existingSecret: ""
+secretKeys:
+  internalSecret: internal-secret
+  signingKey: signing-key.pem
+  signingKeyPublic: ""
+  signingKeyNext: ""
+  signingKeyPrevious: ""
+  bootstrapApiKey: bootstrap-api-key
+
+service:
+  type: ClusterIP
+  port: 8787
+  annotations: {}
+
+# Optional ingress exposing only the well-known discovery/JWKS paths. Token
+# and administration APIs remain unexposed by this ingress.
+jwksIngress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  # - auth.example.com
+  tls: []
+  # - secretName: auth-example-com-tls
+  #   hosts: [auth.example.com]
+
+persistence:
+  # Use an existing RWO PVC instead of creating one when set.
+  existingClaim: ""
+  storageClass: ""
+  size: 1Gi
+  annotations:
+    helm.sh/resource-policy: keep
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  failureThreshold: 30
+  periodSeconds: 2
+  timeoutSeconds: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 20
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+networkPolicy:
+  enabled: false
+  # Empty means only pods in the release namespace. Add explicit Kubernetes
+  # NetworkPolicy peers when cross-namespace callers need access.
+  ingressFrom: []
+
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

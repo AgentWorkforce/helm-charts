@@ -1,0 +1,19 @@
+apiVersion: v2
+name: relayauth
+description: RelayAuth identity and token issuer for self-hosted Agent Relay stacks
+type: application
+version: 0.1.0
+appVersion: "0.2.32"
+home: https://github.com/AgentWorkforce/relayauth
+keywords:
+  - relayauth
+  - oidc
+  - jwt
+  - jwks
+  - agentworkforce
+maintainers:
+  - name: AgentWorkforce
+    url: https://github.com/AgentWorkforce/helm-charts
+sources:
+  - https://github.com/AgentWorkforce/relayauth
+  - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayauth
