@@ -189,8 +189,9 @@ affinity: {}
 # OPTIONAL: External Secrets Operator (e.g. a 1Password ClusterSecretStore).
 # Off by default; customers create existingSecret themselves. When enabled the
 # chart renders an ExternalSecret (named after the release) whose target IS
-# existingSecret, so workloads are unchanged. Every key in secretKeys must be
-# mapped in data. Remote key names only, never secret values.
+# existingSecret, so workloads are unchanged. Every credential key consumed
+# from that target, including summaryEncryption.key when it follows
+# existingSecret, must be mapped in data. Remote key names only, never values.
 externalSecrets:
   enabled: false
   refreshInterval: 1h

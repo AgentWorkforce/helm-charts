@@ -27,7 +27,9 @@ shared: &shared
     lockerAccessKeyId: rootUser
     lockerSecretAccessKey: rootPassword
   summaryEncryption:
-    existingSecret: 96bulls-locker
+    # Empty follows worker.existingSecret, including user overrides. Set a
+    # name only when summary custody belongs in a separate Secret.
+    existingSecret: ""
     key: SUMMARY_MASTER_KEYS
   hoopdb:
     existingSecret: hoopdb-app
