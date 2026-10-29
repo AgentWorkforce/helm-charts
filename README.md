@@ -76,8 +76,24 @@ helm install alleyoop agentworkforce/alleyoop -n 96bulls \
 
 ## Releases
 
-Charts are packaged and published to GitHub Pages via [helm/chart-releaser-action](https://github.com/helm/chart-releaser-action) on every merge to `main`. chart-releaser detects changed chart versions automatically — each service chart is released independently.
+Charts are packaged and published to GitHub Pages via [helm/chart-releaser-action](https://github.com/helm/chart-releaser-action) on every merge to `main`, after the same lint checks that run on pull requests pass. chart-releaser detects changed chart versions automatically — each service chart is released independently.
+
+Each released chart is also pushed to GHCR as an OCI artifact:
+
+```bash
+helm install <release> oci://ghcr.io/agentworkforce/charts/<chart> --version <version>
+```
 
 ## Contributing
 
 Add new service charts under `charts/<service-name>/`. Open a PR against `main`. Merges are gated by Khaliq.
+
+Every chart must install correctly through `helm template --no-hooks` plus server-side apply, which is how Alchemy's `Kubernetes.HelmChart` installs it. Pull requests run `.github/workflows/lint.yml`:
+
+- `helm lint --strict`, once per `charts/<chart>/ci/*-values.yaml` (or with defaults when there are none).
+- **No Helm hooks.** Hooks never run under `--no-hooks`; use a plain Job instead (see `96bulls-worker`).
+- **Deterministic renders.** No `randAlphaNum`, `lookup` or `now`, or every render looks like drift.
+- `kubeconform`, plus a server-side dry-run apply on kind.
+- **A version bump** for any chart change outside `ci/`.
+
+Run the same checks locally with `scripts/ci/charts.sh static` and `scripts/ci/charts.sh dryrun` (the dry run needs a cluster in the current kube context).

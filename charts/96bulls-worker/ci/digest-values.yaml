@@ -1,0 +1,12 @@
+# Digest pinning, a fully qualified repository and a non-default bucket.
+existingSecret: 96bulls
+image:
+  repository: registry.example.com/acme/96bulls-services
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+imagePullSecrets:
+  - name: registry
+locker:
+  endpoint: http://locker:9000
+  bucket: raw
+tenant:
+  orgId: org_ci

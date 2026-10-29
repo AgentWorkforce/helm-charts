@@ -1,0 +1,4 @@
+# CI render/dry-run values: standalone mode running a flow baked into the image.
+standalone:
+  flow:
+    path: /app/flows/ci.flow.ts
