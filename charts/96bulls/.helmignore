@@ -1,0 +1,4 @@
+# Anchored: an unanchored *.tgz would also drop vendored subcharts.
+/*.tgz
+.git/
+.gitignore

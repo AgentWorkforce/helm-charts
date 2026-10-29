@@ -2,7 +2,8 @@
 ## Secrets are NEVER set here: point existingSecret at a Secret you create.
 
 global:
-  # Registry prefixed to image.repository. Public, so no pull secret is needed.
+  # Registry prefixed to relative image.repository values. The default image
+  # repository is private and requires imagePullSecrets outside hosted EKS.
   imageRegistry: ghcr.io
   otel:
     # OTLP/HTTP endpoint; rendered as OTEL_EXPORTER_OTLP_ENDPOINT. Empty = unset.
@@ -13,8 +14,11 @@ image:
   repository: agentworkforce/96bulls-services
   # Defaults to Chart.appVersion when empty.
   tag: ""
-  # Optional sha256 digest ("sha256:..."); when set it wins over tag.
-  digest: ""
+  # sha256 digest; when set it wins over tag. Default: the services image
+  # built from 96BullSessions main db2663d (linux/amd64+arm64). This hosted
+  # service package is private: add imagePullSecrets for direct installs.
+  # When overriding repository or tag, clear digest or set a matching digest.
+  digest: "sha256:245a75f9d7abdbd2167108db6e4fa852df844b41a22eaebcd64b4dd7b753b2aa"
   pullPolicy: IfNotPresent
 
 # Optional; passed to every workload and Job.
@@ -31,6 +35,13 @@ secretKeys:
   lockerSecretAccessKey: LOCKER_SECRET_ACCESS_KEY
   # Used only when auth.localJwks=true (local/kind).
   jwksJson: JWKS_JSON
+
+# OPTIONAL: read HOOPDB_URL from a different Secret than existingSecret, e.g.
+# the "<cluster>-app" Secret CloudNativePG generates (key "uri"). Empty =
+# existingSecret / secretKeys.hoopdbUrl.
+hoopdb:
+  existingSecret: ""
+  key: ""
 
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).

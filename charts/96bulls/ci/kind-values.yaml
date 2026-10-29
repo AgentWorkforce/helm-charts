@@ -1,0 +1,25 @@
+# kind: small volumes, local JWKS, images loaded into kind (pullPolicy Never).
+global:
+  otel:
+    endpoint: http://otel-collector:4318
+  tenant:
+    orgId: org_kind
+worker:
+  image: { pullPolicy: Never }
+  environment: local
+alleyoop:
+  image: { pullPolicy: Never }
+  environment: local
+  auth:
+    localJwks: true
+  secretKeys:
+    jwksJson: JWKS_JSON
+hoopdb:
+  cluster:
+    storage: { size: 2Gi }
+locker:
+  persistence: { enabled: false }
+  resources:
+    requests: { memory: 256Mi }
+otel:
+  enabled: true

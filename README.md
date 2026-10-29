@@ -9,6 +9,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 | [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
+| [96bulls](charts/96bulls) | The whole 96Bulls pipeline in one release: 96bulls-worker + alleyoop, with optional HoopDb (CloudNativePG), Locker (MinIO) and an OTel collector |
 | [alleyoop](charts/alleyoop) | 96Bulls ingest: receives session manifests and chunks and lands them in the Locker (S3) |
 
 ## Quick start
@@ -47,16 +48,51 @@ helm install relayflows agentworkforce/relayflows \
 See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
 flows, model credentials, resuming runs, and optional Cloud worker mode.
 
-### Install the 96Bulls pipeline
+### Install the 96Bulls pipeline (umbrella)
+
+One release runs everything. Prerequisite: the CloudNativePG operator (see
+[`deps/PINS.md`](deps/PINS.md)). Then create one Secret and install:
+
+```bash
+kubectl create namespace 96bulls
+kubectl -n 96bulls create secret generic 96bulls-locker \
+  --from-literal=rootUser=<user> --from-literal=rootPassword=<password>
+helm install bulls agentworkforce/96bulls -n 96bulls \
+  --set global.tenant.orgId=<org> \
+  --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
+```
+
+The charts default to `ghcr.io/agentworkforce/96bulls-services`, pinned by
+digest. That hosted-service package is private. For direct installs, create a
+docker-registry Secret and add `--set worker.imagePullSecrets[0].name=<secret>
+--set alleyoop.imagePullSecrets[0].name=<secret>`. When overriding either app's
+image repository or tag, also clear its shipped digest with
+`--set worker.image.digest= --set alleyoop.image.digest=` (or supply matching
+digests). Hosted EKS installs instead set both `worker.image.repository` and
+`alleyoop.image.repository` to the fully qualified ECR repository plus its
+matching digest; EKS nodes authenticate through their node role, so that path
+does not need an image pull Secret. The OpenTelemetry collector is off by default; set
+`global.otel.endpoint` to your backend, or set both `otel.enabled=true` and
+`global.otel.endpoint=http://otel-collector:4318` to use the bundled collector.
+Its safe default exporter drops telemetry; replace `otel.config.exporters` and
+the pipeline exporters with your backend configuration outside local testing.
+
+HoopDb credentials come from the Secret CloudNativePG generates
+(`hoopdb-app`). Bring your own Postgres or S3 by disabling `hoopdb` or
+`locker` and pointing `worker.*` / `alleyoop.*` at your Secret.
+`ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
+
+### Install the 96Bulls app charts individually
 
 Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a
 Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
 first (or enable `externalSecrets`).
 
-> The default image `ghcr.io/agentworkforce/96bulls-services` is not published
-> yet. Until it is, add `--set image.repository=<repo> --set image.tag=<tag>`
-> to both commands (`ci/96bulls/smoke.sh` builds and loads one for kind).
+> The default image `ghcr.io/agentworkforce/96bulls-services` (pinned by
+> digest) is private: add `--set imagePullSecrets[0].name=<secret>` to both
+> commands. If you override `image.repository` or
+> `image.tag`, also set `image.digest=` or supply the matching digest.
 
 
 ```bash
