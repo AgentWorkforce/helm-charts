@@ -1,10 +1,17 @@
 {{/*
+Tenant org id: tenant.orgId, else global.tenant.orgId (set once by an umbrella).
+*/}}
+{{- define "alleyoop.orgId" -}}
+{{- .Values.tenant.orgId | default (dig "tenant" "orgId" "" (.Values.global | default dict)) -}}
+{{- end }}
+
+{{/*
 Fail early on missing required values (render time, not crash-loop time).
 */}}
 {{- define "alleyoop.validate" -}}
 {{- if not .Values.existingSecret }}{{ fail "alleyoop: existingSecret is required (Secret with HOOPDB_URL, LOCKER_ACCESS_KEY_ID, LOCKER_SECRET_ACCESS_KEY)" }}{{ end -}}
 {{- if not .Values.locker.endpoint }}{{ fail "alleyoop: locker.endpoint is required" }}{{ end -}}
-{{- if not .Values.tenant.orgId }}{{ fail "alleyoop: tenant.orgId is required" }}{{ end -}}
+{{- if not (include "alleyoop.orgId" .) }}{{ fail "alleyoop: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
 {{- end }}
@@ -22,8 +29,8 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
 - name: HOOPDB_URL
   valueFrom:
     secretKeyRef:
-      name: {{ $v.existingSecret }}
-      key: {{ $v.secretKeys.hoopdbUrl }}
+      name: {{ $v.hoopdb.existingSecret | default $v.existingSecret }}
+      key: {{ $v.hoopdb.key | default $v.secretKeys.hoopdbUrl }}
 - name: LOCKER_ENDPOINT
   value: {{ $v.locker.endpoint | quote }}
 - name: LOCKER_BUCKET
@@ -41,7 +48,7 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
       name: {{ $v.existingSecret }}
       key: {{ $v.secretKeys.lockerSecretAccessKey }}
 - name: TENANT_ORG_ID
-  value: {{ $v.tenant.orgId | quote }}
+  value: {{ include "alleyoop.orgId" .context | quote }}
 - name: WORKSPACE_ID
   value: {{ $v.tenant.workspaceId | quote }}
 - name: DEPLOYMENT

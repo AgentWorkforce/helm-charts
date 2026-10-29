@@ -21,4 +21,14 @@ while read -r name chart version values; do
     fail=1
   fi
 done < <(grep -vE '^\s*(#|$)' deps/pins.txt)
+
+# Umbrella charts must depend on exactly the pinned versions.
+while read -r name chart version values; do
+  dep=${chart#*/}
+  for c in charts/*/Chart.yaml; do
+    got=$(awk -v d="$dep" '$1=="-" && $2=="name:" {n=$3} $1=="version:" && n==d {print $2; n=""}' "$c")
+    [ -z "$got" ] || [ "$got" = "$version" ] || {
+      echo "::error::$c depends on $dep $got but deps/pins.txt pins $version"; fail=1; }
+  done
+done < <(grep -vE '^\s*(#|$)' deps/pins.txt)
 exit $fail

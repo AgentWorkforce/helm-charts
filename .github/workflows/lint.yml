@@ -58,6 +58,12 @@ jobs:
       - name: Prepare cluster
         run: |
           kubectl apply --server-side -f "https://raw.githubusercontent.com/external-secrets/external-secrets/${ESO_VERSION}/deploy/crds/bundle.yaml"
+          # CloudNativePG CRDs, so charts that render a postgresql.cnpg.io
+          # Cluster (the 96bulls umbrella) dry-run cleanly.
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          read -r _ chart version values < <(grep '^cnpg-operator ' deps/pins.txt)
+          helm template cnpg "$chart" --version "$version" -f "deps/$values" --include-crds --no-hooks \
+            | yq 'select(.kind == "CustomResourceDefinition")' | kubectl apply --server-side -f -
           # A created CRD is not served until Established.
           kubectl wait --for=condition=Established crd --all --timeout=120s
           kubectl create namespace ci

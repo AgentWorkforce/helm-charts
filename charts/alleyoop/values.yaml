@@ -32,6 +32,13 @@ secretKeys:
   # Used only when auth.localJwks=true (local/kind).
   jwksJson: JWKS_JSON
 
+# OPTIONAL: read HOOPDB_URL from a different Secret than existingSecret, e.g.
+# the "<cluster>-app" Secret CloudNativePG generates (key "uri"). Empty =
+# existingSecret / secretKeys.hoopdbUrl.
+hoopdb:
+  existingSecret: ""
+  key: ""
+
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).
 locker:

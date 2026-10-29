@@ -1,0 +1,134 @@
+## 96bulls: the sessions pipeline in one release.
+##
+## Before installing, create one Secret (name: lockerSecret below) with keys
+## rootUser and rootPassword. It is both MinIO's root credential and the
+## workers' Locker credential. With hoopdb.enabled, HOOPDB_URL comes from the
+## Secret CloudNativePG generates ("hoopdb-app", key "uri"); nothing to create.
+##
+## One release per namespace: dependency objects use fixed names (hoopdb,
+## locker, otel-collector) so the app charts can address them.
+
+global:
+  imageRegistry: ghcr.io
+  tenant:
+    orgId: ""          # REQUIRED: your Agent Relay org id
+  otel:
+    # In-release collector; set "" to disable export, or point at your own.
+    endpoint: http://otel-collector:4318
+
+# Shared by both app charts (YAML anchors keep one copy).
+shared: &shared
+  existingSecret: 96bulls-locker
+  secretKeys:
+    hoopdbUrl: HOOPDB_URL
+    lockerAccessKeyId: rootUser
+    lockerSecretAccessKey: rootPassword
+  hoopdb:
+    existingSecret: hoopdb-app
+    key: uri
+  locker:
+    endpoint: http://locker:9000
+    bucket: locker
+    region: us-east-1
+  tenant:
+    orgId: ""          # empty = global.tenant.orgId
+    workspaceId: default
+  deployment:
+    name: selfhost
+    id: ""
+
+worker:
+  <<: *shared
+
+alleyoop:
+  <<: *shared
+  auth:
+    # REQUIRED: RelayAuth JWKS URL (or auth.localJwks=true for kind/local).
+    jwksUrl: ""
+
+# ---------------------------------------------------------------------------
+# HoopDb: a CloudNativePG Cluster (cnpg/cluster). Needs the CloudNativePG
+# operator installed first (deps/cnpg-operator-values.yaml). Disable to use
+# your own Postgres 17 with vector + pg_trgm: then set worker.hoopdb and
+# alleyoop.hoopdb to your Secret.
+# ---------------------------------------------------------------------------
+hoopdb:
+  enabled: true
+  fullnameOverride: hoopdb
+  type: postgresql
+  mode: standalone
+  version:
+    postgresql: "17"
+  cluster:
+    instances: 1
+    # CNPG standard Postgres 17.11; ships vector and pg_trgm (deps/PINS.md).
+    imageName: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3
+    storage:
+      size: 10Gi
+    walStorage:
+      enabled: false
+    enableSuperuserAccess: false
+    monitoring:
+      enabled: false
+    initdb:
+      database: hoopdb
+      owner: hoop
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm
+        # Supabase roles the migrations GRANT to; created as superuser so the
+        # app role keeps least privilege. Runs once (CNPG mangles $$ quoting).
+        - CREATE ROLE anon NOLOGIN NOINHERIT
+        - CREATE ROLE authenticated NOLOGIN NOINHERIT
+        - CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS
+  backups:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# Locker: MinIO (standalone). Disable to use your own S3: then set
+# worker.locker / alleyoop.locker and the credential Secret.
+# The bucket is created by 96bulls-worker's locker-init Job, not MinIO's
+# post-install hook (hooks never run under --no-hooks).
+# ---------------------------------------------------------------------------
+locker:
+  enabled: true
+  fullnameOverride: locker
+  mode: standalone
+  replicas: 1
+  existingSecret: 96bulls-locker
+  # MinIO no longer publishes public images; Chainguard's is public, signed
+  # and digest-pinned (free tier is :latest only, so bump the digest by hand).
+  image:
+    repository: cgr.dev/chainguard/minio
+    tag: latest@sha256:e70b2b1e74d79457f808710483bd726ff364529ca30736eaa15a6ab547d3a5a7
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests: { memory: 512Mi }
+  buckets: []
+  users: []
+  policies: []
+  svcaccts: []
+  consoleService: { type: ClusterIP }
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry collector. Customers bring their own backend: replace the
+# debug exporter with yours, or disable and set global.otel.endpoint.
+# ---------------------------------------------------------------------------
+otel:
+  enabled: true
+  fullnameOverride: otel-collector
+  mode: deployment
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    # Must track the chart's appVersion (0.137.0 rejects this chart's config).
+    tag: "0.163.2"
+  config:
+    exporters:
+      debug: { verbosity: basic }
+    service:
+      pipelines:
+        traces: { receivers: [otlp], exporters: [debug] }
+        metrics: { receivers: [otlp], exporters: [debug] }
+        logs: { receivers: [otlp], exporters: [debug] }

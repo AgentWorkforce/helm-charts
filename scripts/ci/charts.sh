@@ -26,7 +26,11 @@ render() { # chart valuesfile [extra helm args]
 for chart in "${charts[@]}"; do
   [ -f "charts/$chart/Chart.yaml" ] || { err "$chart: no Chart.yaml"; continue; }
   if [ -f "charts/$chart/Chart.lock" ] || grep -q '^dependencies:' "charts/$chart/Chart.yaml"; then
-    helm dependency build "charts/$chart" >/dev/null
+    # helm dependency build only resolves https repositories that are added.
+    for repo in $(sed -n 's/^ *repository: *\(https:.*\)/\1/p' "charts/$chart/Chart.yaml" | sort -u); do
+      helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
+    done
+    helm dependency build "charts/$chart" >/dev/null || { err "$chart: helm dependency build failed"; continue; }
   fi
   values=(charts/"$chart"/ci/*-values.yaml)
   [ -e "${values[0]}" ] || values=("")
@@ -39,7 +43,8 @@ for chart in "${charts[@]}"; do
         helm lint --strict "charts/$chart" "${args[@]}" >/dev/null || { helm lint --strict "charts/$chart" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
         out=$(render "$chart" "$v") || { err "$label: render failed"; continue; }
         # --no-hooks drops hooked objects, so ban hooks on a full render.
-        if helm template ci "charts/$chart" --namespace ci "${args[@]}" | grep -nE '^\s*"?helm\.sh/hook"?\s*:'; then
+        # Helm test hooks are allowed (e.g. in third-party subcharts): dropping them is harmless.
+        if helm template ci "charts/$chart" --namespace ci "${args[@]}" | grep -E '^\s*"?helm\.sh/hook"?\s*:' | grep -vE ':\s*"?test(-success)?"?\s*$'; then
           err "$label: renders a helm.sh/hook annotation. Hooks never run under Alchemy (helm template --no-hooks); use a plain Job instead"
         fi
         if ! diff -q <(echo "$out") <(render "$chart" "$v") >/dev/null; then

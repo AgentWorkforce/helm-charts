@@ -1,0 +1,6 @@
+global:
+  tenant:
+    orgId: org_ci
+alleyoop:
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json

@@ -9,6 +9,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 | [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
+| [96bulls](charts/96bulls) | The whole 96Bulls pipeline in one release: 96bulls-worker + alleyoop, with optional HoopDb (CloudNativePG), Locker (MinIO) and an OTel collector |
 | [alleyoop](charts/alleyoop) | 96Bulls ingest: receives session manifests and chunks and lands them in the Locker (S3) |
 
 ## Quick start
@@ -47,7 +48,26 @@ helm install relayflows agentworkforce/relayflows \
 See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
 flows, model credentials, resuming runs, and optional Cloud worker mode.
 
-### Install the 96Bulls pipeline
+### Install the 96Bulls pipeline (umbrella)
+
+One release runs everything. Prerequisite: the CloudNativePG operator (see
+[`deps/PINS.md`](deps/PINS.md)). Then create one Secret and install:
+
+```bash
+kubectl create namespace 96bulls
+kubectl -n 96bulls create secret generic 96bulls-locker \
+  --from-literal=rootUser=<user> --from-literal=rootPassword=<password>
+helm install bulls agentworkforce/96bulls -n 96bulls \
+  --set global.tenant.orgId=<org> \
+  --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
+```
+
+HoopDb credentials come from the Secret CloudNativePG generates
+(`hoopdb-app`). Bring your own Postgres or S3 by disabling `hoopdb` or
+`locker` and pointing `worker.*` / `alleyoop.*` at your Secret.
+`ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
+
+### Install the 96Bulls app charts individually
 
 Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a
