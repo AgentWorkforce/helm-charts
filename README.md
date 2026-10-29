@@ -8,6 +8,8 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 |-------|-------------|
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
+| [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
+| [alleyoop](charts/alleyoop) | 96Bulls ingest: receives session manifests and chunks and lands them in the Locker (S3) |
 
 ## Quick start
 
@@ -44,6 +46,28 @@ helm install relayflows agentworkforce/relayflows \
 
 See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
 flows, model credentials, resuming runs, and optional Cloud worker mode.
+
+### Install the 96Bulls pipeline
+
+Both charts are hook-free, so `helm install` and Alchemy's
+`helm template --no-hooks` + server-side apply behave the same. Create a
+Secret with `HOOPDB_URL`, `LOCKER_ACCESS_KEY_ID` and `LOCKER_SECRET_ACCESS_KEY`
+first (or enable `externalSecrets` in one of the two charts):
+
+```bash
+helm install bulls agentworkforce/96bulls-worker -n 96bulls \
+  --set existingSecret=96bulls \
+  --set locker.endpoint=http://locker:9000 \
+  --set tenant.orgId=<org>
+helm install alleyoop agentworkforce/alleyoop -n 96bulls \
+  --set existingSecret=96bulls \
+  --set locker.endpoint=http://locker:9000 \
+  --set tenant.orgId=<org> \
+  --set auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
+```
+
+`ci/96bulls/smoke.sh` runs the whole pipeline on kind, with Postgres 17
+(pgvector), MinIO and an OpenTelemetry collector.
 
 ## Releases
 
