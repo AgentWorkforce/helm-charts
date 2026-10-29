@@ -1,7 +1,7 @@
 apiVersion: v2
 name: relayfile
 type: application
-version: 0.1.0
+version: 0.1.1
 # appVersion tracks the default image tag. Pin image.tag in your values to a
 # specific digest for reproducible deployments; do not rely on "latest".
 appVersion: "0.1.0"
