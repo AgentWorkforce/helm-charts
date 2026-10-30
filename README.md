@@ -6,6 +6,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 
 | Chart | Description |
 |-------|-------------|
+| [relaycast](charts/relaycast) | Portable self-hosted Relaycast core — realtime agent communication with single-writer SQLite persistence |
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 | [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
@@ -19,6 +20,22 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 helm repo add agentworkforce https://AgentWorkforce.github.io/helm-charts
 helm repo update
 ```
+
+### Install the Relaycast core
+
+Relaycast is the minimal self-hosted core. Relayflows and 96Bulls are optional
+add-ons and are not installed with it:
+
+```bash
+kubectl create namespace relaycast
+helm install relaycast agentworkforce/relaycast -n relaycast \
+  --set baseUrl=https://relay.example.com
+```
+
+See [charts/relaycast/README.md](charts/relaycast/README.md) for ingress,
+persistence, and composition guidance. The staged AWS-first/GCP-second adapter
+plan and its proof gates are in
+[docs/self-hosted-reference-architecture.md](docs/self-hosted-reference-architecture.md).
 
 ### Install relayfile
 

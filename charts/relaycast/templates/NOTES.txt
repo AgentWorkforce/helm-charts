@@ -1,0 +1,14 @@
+Relaycast {{ .Chart.AppVersion }} was installed as {{ include "relaycast.fullname" . }}.
+
+Public origin: {{ .Values.baseUrl }}
+Service: http://{{ include "relaycast.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+Persistent volume claim: {{ include "relaycast.claimName" . }}
+
+This release is the portable single-process Relaycast core. It uses one SQLite
+database and local uploaded-file storage on the same persistent volume, so it
+must remain at one replica. Relayflows and 96Bulls are independent add-ons and
+are not installed by this chart.
+
+Health check:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "relaycast.fullname" . }} 8787:{{ .Values.service.port }}
+  curl http://127.0.0.1:8787/health
