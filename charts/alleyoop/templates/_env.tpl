@@ -18,6 +18,14 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
 {{- if and .Values.auth.localJwks (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when auth.localJwks=true" }}{{ end -}}
+{{- if not (kindIs "bool" .Values.auth.allowInterimRelayAuthBearer) }}{{ fail "alleyoop: auth.allowInterimRelayAuthBearer must be a boolean" }}{{ end -}}
+{{- if and .Values.auth.allowInterimRelayAuthBearer (ne .Values.environment "local") }}{{ fail "alleyoop: auth.allowInterimRelayAuthBearer=true is allowed only when environment=local" }}{{ end -}}
+{{- range $entry := .Values.extraEnv }}
+{{- if eq ($entry.name | default "") "ALLOW_INTERIM_RELAYAUTH_BEARER" }}{{ fail "alleyoop: configure auth.allowInterimRelayAuthBearer instead of extraEnv" }}{{ end -}}
+{{- end -}}
+{{- range $entry := .Values.ingest.env }}
+{{- if eq ($entry.name | default "") "ALLOW_INTERIM_RELAYAUTH_BEARER" }}{{ fail "alleyoop: configure auth.allowInterimRelayAuthBearer instead of ingest.env" }}{{ end -}}
+{{- end -}}
 {{- end }}
 
 {{/*

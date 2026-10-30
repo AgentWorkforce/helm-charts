@@ -42,6 +42,8 @@ spec:
               value: {{ .Values.auth.issuer | quote }}
             - name: AUTH_AUDIENCE
               value: {{ .Values.auth.audience | quote }}
+            - name: ALLOW_INTERIM_RELAYAUTH_BEARER
+              value: {{ .Values.auth.allowInterimRelayAuthBearer | quote }}
             {{- if .Values.auth.jwksUrl }}
             - name: RELAYAUTH_JWKS_URL
               value: {{ .Values.auth.jwksUrl | quote }}
