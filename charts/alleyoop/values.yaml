@@ -82,6 +82,10 @@ auth:
   localJwks: false
   issuer: https://96bulls.local
   audience: relayhistory
+  # Temporary compatibility for legacy RelayAuth bearer tokens. Fail-closed by
+  # default and permitted only when environment=local. Hosted/customer
+  # installs must use origin-bound migration assertions instead.
+  allowInterimRelayAuthBearer: false
 
 ingest:
   replicas: 1
