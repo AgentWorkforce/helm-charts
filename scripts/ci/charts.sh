@@ -95,6 +95,15 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
         expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
         expect_render_failure "$chart" "$v" "local JWKS without Secret" "existingSecret is required when auth.localJwks=true" --set auth.jwksUrl= --set auth.localJwks=true
+        expect_render_failure "$chart" "$v" "interim bearer in production" "auth.allowInterimRelayAuthBearer=true is allowed only when environment=local" --set auth.allowInterimRelayAuthBearer=true
+        expect_render_failure "$chart" "$v" "interim bearer through raw env" "configure auth.allowInterimRelayAuthBearer instead of ingest.env" --set-json 'ingest.env=[{"name":"ALLOW_INTERIM_RELAYAUTH_BEARER","value":"true"}]'
+        expect_render_failure "$chart" "$v" "non-boolean interim bearer" "auth.allowInterimRelayAuthBearer must be a boolean" --set-string auth.allowInterimRelayAuthBearer=true
+        default_auth=$(render "$chart" "$v")
+        grep -A1 -F -- '- name: ALLOW_INTERIM_RELAYAUTH_BEARER' <<<"$default_auth" | grep -Fq 'value: "false"' \
+          || err "$chart: interim RelayAuth bearer must render false by default"
+        local_auth=$(render "$chart" "$v" --set environment=local --set auth.allowInterimRelayAuthBearer=true)
+        grep -A1 -F -- '- name: ALLOW_INTERIM_RELAYAUTH_BEARER' <<<"$local_auth" | grep -Fq 'value: "true"' \
+          || err "$chart: explicit local interim RelayAuth bearer opt-in did not render true"
         ;;
       relayauth)
         v=charts/relayauth/ci/default-values.yaml
