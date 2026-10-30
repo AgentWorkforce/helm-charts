@@ -1,0 +1,21 @@
+{{- include "relaycast.validate" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "relaycast.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "relaycast.selectorLabels" . | nindent 4 }}

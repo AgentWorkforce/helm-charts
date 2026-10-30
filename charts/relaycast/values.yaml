@@ -1,0 +1,136 @@
+# Relaycast self-host currently uses one SQLite database and local file store.
+# The chart therefore permits exactly one replica and uses Recreate upgrades.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/agentworkforce/relaycast-self-host
+  # Immutable multi-platform 8.0.0 manifest (linux/amd64 and linux/arm64).
+  digest: sha256:5c86c095a335259060dc34ce7aa2e90809267395af915977a1ae608f93a83b98
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+server:
+  port: 8787
+  environment: production
+
+runtime:
+  # The released self-host image currently implements only the portable
+  # single-node SQLite adapter. Future HA adapters must be implemented and
+  # proven in the Relaycast engine before this chart can select them.
+  backend: sqlite
+
+# REQUIRED. Relaycast embeds this authority in signed file URLs and A2A cards.
+# It must be an HTTPS origin with public, multi-label DNS, without a path.
+baseUrl: ""
+
+retention:
+  # Empty keeps messages forever. Positive values set
+  # RELAYCAST_MESSAGE_TTL_DAYS; zero and negative values are rejected.
+  messageTtlDays: null
+
+mailbox:
+  # Empty values use Relaycast defaults.
+  ttlMs: null
+  depthCap: null
+
+service:
+  # ClusterIP is enforced until the runtime can authenticate anonymous
+  # workspace creation. Access this profile only from inside the cluster or
+  # through an operator-controlled port-forward.
+  type: ClusterIP
+  port: 8787
+  annotations: {}
+
+# Public ingress is unavailable for the pinned runtime because it cannot
+# authenticate anonymous workspace creation. Enabling it fails rendering.
+# Keep the shape reserved for a later, separately proven image contract.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  # - relay.example.com
+  tls: []
+  # - secretName: relay-example-com-tls
+  #   hosts: [relay.example.com]
+
+persistence:
+  existingClaim: ""
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations:
+    helm.sh/resource-policy: keep
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  failureThreshold: 30
+  periodSeconds: 2
+  timeoutSeconds: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 20
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+networkPolicy:
+  enabled: false
+  # Empty allows callers only from the release namespace.
+  ingressFrom: []
+
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# Additional non-secret environment variables. Names managed by the structured
+# values above are reserved and rejected here. The pinned 8.0.0 image does not
+# support the later workspace-bootstrap Secret variables; those are rejected so
+# a release cannot silently ignore them.
+extraEnv: []
