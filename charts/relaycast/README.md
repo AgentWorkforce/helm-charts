@@ -15,26 +15,20 @@ therefore fixed to `sqlite`; the chart refuses names for unimplemented backends.
 ```bash
 kubectl create namespace relaycast
 helm install relaycast agentworkforce/relaycast -n relaycast \
-  --set baseUrl=https://relay.example.com \
-  --set ingress.enabled=true \
-  --set ingress.hosts[0]=relay.example.com \
-  --set ingress.tls[0].secretName=relay-example-com-tls \
-  --set ingress.tls[0].hosts[0]=relay.example.com
+  --set baseUrl=https://relay.example.com
 ```
 
-TLS must terminate before traffic reaches the pod, and the ingress or load
-balancer must preserve WebSocket upgrades. `baseUrl` must be the public HTTPS
-origin clients actually use because Relaycast embeds it in signed file URLs and
-A2A cards.
+`baseUrl` must be the HTTPS origin clients will eventually use because Relaycast
+embeds it in signed file URLs and A2A cards.
 
 The pinned runtime cannot authenticate anonymous `POST /v1/workspaces`, so the
-chart keeps the Service on `ClusterIP` and routes the exact workspace-bootstrap
-paths to a selectorless deny Service. Bootstrap the first workspace from inside
-the cluster or through a temporary operator port-forward. Do not put another
-Ingress, Gateway, or load balancer directly in front of the application Service;
-doing so would let arbitrary internet clients allocate workspaces on the sole
-SQLite volume. A later digest may expose bootstrap only after the runtime has a
-proven authentication mechanism.
+chart keeps the Service on `ClusterIP` and rejects `ingress.enabled=true`.
+Bootstrap and use this portable profile from inside the cluster or through an
+operator port-forward. Do not put an Ingress, Gateway, NodePort, or load balancer
+directly in front of the application Service; doing so would let arbitrary
+internet clients allocate workspaces on the sole SQLite volume. A later digest
+may expose the service only after the runtime has a proven authentication
+mechanism.
 
 The pinned, published 8.0.0 image predates Relaycast's workspace-bootstrap
 Secret support. This chart therefore rejects those later environment variables

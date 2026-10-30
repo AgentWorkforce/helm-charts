@@ -44,9 +44,9 @@ service:
   port: 8787
   annotations: {}
 
-# This ingress exposes REST and WebSocket APIs except anonymous workspace
-# creation. TLS can terminate in the ingress controller or an external load
-# balancer, but clients must reach the exact HTTPS origin in baseUrl.
+# Public ingress is unavailable for the pinned runtime because it cannot
+# authenticate anonymous workspace creation. Enabling it fails rendering.
+# Keep the shape reserved for a later, separately proven image contract.
 ingress:
   enabled: false
   className: ""

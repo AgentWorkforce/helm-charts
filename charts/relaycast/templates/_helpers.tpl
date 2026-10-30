@@ -90,21 +90,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and (not (kindIs "invalid" .Values.mailbox.depthCap)) (not (regexMatch "^[1-9][0-9]*$" (toString .Values.mailbox.depthCap))) }}
 {{- fail "mailbox.depthCap must be a positive integer when set" }}
 {{- end }}
-{{- if and .Values.ingress.enabled (not .Values.ingress.hosts) }}
-{{- fail "ingress.enabled=true requires at least one host" }}
-{{- end }}
 {{- if .Values.ingress.enabled }}
-{{- $baseHost := regexReplaceAll ":[0-9]+$" (trimPrefix "https://" .Values.baseUrl) "" | lower }}
-{{- $ingressHosts := list }}
-{{- range .Values.ingress.hosts }}
-{{- $ingressHosts = append $ingressHosts (lower .) }}
-{{- end }}
-{{- if not (has $baseHost $ingressHosts) }}
-{{- fail "ingress.hosts must include the DNS host from baseUrl" }}
-{{- end }}
-{{- end }}
-{{- if and .Values.ingress.enabled .Values.networkPolicy.enabled (not .Values.networkPolicy.ingressFrom) }}
-{{- fail "ingress with networkPolicy requires networkPolicy.ingressFrom to allow the ingress controller explicitly" }}
+{{- fail "ingress.enabled must remain false: the pinned Relaycast image cannot authenticate anonymous workspace creation safely behind a public Ingress" }}
 {{- end }}
 {{- range .Values.extraEnv }}
 {{- if has .name (list "PORT" "RELAYCAST_DB_PATH" "RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET" "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED" "RELAYCAST_MESSAGE_TTL_DAYS" "RELAYCAST_MAILBOX_TTL_MS" "RELAYCAST_MAILBOX_DEPTH_CAP") }}

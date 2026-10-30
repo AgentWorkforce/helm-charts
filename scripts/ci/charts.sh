@@ -134,9 +134,7 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "boolean mailbox TTL" "mailbox.ttlMs must be a positive integer" --set mailbox.ttlMs=true
         expect_render_failure "$chart" "$v" "zero mailbox depth" "mailbox.depthCap must be a positive integer" --set mailbox.depthCap=0
         expect_render_failure "$chart" "$v" "boolean mailbox depth" "mailbox.depthCap must be a positive integer" --set mailbox.depthCap=true
-        expect_render_failure "$chart" "$v" "ingress without host" "ingress.enabled=true requires at least one host" --set ingress.enabled=true
-        expect_render_failure "$chart" "$v" "ingress host mismatch" "ingress.hosts must include the DNS host from baseUrl" --set ingress.enabled=true --set ingress.hosts[0]=other.example.com
-        expect_render_failure "$chart" "$v" "blocked ingress" "ingress with networkPolicy requires networkPolicy.ingressFrom" --set ingress.enabled=true --set ingress.hosts[0]=relay.example.com --set networkPolicy.enabled=true
+        expect_render_failure "$chart" "$v" "public ingress" "ingress.enabled must remain false" --set ingress.enabled=true
         ;;
     esac
   fi
