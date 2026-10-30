@@ -35,10 +35,6 @@ Secret support. This chart therefore rejects those later environment variables
 instead of silently accepting an ineffective Secret. Add the structured Secret
 configuration only when a supporting image is published and digest-pinned.
 
-Ingress-controller limits still apply to WebSocket lifetime and upload size.
-For ingress-nginx, configure suitable `proxy-read-timeout` and
-`proxy-body-size` annotations for your operating requirements.
-
 The image and PVC are retained independently: the image is pinned to an
 immutable multi-platform digest, and the generated PVC carries
 `helm.sh/resource-policy: keep` by default.

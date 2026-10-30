@@ -32,7 +32,7 @@ helm install relaycast agentworkforce/relaycast -n relaycast \
   --set baseUrl=https://relay.example.com
 ```
 
-See [charts/relaycast/README.md](charts/relaycast/README.md) for ingress,
+See [charts/relaycast/README.md](charts/relaycast/README.md) for private access,
 persistence, and composition guidance. The staged AWS-first/GCP-second adapter
 plan and its proof gates are in
 [docs/self-hosted-reference-architecture.md](docs/self-hosted-reference-architecture.md).

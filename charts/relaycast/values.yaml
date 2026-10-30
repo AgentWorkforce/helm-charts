@@ -38,8 +38,8 @@ mailbox:
 
 service:
   # ClusterIP is enforced until the runtime can authenticate anonymous
-  # workspace creation. Use the chart Ingress, which fails that endpoint
-  # closed, rather than exposing the Service directly.
+  # workspace creation. Access this profile only from inside the cluster or
+  # through an operator-controlled port-forward.
   type: ClusterIP
   port: 8787
   annotations: {}
@@ -120,8 +120,7 @@ readinessProbe:
 
 networkPolicy:
   enabled: false
-  # Empty allows callers only from the release namespace. When ingress is
-  # enabled, explicitly allow the ingress controller or rendering fails.
+  # Empty allows callers only from the release namespace.
   ingressFrom: []
 
 terminationGracePeriodSeconds: 30
