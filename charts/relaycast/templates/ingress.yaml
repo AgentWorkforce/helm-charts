@@ -24,6 +24,23 @@ spec:
     - host: {{ . | quote }}
       http:
         paths:
+          # Relaycast 8.0.0 cannot authenticate anonymous workspace creation.
+          # Exact matches take precedence over the catch-all Prefix, so public
+          # POST /v1/workspaces never reaches the runtime through this Ingress.
+          - path: /v1/workspaces
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "relaycast.fullname" $ }}-workspace-bootstrap-deny
+                port:
+                  name: deny
+          - path: /v1/workspaces/
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "relaycast.fullname" $ }}-workspace-bootstrap-deny
+                port:
+                  name: deny
           - path: /
             pathType: Prefix
             backend:

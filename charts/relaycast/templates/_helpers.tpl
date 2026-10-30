@@ -68,16 +68,26 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if regexMatch "(?i)\\.local(:[0-9]{1,5})?$" .Values.baseUrl }}
 {{- fail "baseUrl must not use the special-use .local namespace" }}
 {{- end }}
+{{- if regexMatch "(?i)\\.localhost(:[0-9]{1,5})?$" .Values.baseUrl }}
+{{- fail "baseUrl must not use the special-use .localhost namespace" }}
+{{- end }}
+{{- $portToken := regexFind ":[0-9]+$" .Values.baseUrl }}
+{{- if and $portToken (or (lt (int (trimPrefix ":" $portToken)) 1) (gt (int (trimPrefix ":" $portToken)) 65535)) }}
+{{- fail "baseUrl port must be between 1 and 65535" }}
+{{- end }}
+{{- if ne .Values.service.type "ClusterIP" }}
+{{- fail "service.type must be ClusterIP: the pinned Relaycast image cannot protect anonymous workspace creation on a directly exposed Service" }}
+{{- end }}
 {{- if not (has .Values.persistence.accessMode (list "ReadWriteOnce" "ReadWriteOncePod")) }}
 {{- fail "persistence.accessMode must be ReadWriteOnce or ReadWriteOncePod for the single-writer SQLite volume" }}
 {{- end }}
-{{- if and (not (kindIs "invalid" .Values.retention.messageTtlDays)) (le (int .Values.retention.messageTtlDays) 0) }}
+{{- if and (not (kindIs "invalid" .Values.retention.messageTtlDays)) (not (regexMatch "^[1-9][0-9]*$" (toString .Values.retention.messageTtlDays))) }}
 {{- fail "retention.messageTtlDays must be a positive integer when set" }}
 {{- end }}
-{{- if and (not (kindIs "invalid" .Values.mailbox.ttlMs)) (le (int .Values.mailbox.ttlMs) 0) }}
+{{- if and (not (kindIs "invalid" .Values.mailbox.ttlMs)) (not (regexMatch "^[1-9][0-9]*$" (toString .Values.mailbox.ttlMs))) }}
 {{- fail "mailbox.ttlMs must be a positive integer when set" }}
 {{- end }}
-{{- if and (not (kindIs "invalid" .Values.mailbox.depthCap)) (le (int .Values.mailbox.depthCap) 0) }}
+{{- if and (not (kindIs "invalid" .Values.mailbox.depthCap)) (not (regexMatch "^[1-9][0-9]*$" (toString .Values.mailbox.depthCap))) }}
 {{- fail "mailbox.depthCap must be a positive integer when set" }}
 {{- end }}
 {{- if and .Values.ingress.enabled (not .Values.ingress.hosts) }}

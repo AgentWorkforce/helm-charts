@@ -37,13 +37,16 @@ mailbox:
   depthCap: null
 
 service:
+  # ClusterIP is enforced until the runtime can authenticate anonymous
+  # workspace creation. Use the chart Ingress, which fails that endpoint
+  # closed, rather than exposing the Service directly.
   type: ClusterIP
   port: 8787
   annotations: {}
 
-# This ingress exposes the complete REST and WebSocket API. TLS can terminate
-# in the ingress controller or an external load balancer, but clients must
-# reach the exact HTTPS origin configured in baseUrl.
+# This ingress exposes REST and WebSocket APIs except anonymous workspace
+# creation. TLS can terminate in the ingress controller or an external load
+# balancer, but clients must reach the exact HTTPS origin in baseUrl.
 ingress:
   enabled: false
   className: ""

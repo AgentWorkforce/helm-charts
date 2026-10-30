@@ -27,6 +27,15 @@ balancer must preserve WebSocket upgrades. `baseUrl` must be the public HTTPS
 origin clients actually use because Relaycast embeds it in signed file URLs and
 A2A cards.
 
+The pinned runtime cannot authenticate anonymous `POST /v1/workspaces`, so the
+chart keeps the Service on `ClusterIP` and routes the exact workspace-bootstrap
+paths to a selectorless deny Service. Bootstrap the first workspace from inside
+the cluster or through a temporary operator port-forward. Do not put another
+Ingress, Gateway, or load balancer directly in front of the application Service;
+doing so would let arbitrary internet clients allocate workspaces on the sole
+SQLite volume. A later digest may expose bootstrap only after the runtime has a
+proven authentication mechanism.
+
 The pinned, published 8.0.0 image predates Relaycast's workspace-bootstrap
 Secret support. This chart therefore rejects those later environment variables
 instead of silently accepting an ineffective Secret. Add the structured Secret
