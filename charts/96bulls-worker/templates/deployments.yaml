@@ -50,7 +50,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- with $c.env }}
-            {{- toYaml . | nindent 12 }}
+            {{- include "96bulls-worker.renderEnv" . | nindent 12 }}
             {{- end }}
           {{- with $.Values.workerHealth }}
           {{- if .enabled }}
