@@ -1,0 +1,20 @@
+self-hosted {{ .Chart.Version }} in namespace {{ .Release.Namespace }}
+profile: {{ .Values.profile }} (one replica, Recreate, SQLite, ReadWriteOnce; not HA)
+{{- if .Values.addons.relaycast }}
+
+Relaycast chart 0.2.0 is enabled. Image pin:
+  ghcr.io/agentworkforce/relaycast-self-host@{{ .Values.relaycast.image.digest }}
+
+Do not helm rollback to Relaycast 0.1.0 after this release has started.
+The 0.1.0 engine cannot read the migrated schema. Roll forward with helm upgrade.
+{{- else }}
+
+Relaycast is off. This release installed no Relaycast workload.
+Enable the portable-single add-on with addons.relaycast=true plus
+relaycast.baseUrl and relaycast.existingSecret. See charts/self-hosted/README.md.
+{{- end }}
+
+Relayfile is not part of this chart. aws-ha is not implemented.
+{{- if not .Values.addons.relaycast }}
+Contract: kubectl -n {{ .Release.Namespace }} get configmap {{ .Release.Name }}-self-hosted-contract
+{{- end }}

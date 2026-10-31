@@ -1,0 +1,16 @@
+# Generic Kubernetes. Portable-single only. Backup is on because the
+# Relaycast chart can back up SQLite; this file does not claim HA.
+profile: portable-single
+addons:
+  relaycast: true
+relaycast:
+  baseUrl: https://relay.example.com
+  existingSecret: relaycast-secrets
+  runtime:
+    backend: sqlite
+  replicaCount: 1
+  persistence:
+    accessMode: ReadWriteOnce
+  backup:
+    enabled: true
+    keep: 7

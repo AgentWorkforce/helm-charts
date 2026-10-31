@@ -1,0 +1,18 @@
+{{- include "selfhosted.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-self-hosted-contract
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "selfhosted.labels" . | nindent 4 }}
+    app.kubernetes.io/component: contract
+data:
+  profile: {{ .Values.profile | quote }}
+  relaycastEnabled: {{ .Values.addons.relaycast | quote }}
+  relaycastChart: "0.2.0"
+  relaycastImage: "ghcr.io/agentworkforce/relaycast-self-host@{{ .Values.relaycast.image.digest }}"
+  supportTier: "portable-single: one replica, Recreate, SQLite, ReadWriteOnce; not HA"
+  rollback: "no helm rollback to relaycast 0.1.0 after the 0.2.0 schema migration"
+  providerMounts: "not-included"
+  awsHa: "not-implemented"

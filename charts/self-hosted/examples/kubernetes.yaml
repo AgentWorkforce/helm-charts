@@ -1,0 +1,24 @@
+# Generic Kubernetes values for the portable-single Relaycast add-on.
+# Create the Secret first. The chart never renders secret values.
+#
+#   kubectl create namespace self-hosted
+#   kubectl -n self-hosted create secret generic relaycast-secrets \
+#     --from-literal=internal-secret="$(openssl rand -hex 32)" \
+#     --from-literal=workspace-bootstrap-secret="$(openssl rand -hex 32)"
+#   helm install self-hosted charts/self-hosted -n self-hosted -f charts/self-hosted/examples/kubernetes.yaml
+#
+# This is one replica, Recreate, SQLite, ReadWriteOnce. It is not HA.
+profile: portable-single
+addons:
+  relaycast: true
+relaycast:
+  baseUrl: https://relay.example.com
+  existingSecret: relaycast-secrets
+  runtime:
+    backend: sqlite
+  replicaCount: 1
+  persistence:
+    accessMode: ReadWriteOnce
+  backup:
+    enabled: true
+    keep: 7

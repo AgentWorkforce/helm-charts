@@ -1,0 +1,25 @@
+# Same edge contract as charts/relaycast/ci/full-values.yaml, nested under
+# the optional add-on. No ingress controller is installed by this chart.
+profile: portable-single
+addons:
+  relaycast: true
+relaycast:
+  baseUrl: https://relay.example.com
+  existingSecret: relaycast-secrets
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
+    hosts: [relay.example.com]
+    tls:
+      - secretName: relay-example-com-tls
+        hosts: [relay.example.com]
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+  backup:
+    enabled: true

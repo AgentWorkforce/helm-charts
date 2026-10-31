@@ -1,0 +1,19 @@
+# AWS EKS is only a place to run the portable-single profile.
+# storageClass is a Kubernetes StorageClass name. It does not select
+# Aurora, RDS, ElastiCache, SQS, or S3, and it is not an AWS adapter.
+profile: portable-single
+addons:
+  relaycast: true
+relaycast:
+  baseUrl: https://relay.example.com
+  existingSecret: relaycast-secrets
+  runtime:
+    backend: sqlite
+  replicaCount: 1
+  persistence:
+    storageClass: gp3
+    accessMode: ReadWriteOnce
+  backup:
+    enabled: true
+    keep: 7
+    storageClass: gp3

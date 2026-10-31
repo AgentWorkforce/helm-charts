@@ -9,10 +9,10 @@ The self-hosted product is composed rather than monolithic.
 
 | Layer | Default | Responsibility |
 |---|---:|---|
-| Relaycast core | Required | Agent communication, REST/WebSocket API, messages, presence, actions, and files |
+| Relaycast portable-single | Off in `charts/self-hosted` until `addons.relaycast=true`. Installing `charts/relaycast` 0.2.0 directly is the same explicit baseline | Agent communication, REST/WebSocket API, messages, presence, actions, and files. One replica, Recreate, SQLite, ReadWriteOnce. Not HA |
 | Identity/control plane | Required for the complete product; naming and package boundary unresolved | Sign-in and tokens, organizations, workspaces, device enrollment, discovery, deployment bindings, and dashboard |
 | Relayflows | Off | Durable, resumable, or scheduled multi-step workflow execution |
-| Relayfile/providers | Off; inclusion in the self-host product is unresolved | GitHub, Slack, and other provider write-backs |
+| Relayfile/providers | Off. Not a dependency of `charts/self-hosted` or `charts/relaycast`, and not on the AWS hot path. Inclusion in the self-host product is unresolved | GitHub, Slack, and other provider write-backs |
 | 96Bulls | Off | Session capture, durable storage, indexing, summaries, and evaluation |
 | Observer/UI | Off | Human inspection and operations surfaces |
 
@@ -28,9 +28,11 @@ one SQLite database, and local file storage on a retained persistent volume.
 The chart enforces one replica and `Recreate` upgrades. This is a useful local,
 edge, and small-team profile, not an HA cloud claim.
 
-### `aws-ha` — next conformance target
+### `aws-ha` — next conformance target, not a chart
 
-The Relaycast engine must own the HA adapter implementation. The working
+No Helm chart or values profile implements this. The six missing proofs are
+frozen in [aws-ha-gates.md](aws-ha-gates.md). The Relaycast engine must own the
+HA adapter implementation before a chart may select it. The working
 adapter boundary discussed with Barry and kjgrok is:
 
 - relational state: PostgreSQL (Aurora/RDS on AWS);

@@ -1,0 +1,30 @@
+apiVersion: v2
+name: self-hosted
+description: >
+  Self-hosted composition chart. Relaycast portable-single is an optional
+  add-on, off by default, pinned to chart 0.2.0 and the published
+  12.2.1-selfhost.1 image. One replica, Recreate, SQLite, ReadWriteOnce.
+  Not HA. Relayfile is not included.
+type: application
+version: 0.1.0
+# The pinned Relaycast image line. This is not an HA product version.
+appVersion: "12.2.1-selfhost.1"
+kubeVersion: ">=1.22.0-0"
+home: https://github.com/AgentWorkforce/helm-charts
+keywords:
+  - self-hosted
+  - relaycast
+  - agentworkforce
+maintainers:
+  - name: AgentWorkforce
+    url: https://github.com/AgentWorkforce/helm-charts
+sources:
+  - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/self-hosted
+  - https://github.com/AgentWorkforce/relaycast
+dependencies:
+  # In-repo portable-single chart. condition is a parent value on purpose:
+  # charts/relaycast has no `enabled` value of its own.
+  - name: relaycast
+    version: 0.2.0
+    repository: file://../relaycast
+    condition: addons.relaycast

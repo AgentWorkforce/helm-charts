@@ -1,0 +1,4 @@
+# Default composition: no Relaycast workload.
+profile: portable-single
+addons:
+  relaycast: false

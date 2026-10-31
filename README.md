@@ -7,6 +7,7 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | Chart | Description |
 |-------|-------------|
 | [relaycast](charts/relaycast) | Portable self-hosted Relaycast core — realtime agent communication with single-writer SQLite persistence |
+| [self-hosted](charts/self-hosted) | Composition chart. Relaycast portable-single is optional and off by default. Not HA. Relayfile is not included |
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
 | [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
@@ -21,10 +22,22 @@ helm repo add agentworkforce https://AgentWorkforce.github.io/helm-charts
 helm repo update
 ```
 
-### Install the Relaycast core
+### Install the self-hosted composition
 
-Relaycast is the minimal self-hosted core. Relayflows and 96Bulls are optional
-add-ons and are not installed with it:
+[`charts/self-hosted`](charts/self-hosted) is the composition chart. Relaycast
+is optional and off by default. Setting `addons.relaycast=true` installs
+Relaycast chart 0.2.0 in its portable-single form (one replica, `Recreate`,
+SQLite, `ReadWriteOnce`). That is not HA. Relayfile is not a dependency and is
+not on the AWS hot path. The frozen aws-ha gates, all still open, are in
+[docs/aws-ha-gates.md](docs/aws-ha-gates.md). Examples for a generic cluster
+and for EKS as a destination only are in
+[charts/self-hosted/examples](charts/self-hosted/examples).
+
+### Install Relaycast directly (portable-single)
+
+Installing the `relaycast` chart itself is the explicit portable-single
+baseline. The self-hosted chart does not install it unless
+`addons.relaycast=true`. Relayflows and 96Bulls stay separate installs:
 
 ```bash
 kubectl create namespace relaycast

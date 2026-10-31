@@ -1,0 +1,27 @@
+# portable-single is the only profile this chart implements.
+# aws-ha is not a values profile. See docs/aws-ha-gates.md.
+profile: portable-single
+
+addons:
+  # Off by default. The self-hosted release installs no Relaycast workload
+  # until this is true. Relayfile is intentionally not an add-on key.
+  relaycast: false
+
+# Passed through to charts/relaycast only when addons.relaycast is true.
+# baseUrl and existingSecret stay empty here; the subchart rejects a render
+# that enables Relaycast without them.
+relaycast:
+  image:
+    repository: ghcr.io/agentworkforce/relaycast-self-host
+    # 12.2.1-selfhost.1 from relaycast bdf1b69c. Do not move this for v12.3.0
+    # in the integration change. The refresh plan is helm-charts issue 23.
+    digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
+  runtime:
+    backend: sqlite
+  replicaCount: 1
+  baseUrl: ""
+  existingSecret: ""
+  persistence:
+    accessMode: ReadWriteOnce
+  backup:
+    enabled: false

@@ -1,0 +1,6 @@
+dependencies:
+- name: relaycast
+  repository: file://../relaycast
+  version: 0.2.0
+digest: sha256:359442b1da0f7ea344d504420f3d1eb9cef62b180b39f69be8c81c359d8e01db
+generated: "2026-10-31T00:41:47.8874846-07:00"

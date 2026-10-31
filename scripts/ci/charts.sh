@@ -203,6 +203,74 @@ for chart in "${charts[@]}"; do
         [ "$(yq 'select(.kind == "CronJob") | .spec.jobTemplate.spec.template.metadata.labels["app.kubernetes.io/name"]' <<<"$out")" = relaycast-backup ] \
           || err "$chart: backup pods must not carry the Service selector labels"
         ;;
+      self-hosted)
+        pin='sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762'
+        repo='ghcr.io/agentworkforce/relaycast-self-host'
+        grep -Fq 'version: 0.2.0' charts/self-hosted/Chart.yaml || err "self-hosted: dependency must pin relaycast chart 0.2.0"
+        grep -Fq 'repository: file://../relaycast' charts/self-hosted/Chart.yaml || err "self-hosted: relaycast dependency must be the in-repo chart"
+        grep -Fq 'condition: addons.relaycast' charts/self-hosted/Chart.yaml || err "self-hosted: relaycast must be conditional on addons.relaycast"
+        grep -Fq "$pin" charts/self-hosted/values.yaml || err "self-hosted: values.yaml must pin the published digest"
+        grep -Fq "$pin" charts/self-hosted/templates/_helpers.tpl || err "self-hosted: render guard must pin the published digest"
+        deps=$(awk 'BEGIN{p=0} /^dependencies:/{p=1} p{print}' charts/self-hosted/Chart.yaml)
+        if grep -Eqi 'relayfile|cloudnative-pg|elasticache|amazonaws|postgres|redis' <<<"$deps"; then
+          err "self-hosted: dependencies must not include Relayfile or an HA backend"
+        fi
+        for pair in kubernetes eks; do
+          diff -q \
+            <(grep -Ev '^[[:space:]]*(#|$)' "charts/self-hosted/examples/${pair}.yaml") \
+            <(grep -Ev '^[[:space:]]*(#|$)' "charts/self-hosted/ci/${pair}-values.yaml") \
+            >/dev/null || err "self-hosted: examples/${pair}.yaml drifted from ci/${pair}-values.yaml"
+        done
+        off=$(render "$chart" charts/self-hosted/ci/default-values.yaml)
+        for kind in Deployment StatefulSet DaemonSet Job CronJob PersistentVolumeClaim NetworkPolicy Ingress Service; do
+          if grep -Eq "^kind: ${kind}\$" <<<"$off"; then
+            err "self-hosted: default-off render includes ${kind}"
+          fi
+        done
+        grep -Eq '^kind: ConfigMap$' <<<"$off" || err "self-hosted: default-off render has no contract ConfigMap"
+        on=$(render "$chart" charts/self-hosted/ci/kubernetes-values.yaml)
+        img=$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].image' <<<"$on")
+        [ "$img" = "${repo}@${pin}" ] || err "self-hosted: enabled image is ${img}"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$on")" = 1 ] || err "self-hosted: replicas must be 1"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.strategy.type' <<<"$on")" = Recreate ] || err "self-hosted: strategy must be Recreate"
+        modes=$(yq 'select(.kind == "PersistentVolumeClaim") | .spec.accessModes[0]' <<<"$on" | grep -vx -- '---' | sort -u)
+        [ "$modes" = ReadWriteOnce ] || err "self-hosted: accessMode must be ReadWriteOnce, got ${modes}"
+        grep -q 'name: RELAYCAST_INTERNAL_SECRET_FILE' <<<"$on" || err "self-hosted: internal secret file env missing"
+        grep -q 'name: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE' <<<"$on" || err "self-hosted: bootstrap secret file env missing"
+        if grep -Eq 'name: RELAYCAST_(INTERNAL|WORKSPACE_BOOTSTRAP)_SECRET$' <<<"$on"; then
+          err "self-hosted: a secret is rendered as a plain environment variable"
+        fi
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "RELAYCAST_PUBLIC_WORKSPACE_CREATE") | .value' <<<"$on")" = false ] \
+          || err "self-hosted: public workspace create is not off"
+        grep -q '/data/relaycast.db' <<<"$on" || err "self-hosted: sqlite database path missing"
+        [ "$(yq 'select(.kind == "NetworkPolicy") | .spec.ingress[0].from[0].podSelector | keys | length' <<<"$on")" = 0 ] \
+          || err "self-hosted: default NetworkPolicy must admit only the release namespace"
+        eks=$(render "$chart" charts/self-hosted/ci/eks-values.yaml)
+        eks_img=$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].image' <<<"$eks")
+        [ "$eks_img" = "${repo}@${pin}" ] || err "self-hosted: EKS example image drifted to ${eks_img}"
+        if grep -Eqi 'amazonaws|elasticache|aurora|[^a-z]sqs[^a-z]' <<<"$eks"; then
+          err "self-hosted: EKS example claims an AWS adapter"
+        fi
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "RELAYCAST_DB_PATH") | .value' <<<"$eks")" = /data/relaycast.db ] \
+          || err "self-hosted: EKS example is not the SQLite database path"
+        ing=$(render "$chart" charts/self-hosted/ci/ingress-values.yaml)
+        for p in /internal /v1/workspaces /v1/workspaces/; do
+          [ "$(yq "select(.kind == \"Ingress\") | .spec.rules[0].http.paths[] | select(.path == \"$p\") | .backend.service.name" <<<"$ing")" = ci-relaycast-deny ] \
+            || err "self-hosted: ingress path $p is not routed to the deny Service"
+        done
+        [ "$(yq 'select(.kind == "Service" and .metadata.name == "ci-relaycast-deny") | (.spec | has("selector") | not)' <<<"$ing")" = true ] \
+          || err "self-hosted: the deny Service must have no selector"
+        v=charts/self-hosted/ci/default-values.yaml
+        expect_render_failure "$chart" "$v" "aws-ha profile" "profile must be portable-single" --set profile=aws-ha
+        expect_render_failure "$chart" "$v" "relayfile add-on" "Relayfile is not part of the self-hosted chart and is off the AWS hot path" --set addons.relayfile=true
+        expect_render_failure "$chart" "$v" "relayfile values" "Relayfile is not part of the self-hosted chart and is off the AWS hot path" --set relayfile.enabled=true
+        expect_render_failure "$chart" "$v" "aws-ha add-on" "aws-ha is not implemented" --set addons.awsHa=true
+        v=charts/self-hosted/ci/kubernetes-values.yaml
+        expect_render_failure "$chart" "$v" "unpinned digest" "relaycast image.digest must stay pinned" --set relaycast.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        expect_render_failure "$chart" "$v" "other repository" "relaycast image.repository must stay" --set relaycast.image.repository=ghcr.io/example/relaycast
+        expect_render_failure "$chart" "$v" "unreleased HA backend" "runtime.backend must be sqlite" --set relaycast.runtime.backend=postgres
+        expect_render_failure "$chart" "$v" "multiple SQLite writers" "replicaCount must be 1" --set relaycast.replicaCount=2
+        ;;
     esac
   fi
 done

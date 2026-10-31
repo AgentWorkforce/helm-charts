@@ -110,3 +110,41 @@ jobs:
       - name: Relaycast live smoke
         if: steps.changed.outputs.run == 'true'
         run: ci/relaycast/smoke.sh
+
+  # Zero-state install of charts/self-hosted. Default-off, then Relaycast
+  # enabled on a new kind cluster. Does not upgrade chart 0.1.0.
+  self-hosted-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] \
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" \
+              | grep -Eq '^(charts/self-hosted/|charts/relaycast/|ci/self-hosted/|docs/aws-ha-gates.md|scripts/ci/charts.sh)'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: azure/setup-helm@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: 22
+
+      - name: Install kind
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64
+          sudo chmod 755 /usr/local/bin/kind
+
+      - name: Self-hosted zero-state smoke
+        if: steps.changed.outputs.run == 'true'
+        run: CREATE_CLUSTER=1 CLUSTER=relaycast-oss-zero NS=relaycast-oss RELEASE=selfhosted ci/self-hosted/smoke.sh

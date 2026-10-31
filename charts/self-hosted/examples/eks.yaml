@@ -1,0 +1,20 @@
+# EKS destination values for the same portable-single profile.
+# gp3 here is only a StorageClass name. This file does not configure
+# Aurora, RDS, ElastiCache, SQS, or S3. Those adapters are not in this chart.
+# See docs/aws-ha-gates.md.
+profile: portable-single
+addons:
+  relaycast: true
+relaycast:
+  baseUrl: https://relay.example.com
+  existingSecret: relaycast-secrets
+  runtime:
+    backend: sqlite
+  replicaCount: 1
+  persistence:
+    storageClass: gp3
+    accessMode: ReadWriteOnce
+  backup:
+    enabled: true
+    keep: 7
+    storageClass: gp3
