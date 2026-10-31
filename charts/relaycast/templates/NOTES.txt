@@ -8,7 +8,7 @@ Anonymous workspace creation: {{ ternary "ON (cluster-internal callers can creat
 Ingress: {{ join ", " .Values.ingress.hosts }} (/internal and /v1/workspaces are denied at the edge)
 {{- end }}
 {{- if .Values.backup.enabled }}
-Backups: CronJob {{ include "relaycast.fullname" . }}-backup ({{ .Values.backup.schedule }}) -> PVC {{ include "relaycast.backupClaimName" . }}
+Backups: CronJob {{ include "relaycast.backupName" . }} ({{ .Values.backup.schedule }}) -> PVC {{ include "relaycast.backupClaimName" . }}
 {{- end }}
 
 Single process: one SQLite database and the uploaded files on one volume.

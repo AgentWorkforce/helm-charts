@@ -1,23 +1,50 @@
 #!/usr/bin/env bash
 # Restore a Relaycast release from a backup written by the chart's backup
-# CronJob. Usage:
+# CronJob. Needs only kubectl and bash. Usage:
 #   NS=relaycast RELEASE=relaycast BACKUP=relaycast-<UTC timestamp> ci/relaycast/restore.sh
-# The engine is stopped for the copy. The replaced database and files are
-# moved to /data/pre-restore-<ts>/ on the data volume, never deleted.
+# The engine is stopped for the copy and scheduled backups are suspended. The
+# replaced database and files are moved to /data/pre-restore-<ts>/ on the data
+# volume, never deleted.
 set -euo pipefail
 : "${NS:?set NS}" "${RELEASE:?set RELEASE}" "${BACKUP:?set BACKUP (a relaycast-<timestamp> directory)}"
-[[ "$BACKUP" =~ ^relaycast-[0-9]{8}T[0-9]{6}Z$ ]] || { echo "BACKUP must look like relaycast-20260101T000000Z" >&2; exit 2; }
+[[ "$BACKUP" =~ ^relaycast-[0-9]{8}T[0-9]{6}Z(-[0-9a-f]{6})?$ ]] || { echo "BACKUP must look like relaycast-20260101T000000Z" >&2; exit 2; }
 K="kubectl -n $NS"
-SEL="app.kubernetes.io/name=relaycast,app.kubernetes.io/instance=$RELEASE"
-DEPLOY=$($K get deploy -l "$SEL" -o jsonpath='{.items[0].metadata.name}')
-IMAGE=$($K get deploy "$DEPLOY" -o jsonpath='{.spec.template.spec.containers[0].image}')
-DATA_CLAIM=$($K get deploy "$DEPLOY" -o jsonpath='{.spec.template.spec.volumes[?(@.name=="data")].persistentVolumeClaim.claimName}')
-BACKUP_CLAIM=$($K get deploy "$DEPLOY" -o jsonpath='{.spec.template.spec.volumes[?(@.name=="backup")].persistentVolumeClaim.claimName}')
-[ -n "$BACKUP_CLAIM" ] || { echo "release $RELEASE has no backup volume (backup.enabled=false)" >&2; exit 2; }
+
+# Find the release's Deployment by its instance label and the volumes that
+# carry data and backups (works with nameOverride/fullnameOverride).
+DEPLOY=
+for d in $($K get deploy -l "app.kubernetes.io/instance=$RELEASE" -o jsonpath='{.items[*].metadata.name}'); do
+  if [ -n "$($K get deploy "$d" -o jsonpath='{.spec.template.spec.volumes[?(@.name=="backup")].persistentVolumeClaim.claimName}')" ]; then DEPLOY=$d; fi
+done
+[ -n "$DEPLOY" ] || { echo "no Deployment for release $RELEASE with a backup volume (backup.enabled=false?)" >&2; exit 2; }
+jp() { $K get deploy "$DEPLOY" -o jsonpath="$1"; }
+IMAGE=$(jp '{.spec.template.spec.containers[0].image}')
+DATA_CLAIM=$(jp '{.spec.template.spec.volumes[?(@.name=="data")].persistentVolumeClaim.claimName}')
+BACKUP_CLAIM=$(jp '{.spec.template.spec.volumes[?(@.name=="backup")].persistentVolumeClaim.claimName}')
+SEL=$($K get deploy "$DEPLOY" -o go-template='{{range $k, $v := .spec.selector.matchLabels}}{{$k}}={{$v}},{{end}}'); SEL=${SEL%,}
+# Scheduling and pull settings come from the Deployment (JSON is valid YAML).
+json() { local v; v=$(jp "$1"); printf '%s' "${v:-$2}"; }
+PULL=$(json '{.spec.template.spec.imagePullSecrets}' '[]')
+TOL=$(json '{.spec.template.spec.tolerations}' '[]')
+NODESEL=$(json '{.spec.template.spec.nodeSelector}' '{}')
+AFF=$(json '{.spec.template.spec.affinity}' '{}')
+SEC=$(json '{.spec.template.spec.securityContext}' '{}')
+CRON=$($K get cronjob -l "app.kubernetes.io/instance=$RELEASE,app.kubernetes.io/component=backup" -o jsonpath='{.items[0].metadata.name}')
 JOB="$DEPLOY-restore"
 
+resume() { [ -n "$CRON" ] && $K patch cronjob "$CRON" -p '{"spec":{"suspend":false}}' >/dev/null || true; }
+trap resume EXIT
+# No backup may run while the data is replaced: suspend the schedule and wait
+# for any running backup (scheduled or manual) to finish.
+[ -n "$CRON" ] && $K patch cronjob "$CRON" -p '{"spec":{"suspend":true}}' >/dev/null
+BACKUP_PODS="app.kubernetes.io/instance=$RELEASE,app.kubernetes.io/name=$(jp '{.spec.template.metadata.labels.app\.kubernetes\.io/name}')-backup"
+for _ in $(seq 360); do
+  [ -z "$($K get pods -l "$BACKUP_PODS" --field-selector=status.phase=Running -o name)" ] && break; sleep 5
+done
+[ -z "$($K get pods -l "$BACKUP_PODS" --field-selector=status.phase=Running -o name)" ] || { echo "a backup is still running; retry later" >&2; exit 1; }
+
 $K scale deploy "$DEPLOY" --replicas=0
-$K wait --for=delete pod -l "$SEL" --timeout=300s
+$K wait --for=delete pod -l "$SEL" --timeout=300s 2>/dev/null || [ -z "$($K get pods -l "$SEL" -o name)" ]
 $K delete job "$JOB" --ignore-not-found
 $K apply -f - <<EOF
 apiVersion: batch/v1
@@ -30,7 +57,11 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
-      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      imagePullSecrets: $PULL
+      tolerations: $TOL
+      nodeSelector: $NODESEL
+      affinity: $AFF
+      securityContext: $SEC
       containers:
         - name: restore
           image: $IMAGE
@@ -62,8 +93,16 @@ spec:
         - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
 EOF
 if ! $K wait --for=condition=complete "job/$JOB" --timeout=600s; then
-  $K logs "job/$JOB" || true
-  echo "restore failed; the Deployment is left at 0 replicas and the data volume untouched or moved aside under /data/pre-restore-*" >&2
+  $K logs "job/$JOB" 2>/dev/null || true
+  if [ -z "$($K get job "$JOB" -o jsonpath='{.status.startTime}')" ] \
+    || [ -n "$($K get pods -l "job-name=$JOB" --field-selector=status.phase=Pending -o name)" ]; then
+    # The restore never ran (unschedulable or image pull): nothing was moved.
+    $K delete job "$JOB" --ignore-not-found
+    $K scale deploy "$DEPLOY" --replicas=1
+    echo "restore Job never ran; the original data is untouched and the Deployment is back at 1 replica" >&2
+  else
+    echo "restore failed after starting; the Deployment stays at 0 replicas. The previous data is under /data/pre-restore-* on $DATA_CLAIM" >&2
+  fi
   exit 1
 fi
 $K logs "job/$JOB"

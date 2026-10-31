@@ -19,6 +19,14 @@ async function j(method, path, tok, body) {
   return { s: r.status, d };
 }
 const wsUrl = (p) => B.replace(/^http/, 'ws') + p;
+// Resolve once the socket opens; reject (and close it) on error or after 10s.
+function opened(sock, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { sock.close(); reject(new Error(`${label}: WebSocket did not open within 10s`)); }, 10000);
+    sock.onopen = () => { clearTimeout(timer); resolve(); };
+    sock.onerror = () => { clearTimeout(timer); reject(new Error(`${label}: WebSocket error`)); };
+  });
+}
 
 async function nodeReceive(agentTok, agentName, marker, send) {
   const nt = await j('POST', '/v1/agent/node-token', agentTok, {});
@@ -39,7 +47,7 @@ async function nodeReceive(agentTok, agentName, marker, send) {
       got(f);
     }
   };
-  await new Promise((r, x) => { sock.onopen = r; sock.onerror = () => x(new Error('ws error')); });
+  await opened(sock, 'node transport');
   sock.send(JSON.stringify({ v: 1, id: 'r1', type: 'node.register', node_id, name: node_name, capabilities: [], max_agents: 1, tags: ['implicit', 'direct'], version: 'kind-smoke/1' }));
   const regOk = await Promise.race([reg, new Promise((r) => setTimeout(() => r(false), 5000))]);
   ok(regOk, `${agentName} node.register acknowledged on /v1/node/ws`);
@@ -56,7 +64,7 @@ async function observerReceive(key, marker, send) {
   const sock = new WebSocket(wsUrl('/v1/ws?token=' + ot.d.data.token));
   let got; const recv = new Promise((r) => (got = r));
   sock.onmessage = (e) => { const m = String(e.data); if (m.includes(marker)) got(JSON.parse(m)); };
-  await new Promise((r, x) => { sock.onopen = r; sock.onerror = () => x(new Error('observer ws error')); });
+  await opened(sock, 'observer stream');
   await new Promise((r) => setTimeout(r, 500));
   await send();
   const f = await Promise.race([recv, new Promise((r) => setTimeout(() => r(null), 10000))]);
@@ -102,7 +110,12 @@ if (mode === 'seed-anon') {
   const b = await j('POST', '/v1/agents', key, { name: 'bob' });
   ok(a.s === 201 && b.s === 201, `register alice=${a.s} bob=${b.s}`);
   const at = a.d.data.token, bt = b.d.data.token;
-  const legacy = await new Promise((r) => { const s = new WebSocket(wsUrl('/v1/ws?token=' + bt)); s.onopen = () => { s.close(); r('open'); }; s.onerror = () => r('refused'); });
+  const legacy = await new Promise((r) => {
+    const s = new WebSocket(wsUrl('/v1/ws?token=' + bt));
+    const timer = setTimeout(() => { s.close(); r('timeout'); }, 10000);
+    s.onopen = () => { clearTimeout(timer); s.close(); r('open'); };
+    s.onerror = () => { clearTimeout(timer); r('refused'); };
+  });
   ok(legacy === 'refused', 'agent token on /v1/ws refused (documented: use /v1/node/ws)');
   await nodeReceive(bt, 'bob', 'hello-bob-kind', async () => {
     const dm = await j('POST', '/v1/dm', at, { to: 'bob', text: 'hello-bob-kind' });

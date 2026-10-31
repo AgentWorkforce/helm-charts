@@ -101,6 +101,8 @@ networkPolicy:
 
 Rendering is refused unless all of the following hold:
 
+- `ingress.tls` is set, or `ingress.externalTls=true` when a load balancer in
+  front of the controller terminates TLS
 - `publicWorkspaceCreate=false`
 - `baseUrl` is HTTPS
 - `baseUrl`'s host is in `ingress.hosts`
@@ -113,7 +115,9 @@ The Ingress sends every path to Relaycast except two:
 
 Those two go to `<fullname>-deny` (`relaycast-deny` for a release named `relaycast`), a Service with no endpoints. The
 controller answers `503`, so the request never reaches the engine. This works
-on any controller that follows the Ingress path-precedence rules. Setting
+on any controller that follows the Ingress path-precedence rules. On
+ingress-nginx, encoded and dot-segment spellings such as `/%69nternal`,
+`//internal`, `/v1/../internal` and `/v1/%77orkspaces` are blocked too. Setting
 `networkPolicy.ingressFrom` replaces the same-namespace default, so if
 in-namespace clients also need access, list them too.
 
@@ -131,7 +135,13 @@ The backup CronJob runs the Relaycast image on the Relaycast pod's node, which
 API while the engine keeps running, then checks the copy with
 `PRAGMA integrity_check`. It copies `relaycast-files/` next to the snapshot and
 writes everything to `relaycast-<UTC timestamp>/` on the backup PVC, marking the
-directory `COMPLETE` last. Only the newest `keep` complete backups are kept. The
+directory `COMPLETE` last. Only the newest `keep` complete backups are kept.
+
+Uploaded files are copied both before and after the snapshot, so every upload
+the snapshot references is included. A lock on the backup volume means only
+one backup runs at a time, including manual runs. A failed run's partial copy
+is removed. If the volume is full, the run prunes to `keep - 1` and retries
+once; it never deletes the last complete backup. The
 backup PVC is also mounted read-only in the Relaycast pod, so it binds at
 install time. Copy that PVC off-cluster with your usual volume-snapshot or
 object-storage tooling.
@@ -153,12 +163,18 @@ NS=relaycast RELEASE=relaycast BACKUP=relaycast-20261031T000952Z ci/relaycast/re
 
 The script does the following:
 
-1. Scales the Deployment to 0 and waits for the pod to exit.
-2. Runs a one-off Job with the same image that moves the current
-   `relaycast.db*` and `relaycast-files/` aside to `/data/pre-restore-<ts>/`.
-   It never deletes them.
-3. Copies the backup into place.
-4. Scales the Deployment back to 1.
+1. Suspends the backup CronJob and waits for any running backup to finish.
+2. Scales the Deployment to 0 and waits for the pod to exit.
+3. Runs a one-off Job that moves the current `relaycast.db*` and
+   `relaycast-files/` aside to `/data/pre-restore-<ts>/`. It never deletes
+   them. The Job uses the Deployment's image, pull secrets, tolerations, node
+   selector, affinity and security context.
+4. Copies the backup into place.
+5. Scales the Deployment back to 1 and resumes the CronJob.
+
+If the Job never starts (for example, it cannot be scheduled or the image
+cannot be pulled), nothing has been moved, so the script scales the Deployment
+back up. If the copy fails after it has started, the Deployment stays at 0.
 
 Do not run `helm upgrade` while a restore is in progress, because it scales the
 Deployment back to 1.

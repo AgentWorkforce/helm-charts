@@ -109,10 +109,20 @@ AT=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1])
 code=$(status -XPOST -H "authorization: Bearer $AT" -H 'content-type: application/json' \
   -d '{"text":"after-backup-quokka"}' "http://127.0.0.1:$PORT/v1/channels/general/messages")
 [ "$code" = 201 ] || { echo "FAIL post-backup message -> $code"; exit 1; }
+# search_has <marker>: 0 if found, 1 if absent; a failed request aborts.
+search_has() {
+  local body
+  body=$(curl -sf -H "authorization: Bearer $KEY" "http://127.0.0.1:$PORT/v1/search?q=quokka") \
+    || { echo "FAIL search request failed"; exit 1; }
+  grep -q '"ok":true' <<<"$body" || { echo "FAIL search response not ok"; exit 1; }
+  grep -q "$1" <<<"$body"
+}
+search_has after-backup-quokka || { echo "FAIL post-backup message is not searchable before the restore"; exit 1; }
+echo "PASS post-backup message searchable before restore"
 kill "$PF_PID"; PF_PID=
 NS="$NS" RELEASE="$RELEASE" BACKUP="$BACKUP" "$HERE/restore.sh" >/dev/null
 forward
-if curl -sf -H "authorization: Bearer $KEY" "http://127.0.0.1:$PORT/v1/search?q=quokka" | grep -q after-backup-quokka; then
+if search_has after-backup-quokka; then
   echo "FAIL message written after the backup survived the restore"; exit 1
 fi
 echo "PASS restore rolled back to $BACKUP (post-backup message gone)"

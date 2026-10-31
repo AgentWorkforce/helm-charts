@@ -51,12 +51,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s@%s" .Values.image.repository $digest }}
 {{- end }}
 
-{{- define "relaycast.backupClaimName" -}}
-{{- default (printf "%s-backup" (include "relaycast.fullname" .)) .Values.backup.existingClaim }}
+{{- /* CronJob names are limited to 52 characters; "-backup" is 7. */ -}}
+{{- define "relaycast.backupName" -}}
+{{- printf "%s-backup" (include "relaycast.fullname" . | trunc 45 | trimSuffix "-") }}
 {{- end }}
 
+{{- define "relaycast.backupClaimName" -}}
+{{- default (include "relaycast.backupName" .) .Values.backup.existingClaim }}
+{{- end }}
+
+{{- /* Shorten before the suffix so it can never collide with the app Service. */ -}}
 {{- define "relaycast.denyServiceName" -}}
-{{- printf "%s-deny" (include "relaycast.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-deny" (include "relaycast.fullname" . | trunc 58 | trimSuffix "-") }}
 {{- end }}
 
 {{- define "relaycast.secretMountPath" -}}
@@ -132,6 +138,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $baseHost := regexReplaceAll "^https://([^:/]+)(:[0-9]+)?$" .Values.baseUrl "${1}" }}
 {{- if not (has $baseHost .Values.ingress.hosts) }}
 {{- fail "ingress.hosts must include the baseUrl host" }}
+{{- end }}
+{{- if and (not .Values.ingress.tls) (not .Values.ingress.externalTls) }}
+{{- fail "ingress.enabled=true requires ingress.tls (or ingress.externalTls=true when a load balancer in front of the controller terminates TLS)" }}
 {{- end }}
 {{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.ingressFrom) }}
 {{- fail "ingress with networkPolicy requires networkPolicy.ingressFrom (the ingress controller's namespace or pods)" }}

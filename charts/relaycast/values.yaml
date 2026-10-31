@@ -94,9 +94,13 @@ ingress:
   # cert-manager.io/cluster-issuer: letsencrypt
   hosts: []
   # - relay.example.com
+  # Required unless externalTls: the Ingress must serve HTTPS itself.
   tls: []
   # - secretName: relay-example-com-tls
   #   hosts: [relay.example.com]
+  # Set true only when a load balancer in front of the controller terminates
+  # TLS for these hosts (then tls may stay empty).
+  externalTls: false
 
 persistence:
   existingClaim: ""
