@@ -27,12 +27,19 @@ json() { local v; v=$(jp "$1"); printf '%s' "${v:-$2}"; }
 PULL=$(json '{.spec.template.spec.imagePullSecrets}' '[]')
 TOL=$(json '{.spec.template.spec.tolerations}' '[]')
 NODESEL=$(json '{.spec.template.spec.nodeSelector}' '{}')
-AFF=$(json '{.spec.template.spec.affinity}' '{}')
+# Node placement only: pod (anti-)affinity rules may reference the engine pod,
+# which is gone during the restore.
+NODEAFF=$(jp '{.spec.template.spec.affinity.nodeAffinity}')
+AFF=${NODEAFF:+"{nodeAffinity: $NODEAFF}"}; AFF=${AFF:-'{}'}
 SEC=$(json '{.spec.template.spec.securityContext}' '{}')
 CRON=$($K get cronjob -l "app.kubernetes.io/instance=$RELEASE,app.kubernetes.io/component=backup" -o jsonpath='{.items[0].metadata.name}')
 JOB="$DEPLOY-restore"
 
-resume() { [ -n "$CRON" ] && $K patch cronjob "$CRON" -p '{"spec":{"suspend":false}}' >/dev/null || true; }
+# Put the schedule back exactly as it was (an operator may have paused it).
+WAS_SUSPENDED=false
+[ -n "$CRON" ] && WAS_SUSPENDED=$($K get cronjob "$CRON" -o jsonpath='{.spec.suspend}')
+[ "$WAS_SUSPENDED" = true ] || WAS_SUSPENDED=false
+resume() { [ -n "$CRON" ] && $K patch cronjob "$CRON" -p "{\"spec\":{\"suspend\":$WAS_SUSPENDED}}" >/dev/null || true; }
 trap resume EXIT
 # No backup may run while the data is replaced: suspend the schedule and wait
 # for any running backup (scheduled or manual) to finish.

@@ -168,9 +168,10 @@ The script does the following:
 3. Runs a one-off Job that moves the current `relaycast.db*` and
    `relaycast-files/` aside to `/data/pre-restore-<ts>/`. It never deletes
    them. The Job uses the Deployment's image, pull secrets, tolerations, node
-   selector, affinity and security context.
+   selector, node affinity and security context.
 4. Copies the backup into place.
-5. Scales the Deployment back to 1 and resumes the CronJob.
+5. Scales the Deployment back to 1 and restores the CronJob's previous
+   `suspend` setting.
 
 If the Job never starts (for example, it cannot be scheduled or the image
 cannot be pulled), nothing has been moved, so the script scales the Deployment
