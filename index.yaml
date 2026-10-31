@@ -433,6 +433,30 @@ entries:
     version: 0.1.0
   relaycast:
   - apiVersion: v2
+    appVersion: 12.2.1-selfhost.1
+    created: "2026-10-31T03:42:29.524178253Z"
+    description: Portable Relaycast core for self-hosted Agent Relay deployments
+    digest: 449146eab49508364d372f32607248d163bd02c68fb947f249c1cdeb3383311b
+    home: https://github.com/AgentWorkforce/relaycast
+    keywords:
+    - relaycast
+    - agents
+    - realtime
+    - self-hosted
+    - agentworkforce
+    kubeVersion: '>=1.22.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relaycast
+    sources:
+    - https://github.com/AgentWorkforce/relaycast
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relaycast
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relaycast-0.2.0/relaycast-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
     appVersion: 8.0.0
     created: "2026-10-30T08:59:43.719454842Z"
     description: Portable Relaycast core for self-hosted Agent Relay deployments
@@ -613,4 +637,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relayflows-0.1.0/relayflows-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-31T02:35:08.513633431Z"
+generated: "2026-10-31T03:42:29.52421901Z"
