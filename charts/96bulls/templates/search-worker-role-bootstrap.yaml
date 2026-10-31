@@ -1,0 +1,132 @@
+{{- /*
+Existing-cluster path for the session directory search Worker role
+(96BullSessions runbooks/session-directory-search-worker-bootstrap.md).
+Runs the HoopDb bootstrap file, taken from the pinned services image, as the
+CNPG superuser `postgres` by `kubectl exec` into the primary. Separate from the
+hoopdb-migrate Job: its own ServiceAccount, and a Role that may only find and
+exec into pods in this namespace. No Helm hooks (Alchemy renders --no-hooks).
+*/ -}}
+{{- with .Values.searchWorkerRole.bootstrapJob }}
+{{- if .enabled }}
+{{- if not (and .sqlImage.repository .sqlImage.digest) }}{{ fail "searchWorkerRole.bootstrapJob.sqlImage.repository and .digest are required: the services image that carries the bootstrap file, by digest" }}{{ end }}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .sqlImage.digest) }}{{ fail "searchWorkerRole.bootstrapJob.sqlImage.digest must be sha256:<64 hex>" }}{{ end }}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .kubectlImage.digest) }}{{ fail "searchWorkerRole.bootstrapJob.kubectlImage.digest must be sha256:<64 hex>" }}{{ end }}
+{{- $name := printf "%s-search-worker-role" $.Release.Name | trunc 50 | trimSuffix "-" }}
+{{- $labels := dict "app.kubernetes.io/name" "search-worker-role-bootstrap" "app.kubernetes.io/instance" $.Release.Name "app.kubernetes.io/component" "search-worker-role-bootstrap" "app.kubernetes.io/part-of" "96bulls" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+rules:
+  # Find the CNPG primary, then exec psql in it. Nothing else.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $.Release.Namespace | quote }}
+{{- $spec := include "96bulls.searchWorkerRoleJobSpec" (dict "c" . "name" $name "labels" $labels "root" $) }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Content-addressed, like hoopdb-migrate: a new image or spec runs it again.
+  name: {{ printf "%s-%s" $name (sha256sum $spec | trunc 8) }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- toYaml $labels | nindent 4 }}
+spec:
+  {{- $spec | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{- define "96bulls.searchWorkerRoleJobSpec" -}}
+{{- $c := .c -}}
+backoffLimit: {{ $c.backoffLimit }}
+activeDeadlineSeconds: {{ $c.activeDeadlineSeconds }}
+template:
+  metadata:
+    labels:
+      {{- toYaml .labels | nindent 6 }}
+  spec:
+    restartPolicy: Never
+    serviceAccountName: {{ .name }}
+    # kubectl needs the API token; this pod is the only one bound to the Role.
+    automountServiceAccountToken: true
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile: { type: RuntimeDefault }
+    initContainers:
+      # The bootstrap file from the pinned services image (the source of truth).
+      - name: sql
+        image: "{{ $c.sqlImage.repository }}@{{ $c.sqlImage.digest }}"
+        imagePullPolicy: IfNotPresent
+        command: ["cp", "{{ $c.sqlPath }}", "/work/bootstrap.sql"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: { drop: [ALL] }
+        resources:
+          {{- toYaml $c.resources | nindent 10 }}
+        volumeMounts:
+          - { name: work, mountPath: /work }
+    containers:
+      - name: bootstrap
+        image: "{{ $c.kubectlImage.repository }}:{{ $c.kubectlImage.tag }}@{{ $c.kubectlImage.digest }}"
+        imagePullPolicy: IfNotPresent
+        env:
+          - { name: HOME, value: /tmp }
+          - { name: CLUSTER, value: {{ $c.cluster | quote }} }
+          - { name: DATABASE, value: {{ $c.database | quote }} }
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -eu
+            pod=$(kubectl get pods -l "cnpg.io/cluster=${CLUSTER},cnpg.io/instanceRole=primary" -o jsonpath='{.items[0].metadata.name}')
+            [ -n "$pod" ] || { echo "no CNPG primary for ${CLUSTER}" >&2; exit 1; }
+            echo "bootstrap session_directory_search_worker via ${pod}"
+            kubectl exec -i "$pod" -c postgres -- psql -v ON_ERROR_STOP=1 -X -d "${DATABASE}" -f - < /work/bootstrap.sql
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: { drop: [ALL] }
+        resources:
+          {{- toYaml $c.resources | nindent 10 }}
+        volumeMounts:
+          - { name: work, mountPath: /work, readOnly: true }
+          - { name: tmp, mountPath: /tmp }
+    volumes:
+      - { name: work, emptyDir: { sizeLimit: 1Mi } }
+      - { name: tmp, emptyDir: { sizeLimit: 16Mi } }
+{{- end }}

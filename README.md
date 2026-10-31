@@ -128,6 +128,30 @@ otherwise the worker role needs permission to create the bucket and enable
 versioning.
 `ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
 
+#### Session directory search Worker role
+
+HoopDb's session directory migration only *verifies* the role
+`session_directory_search_worker` (`NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER
+NOCREATEDB NOCREATEROLE NOREPLICATION`, exactly `statement_timeout=2s`, no
+memberships). Creating it needs a superuser on PostgreSQL 16+, so the chart
+provisions it (96BullSessions `runbooks/session-directory-search-worker-bootstrap.md`):
+
+- **New clusters:** two `hoopdb.cluster.initdb.postInitApplicationSQL` statements,
+  run once by CNPG as `postgres`. Remove them to opt out.
+- **Existing clusters:** `searchWorkerRole.bootstrapJob.enabled=true` with
+  `sqlImage` set to the services image by digest. A separate Job (its own
+  ServiceAccount; a Role limited to `pods` get/list and `pods/exec`) runs the
+  image's `supabase/bootstrap/session_directory_search_worker.sql` as `postgres`
+  by `kubectl exec` into the primary. `enableSuperuserAccess` stays false. It is
+  idempotent and never alters a role that differs from the spec (it fails with
+  `55000`). The migrate Job fails closed until the role exists and retries.
+- **Disabling** the Job removes the Job and its RBAC; the role is never dropped
+  (see the runbook's "Rollback and removal").
+
+`ci/96bulls-search-worker-role/render.sh` asserts the rendered objects;
+`ci/96bulls-search-worker-role/kind.sh` proves a fresh and an existing CNPG
+cluster converge to the same role on kind.
+
 ### Install the 96Bulls app charts individually
 
 Both charts are hook-free, so `helm install` and Alchemy's

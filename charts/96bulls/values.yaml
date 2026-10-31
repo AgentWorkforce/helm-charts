@@ -97,6 +97,14 @@ hoopdb:
         - CREATE ROLE anon NOLOGIN NOINHERIT
         - CREATE ROLE authenticated NOLOGIN NOINHERIT
         - CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS
+        # The session directory search Worker role (96BullSessions
+        # runbooks/session-directory-search-worker-bootstrap.md). The HoopDb
+        # migration only verifies it; creating it and setting a role parameter
+        # need a superuser on PostgreSQL 16+, which postInit SQL runs as. New
+        # clusters only: existing clusters use searchWorkerRole.bootstrapJob.
+        # Remove these two lines to opt out (the role is then never created).
+        - CREATE ROLE session_directory_search_worker NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        - ALTER ROLE session_directory_search_worker SET statement_timeout = '2s'
   backups:
     enabled: false
 
@@ -150,3 +158,42 @@ otel:
         traces: { receivers: [otlp], exporters: [nop] }
         metrics: { receivers: [otlp], exporters: [nop] }
         logs: { receivers: [otlp], exporters: [nop] }
+
+# ---------------------------------------------------------------------------
+# session_directory_search_worker on an EXISTING HoopDb cluster.
+# postInitApplicationSQL above only runs at initdb. This Job runs the HoopDb
+# bootstrap file (supabase/bootstrap/session_directory_search_worker.sql,
+# taken from the pinned services image) as the CNPG superuser `postgres`, by
+# `kubectl exec` into the primary: no superuser Secret, enableSuperuserAccess
+# stays false. Idempotent and atomic (it never alters an existing role; a
+# role that differs from the spec fails it with 55000). Separate from the
+# hoopdb-migrate Job, with its own ServiceAccount and a namespace Role that
+# can only list/get pods and exec. Off by default: running it is an operator
+# step under the deploy approval. Disabling it (or deleting the release)
+# removes the Job and its RBAC; the role itself is never dropped (see the
+# runbook's "Rollback and removal").
+# The migrate Job fails closed (42704) until the role exists and retries
+# (worker.migrations.backoffLimit), so the two may be applied together.
+# ---------------------------------------------------------------------------
+searchWorkerRole:
+  bootstrapJob:
+    enabled: false
+    # REQUIRED when enabled: the services image that carries the file, by digest.
+    sqlImage:
+      repository: ""
+      digest: ""
+    sqlPath: /app/supabase/bootstrap/session_directory_search_worker.sql
+    # kubectl (with a shell) to exec into the CNPG primary. alpine/k8s 1.34.1.
+    kubectlImage:
+      repository: docker.io/alpine/k8s
+      tag: "1.34.1"
+      digest: "sha256:ec714df3813b5405292860f8a1c55c5727bf8c33c88992f1e981efad8065547f"
+    # The CNPG Cluster (hoopdb.fullnameOverride) and its application database.
+    cluster: hoopdb
+    database: hoopdb
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 256Mi }
+

@@ -38,6 +38,14 @@ jobs:
       - name: Dependency pins are hook-free
         run: scripts/ci/deps.sh
 
+      - name: 96bulls search Worker role render assertions
+        run: |
+          for repo in https://cloudnative-pg.github.io/charts https://charts.min.io/ https://open-telemetry.github.io/opentelemetry-helm-charts; do
+            helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
+          done
+          helm dependency build charts/96bulls >/dev/null
+          ci/96bulls-search-worker-role/render.sh
+
       - name: Chart version bumped
         if: github.event_name == 'pull_request'
         run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"
@@ -110,3 +118,34 @@ jobs:
       - name: Relaycast live smoke
         if: steps.changed.outputs.run == 'true'
         run: ci/relaycast/smoke.sh
+
+  # Real CloudNativePG on kind: a fresh cluster (initdb SQL) and an existing one
+  # (searchWorkerRole.bootstrapJob) converge to the same search Worker role.
+  search-worker-role-kind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] \
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|deps/cnpg-|ci/96bulls-search-worker-role/)'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: azure/setup-helm@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: helm/kind-action@v1.15.1
+        if: steps.changed.outputs.run == 'true'
+        with:
+          cluster_name: 96bulls-role
+
+      - name: Fresh and existing CNPG clusters converge
+        if: steps.changed.outputs.run == 'true'
+        run: ci/96bulls-search-worker-role/kind.sh
