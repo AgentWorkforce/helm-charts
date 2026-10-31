@@ -2,8 +2,6 @@
 # edge denials, NetworkPolicy admitting the controller, and backups.
 baseUrl: https://relay.example.com
 existingSecret: relaycast-secrets
-image:
-  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 ingress:
   enabled: true
   className: nginx

@@ -4,8 +4,10 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/agentworkforce/relaycast-self-host
-  # Immutable multi-platform manifest (linux/amd64 and linux/arm64).
-  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  # relaycast-self-host:12.2.1-selfhost.1, built from relaycast main bdf1b69c
+  # (engine 12.2.1 + the internal admin API). Immutable multi-platform
+  # manifest (linux/amd64 and linux/arm64).
+  digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

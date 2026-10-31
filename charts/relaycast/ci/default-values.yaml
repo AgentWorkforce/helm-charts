@@ -1,4 +1,2 @@
 baseUrl: https://relay.example.com
 existingSecret: relaycast-secrets
-image:
-  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

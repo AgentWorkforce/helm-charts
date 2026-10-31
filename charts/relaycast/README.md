@@ -184,7 +184,10 @@ agents and history carry over, and the new engine migrates the schema on boot.
 `8.0.0` engine cannot read the migrated schema (`no such column: "plan"`), so
 every authenticated request returns `500` while `/health` still returns `200`.
 To go back, restore a backup taken before the upgrade into a `0.1.0` release.
-Rolling forward to `0.2.0` again restores service with the data intact.
+Rolling forward restores service with the data intact. Use `helm upgrade` with
+your `0.2.0` values, not `helm rollback` to the `0.2.0` revision: when backups
+are enabled, the rollback cannot re-adopt the retained backup PVC (`spec is
+immutable`), but an upgrade can.
 
 Releases within the 12.x line apply forward-only migrations. Take a backup
 before every upgrade.
