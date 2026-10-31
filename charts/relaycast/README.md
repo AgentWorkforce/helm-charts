@@ -111,7 +111,7 @@ The Ingress sends every path to Relaycast except two:
 - `/internal` (Prefix): the admin API.
 - `/v1/workspaces` and `/v1/workspaces/` (Exact): anonymous workspace creation.
 
-Those two go to `<release>-relaycast-deny`, a Service with no endpoints. The
+Those two go to `<fullname>-deny` (`relaycast-deny` for a release named `relaycast`), a Service with no endpoints. The
 controller answers `503`, so the request never reaches the engine. This works
 on any controller that follows the Ingress path-precedence rules. Setting
 `networkPolicy.ingressFrom` replaces the same-namespace default, so if
@@ -177,7 +177,7 @@ helm upgrade relaycast agentworkforce/relaycast -n relaycast --version 0.2.0 \
   --set baseUrl=https://relay.example.com --set existingSecret=relaycast-secrets
 ```
 
-The data PVC (`<release>-relaycast-data`) is reused. Existing workspaces, keys,
+The data PVC (`relaycast-data` for a release named `relaycast`) is reused. Existing workspaces, keys,
 agents and history carry over, and the new engine migrates the schema on boot.
 
 **`helm rollback` to `0.1.0` is not supported once `0.2.0` has started.** The
