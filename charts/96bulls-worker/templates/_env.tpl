@@ -17,6 +17,9 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
 {{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}
+{{- /* Phase 2 role verify must run in migrate: with it off, readiness never passes
+unless a separate mark_pass step runs, which this chart does not have. */ -}}
+{{- range .Values.extraEnv }}{{ if eq (.name | default "") "HOOPDB_ROLE_VERIFY" }}{{ fail "96bulls-worker: extraEnv must not set HOOPDB_ROLE_VERIFY (migrate always runs the phase 2 role verify)" }}{{ end }}{{ end -}}
 {{- $bob := index .Values.components "bob-costas" -}}
 {{- if and $bob.enabled (not (.Values.summaryEncryption.existingSecret | default .Values.existingSecret)) }}{{ fail "96bulls-worker: summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" }}{{ end -}}
 {{- if and $bob.enabled (not .Values.summaryEncryption.key) }}{{ fail "96bulls-worker: summaryEncryption.key is required when bob-costas is enabled" }}{{ end -}}
@@ -58,11 +61,7 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ .service | quote }}
 - name: OTEL_SERVICE_NAME
   value: {{ .service | quote }}
-- name: HOOPDB_URL
-  valueFrom:
-    secretKeyRef:
-      name: {{ $v.hoopdb.existingSecret | default $v.existingSecret }}
-      key: {{ $v.hoopdb.key | default $v.secretKeys.hoopdbUrl }}
+{{ include "96bulls-worker.hoopdbUrlEnv" .context }}
 - name: LOCKER_ENDPOINT
   value: {{ $v.locker.endpoint | quote }}
 - name: LOCKER_BUCKET
@@ -151,4 +150,15 @@ volumes:
         - key: {{ $ctx.Values.summaryEncryption.key | quote }}
           path: {{ $ctx.Values.summaryEncryption.fileName | quote }}
 {{- end }}
+{{- end }}
+
+{{/*
+HOOPDB_URL from the HoopDb Secret (context: the chart root).
+*/}}
+{{- define "96bulls-worker.hoopdbUrlEnv" -}}
+- name: HOOPDB_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.hoopdb.existingSecret | default .Values.existingSecret }}
+      key: {{ .Values.hoopdb.key | default .Values.secretKeys.hoopdbUrl }}
 {{- end }}

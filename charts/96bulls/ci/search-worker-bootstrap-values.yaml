@@ -1,0 +1,13 @@
+# The existing-cluster role bootstrap Job (searchWorkerRole.bootstrapJob), enabled.
+global:
+  tenant:
+    orgId: org_ci
+alleyoop:
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+searchWorkerRole:
+  bootstrapJob:
+    enabled: true
+    sqlImage:
+      repository: ghcr.io/agentworkforce/96bulls-services
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000001"

@@ -128,6 +128,56 @@ otherwise the worker role needs permission to create the bucket and enable
 versioning.
 `ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
 
+#### Session directory search Worker role
+
+HoopDb's session directory migration only *verifies* the role
+`session_directory_search_worker` (`NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER
+NOCREATEDB NOCREATEROLE NOREPLICATION`, exactly `statement_timeout=2s`, no
+memberships). Creating it needs a superuser on PostgreSQL 16+, so the chart
+provisions it (96BullSessions `runbooks/session-directory-search-worker-bootstrap.md`):
+
+- **New clusters:** two `hoopdb.cluster.initdb.postInitApplicationSQL` statements,
+  run once by CNPG as `postgres`. Remove them to opt out.
+- **Existing clusters:** `searchWorkerRole.bootstrapJob.enabled=true` with
+  `sqlImage` set to the services image by digest. A separate Job (its own
+  ServiceAccount; a Role limited to `pods` get/list and `pods/exec`) runs the
+  image's `supabase/bootstrap/session_directory_search_worker.sql` as `postgres`
+  by `kubectl exec` into the primary. `enableSuperuserAccess` stays false. It is
+  idempotent and never alters a role that differs from the spec (it fails with
+  `55000`). The sql init container, which runs the services image, gets no API
+  token: the pod has `automountServiceAccountToken: false` and only the kubectl
+  container mounts a projected token. Pull auth is `worker.imagePullSecrets`
+  (the umbrella's shared `imagePullSecrets`), the same Secret as the workloads.
+- **Order** (no Helm hooks): the migrate Job's `wait-for-role` init container
+  (`worker.migrations.waitForRole`, on by default in the umbrella, on the pinned
+  HoopDb image) polls HoopDb until the role exists, so bootstrap and migrate are
+  applied together. migrate then verifies the role (phase 1), migrates, and
+  checks its grants (phase 2) and records PASS for the image's migration
+  generation in `sessions.__96bulls_role_validation`. Workloads are ready only
+  while that PASS is current, so a phase 2 failure after the ledger is
+  complete leaves everything unready. migrate always sets
+  `HOOPDB_ROLE_VERIFY=true`, and `worker.extraEnv` may not override it: with
+  verify off, readiness would need a separate mark_pass step, which this chart
+  does not run. A drifted role fails both Jobs with `55000` and nothing
+  becomes ready.
+- **Disabling** the Job removes the Job and its RBAC; the role is never dropped
+  (see the runbook's "Rollback and removal").
+
+`ci/96bulls-search-worker-role/render.sh` asserts the rendered objects;
+`ci/96bulls-search-worker-role/kind.sh` (required in CI) runs on the real
+services image, which CI builds from the 96BullSessions commit in
+`ci/96bulls-search-worker-role/services-commit` (the published image is
+private; locally, pass `SERVICES_IMAGE`). It proves:
+- a fresh and an existing CNPG cluster converge to the same role;
+- a drifted role is refused with `55000` (exit 3);
+- in the whole release, migrate waits while the bootstrap is held back and no
+  workload is ready; after the bootstrap, migrate passes both role checks and
+  the workloads become ready;
+- a phase-2-only failure after the ledger is complete (a direct grant) sets the
+  role validation marker to pending, and running and restarted workloads go
+  unready;
+- with a drifted role, both Jobs fail with `55000` and nothing becomes ready.
+
 ### Install the 96Bulls app charts individually
 
 Both charts are hook-free, so `helm install` and Alchemy's

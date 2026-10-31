@@ -38,6 +38,14 @@ jobs:
       - name: Dependency pins are hook-free
         run: scripts/ci/deps.sh
 
+      - name: 96bulls search Worker role render assertions
+        run: |
+          for repo in https://cloudnative-pg.github.io/charts https://charts.min.io/ https://open-telemetry.github.io/opentelemetry-helm-charts; do
+            helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
+          done
+          helm dependency build charts/96bulls >/dev/null
+          ci/96bulls-search-worker-role/render.sh
+
       - name: Chart version bumped
         if: github.event_name == 'pull_request'
         run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"
@@ -110,3 +118,78 @@ jobs:
       - name: Relaycast live smoke
         if: steps.changed.outputs.run == 'true'
         run: ci/relaycast/smoke.sh
+
+  # Real CloudNativePG on kind, on a services image built here from the pinned
+  # 96BullSessions commit (ci/96bulls-search-worker-role/services-commit; the
+  # published image is private). The role part (fresh and existing clusters
+  # converge, idempotent, drift refused) and the full release (bootstrap ->
+  # migrate -> phase 2 verify -> workloads, drift and phase-2-only failures)
+  # both run. Required: no success on skip. If the token cannot be minted or
+  # the image cannot be built, the job fails.
+  search-worker-role-kind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] \
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|ci/96bulls-search-worker-role/|\.github/workflows/lint\.yml$)'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pinned 96BullSessions commit
+        if: steps.changed.outputs.run == 'true'
+        id: pin
+        run: |
+          sha=$(tr -d '[:space:]' < ci/96bulls-search-worker-role/services-commit)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::services-commit must be a full 40-hex commit sha"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # Read-only, single-repository token (the org's pusher GitHub App, as in
+      # AgentWorkforce/cloud's private-artifact workflows).
+      - name: Mint a read token for 96BullSessions
+        if: steps.changed.outputs.run == 'true'
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GH_APP_PUSHER_ID }}
+          private-key: ${{ secrets.GH_APP_PUSHER_PRIVATE_KEY }}
+          owner: AgentWorkforce
+          repositories: 96BullSessions
+          permission-contents: read
+
+      - uses: actions/checkout@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          repository: AgentWorkforce/96BullSessions
+          ref: ${{ steps.pin.outputs.sha }}
+          token: ${{ steps.token.outputs.token }}
+          path: .services-src
+          persist-credentials: false
+
+      - name: Build the services image (local only, never pushed)
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          [ "$(git -C .services-src rev-parse HEAD)" = "${{ steps.pin.outputs.sha }}" ] || { echo "::error::checked out the wrong commit"; exit 1; }
+          docker build -f .services-src/docker/services.Dockerfile -t "ghcr.io/agentworkforce/96bulls-services:kind-${{ steps.pin.outputs.sha }}" .services-src
+
+      - uses: azure/setup-helm@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: helm/kind-action@v1.15.1
+        if: steps.changed.outputs.run == 'true'
+        with:
+          cluster_name: 96bulls-role
+
+      - name: Role converges; drift refused; full release incl. phase-2-only failure
+        if: steps.changed.outputs.run == 'true'
+        env:
+          SERVICES_IMAGE: ghcr.io/agentworkforce/96bulls-services:kind-${{ steps.pin.outputs.sha }}
+          SERVICES_SRC: .services-src
+        run: ci/96bulls-search-worker-role/kind.sh

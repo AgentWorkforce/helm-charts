@@ -21,6 +21,10 @@ global:
 
 # Shared by both app charts (YAML anchors keep one copy).
 shared: &shared
+  # Pull credentials for the private services image: every workload and Job,
+  # including searchWorkerRole.bootstrapJob (which reads worker.imagePullSecrets).
+  # Empty on hosted EKS (node role pulls from ECR).
+  imagePullSecrets: []
   existingSecret: 96bulls-locker
   secretKeys:
     hoopdbUrl: HOOPDB_URL
@@ -49,6 +53,13 @@ shared: &shared
 
 worker:
   <<: *shared
+  migrations:
+    # migrate waits until session_directory_search_worker exists (created by
+    # initdb on a new cluster, by searchWorkerRole.bootstrapJob on an existing
+    # one, by the runbook on Supabase). Same pinned image as hoopdb.cluster.imageName.
+    waitForRole:
+      enabled: true
+      image: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3
 
 alleyoop:
   <<: *shared
@@ -97,6 +108,14 @@ hoopdb:
         - CREATE ROLE anon NOLOGIN NOINHERIT
         - CREATE ROLE authenticated NOLOGIN NOINHERIT
         - CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS
+        # The session directory search Worker role (96BullSessions
+        # runbooks/session-directory-search-worker-bootstrap.md). The HoopDb
+        # migration only verifies it; creating it and setting a role parameter
+        # need a superuser on PostgreSQL 16+, which postInit SQL runs as. New
+        # clusters only: existing clusters use searchWorkerRole.bootstrapJob.
+        # Remove these two lines to opt out (the role is then never created).
+        - CREATE ROLE session_directory_search_worker NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        - ALTER ROLE session_directory_search_worker SET statement_timeout = '2s'
   backups:
     enabled: false
 
@@ -150,3 +169,44 @@ otel:
         traces: { receivers: [otlp], exporters: [nop] }
         metrics: { receivers: [otlp], exporters: [nop] }
         logs: { receivers: [otlp], exporters: [nop] }
+
+# ---------------------------------------------------------------------------
+# session_directory_search_worker on an EXISTING HoopDb cluster.
+# postInitApplicationSQL above only runs at initdb. This Job runs the HoopDb
+# bootstrap file (supabase/bootstrap/session_directory_search_worker.sql,
+# taken from the pinned services image) as the CNPG superuser `postgres`, by
+# `kubectl exec` into the primary: no superuser Secret, enableSuperuserAccess
+# stays false. Idempotent and atomic (it never alters an existing role; a
+# role that differs from the spec fails it with 55000). Separate from the
+# hoopdb-migrate Job, with its own ServiceAccount and a namespace Role that
+# can only list/get pods and exec. Off by default: running it is an operator
+# step under the deploy approval. Disabling it (or deleting the release)
+# removes the Job and its RBAC; the role itself is never dropped (see the
+# runbook's "Rollback and removal").
+# Order: the migrate Job's wait-for-role init container (worker.migrations.
+# waitForRole) blocks migrate until the role exists, so the two are applied
+# together. Workloads stay unready until migrate (phase 1 verify, migrations,
+# phase 2 verify) completes; a drifted role fails both Jobs (55000).
+# Pull auth: worker.imagePullSecrets (the shared value above).
+# ---------------------------------------------------------------------------
+searchWorkerRole:
+  bootstrapJob:
+    enabled: false
+    # REQUIRED when enabled: the services image that carries the file, by digest.
+    sqlImage:
+      repository: ""
+      digest: ""
+    sqlPath: /app/supabase/bootstrap/session_directory_search_worker.sql
+    # kubectl (with a shell) to exec into the CNPG primary. alpine/k8s 1.34.1.
+    kubectlImage:
+      repository: docker.io/alpine/k8s
+      tag: "1.34.1"
+      digest: "sha256:ec714df3813b5405292860f8a1c55c5727bf8c33c88992f1e981efad8065547f"
+    # The CNPG Cluster (hoopdb.fullnameOverride) and its application database.
+    cluster: hoopdb
+    database: hoopdb
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 256Mi }
