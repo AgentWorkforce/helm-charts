@@ -1,13 +1,30 @@
 Relaycast {{ .Chart.AppVersion }} was installed as {{ include "relaycast.fullname" . }}.
 
-Public origin: {{ .Values.baseUrl }}
+Origin: {{ .Values.baseUrl }}
 Service: http://{{ include "relaycast.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
 Persistent volume claim: {{ include "relaycast.claimName" . }}
+Anonymous workspace creation: {{ ternary "ON (cluster-internal callers can create workspaces)" "off" .Values.publicWorkspaceCreate }}
+{{- if .Values.ingress.enabled }}
+Ingress: {{ join ", " .Values.ingress.hosts }} (/internal and /v1/workspaces are denied at the edge)
+{{- end }}
+{{- if .Values.backup.enabled }}
+Backups: CronJob {{ include "relaycast.fullname" . }}-backup ({{ .Values.backup.schedule }}) -> PVC {{ include "relaycast.backupClaimName" . }}
+{{- end }}
 
-This release is the portable single-process Relaycast core. It uses one SQLite
-database and local uploaded-file storage on the same persistent volume, so it
-must remain at one replica. Relayflows and 96Bulls are independent add-ons and
-are not installed by this chart.
+Single process: one SQLite database and the uploaded files on one volume.
+Do not scale this Deployment.
+
+First run: create a workspace through the in-cluster admin API. The internal
+secret never leaves the pod; the response holds the only copy of the workspace
+key (rk_live_...), so store it in your secret manager:
+
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "relaycast.fullname" . }} -- node -e '
+    const s = require("fs").readFileSync("{{ include "relaycast.secretMountPath" . }}/internal-secret", "utf8").trim();
+    fetch("http://127.0.0.1:{{ .Values.server.port }}/internal/workspaces", { method: "POST",
+      headers: { authorization: "Bearer " + s, "content-type": "application/json" },
+      body: JSON.stringify({ name: process.argv[1] }) })
+      .then(async (r) => { process.stdout.write(await r.text() + "\n"); process.exitCode = r.status === 201 ? 0 : 1; });
+  ' my-team > workspace.json
 
 Health check:
   kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "relaycast.fullname" . }} 8787:{{ .Values.service.port }}

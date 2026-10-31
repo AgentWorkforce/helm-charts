@@ -1,0 +1,6 @@
+# Cluster-internal origin over http (no ingress).
+baseUrl: http://ci-relaycast.ci.svc:8787
+allowInsecureBaseUrl: true
+existingSecret: relaycast-secrets
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

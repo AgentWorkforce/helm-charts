@@ -58,6 +58,28 @@ spec:
               value: {{ .Values.server.port | quote }}
             - name: RELAYCAST_DB_PATH
               value: /data/relaycast.db
+            - name: RELAYCAST_INTERNAL_SECRET_FILE
+              value: {{ include "relaycast.secretMountPath" . }}/internal-secret
+            - name: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE
+              value: {{ include "relaycast.secretMountPath" . }}/workspace-bootstrap-secret
+            - name: RELAYCAST_PUBLIC_WORKSPACE_CREATE
+              value: {{ ternary "true" "false" .Values.publicWorkspaceCreate | quote }}
+            {{- if .Values.bootstrapProofRequired }}
+            - name: RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED
+              value: "true"
+            {{- end }}
+            {{- if .Values.allowInsecureBaseUrl }}
+            - name: RELAYCAST_ALLOW_INSECURE_BASE_URL
+              value: "true"
+            {{- with .Values.privateDnsSuffixes }}
+            - name: RELAYCAST_PRIVATE_DNS_SUFFIXES
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.insecureBaseUrlHosts }}
+            - name: RELAYCAST_INSECURE_BASE_URL_HOSTS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- end }}
             {{- with .Values.retention.messageTtlDays }}
             - name: RELAYCAST_MESSAGE_TTL_DAYS
               value: {{ . | quote }}
@@ -86,6 +108,17 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+            - name: secrets
+              mountPath: {{ include "relaycast.secretMountPath" . }}
+              readOnly: true
+            {{- if .Values.backup.enabled }}
+            # Mounted (read-only) so the backup claim is provisioned and bound
+            # with the release, on this pod's node, rather than at the first
+            # scheduled backup.
+            - name: backup
+              mountPath: /backup
+              readOnly: true
+            {{- end }}
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -93,6 +126,21 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        - name: secrets
+          secret:
+            secretName: {{ .Values.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.secretKeys.internalSecret | quote }}
+                path: internal-secret
+              - key: {{ .Values.secretKeys.bootstrapSecret | quote }}
+                path: workspace-bootstrap-secret
+        {{- if .Values.backup.enabled }}
+        - name: backup
+          persistentVolumeClaim:
+            claimName: {{ include "relaycast.backupClaimName" . }}
+            readOnly: true
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

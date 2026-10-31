@@ -73,3 +73,40 @@ jobs:
       # so the API server validates every object.
       - name: Server-side dry-run apply
         run: scripts/ci/charts.sh dryrun
+
+  # Live install of charts/relaycast on kind against the pinned image:
+  # upgrade from the published 0.1.0, first-run bootstrap, register -> node
+  # transport -> send -> receive, restart, backup + restore.
+  relaycast-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] \
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts|ci)/relaycast/'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: azure/setup-helm@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: 22
+
+      - uses: helm/kind-action@v1.15.1
+        if: steps.changed.outputs.run == 'true'
+        with:
+          cluster_name: relaycast
+
+      - name: Relaycast live smoke
+        if: steps.changed.outputs.run == 'true'
+        run: ci/relaycast/smoke.sh

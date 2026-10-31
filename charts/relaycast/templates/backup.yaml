@@ -1,0 +1,151 @@
+{{- include "relaycast.validate" . }}
+{{- if .Values.backup.enabled }}
+{{- $fullname := include "relaycast.fullname" . }}
+{{- if not .Values.backup.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "relaycast.backupClaimName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+  {{- with .Values.backup.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.backup.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-backup
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+data:
+  backup.mjs: |
+    // Online backup: SQLite's backup API copies a consistent snapshot while
+    // the engine keeps running (WAL readers do not block the writer).
+    import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+    import { createRequire } from 'node:module';
+    const require = createRequire('/opt/relaycast/package.json');
+    const Database = require('better-sqlite3');
+    const keep = Number(process.env.BACKUP_KEEP);
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const dest = `/backup/relaycast-${stamp}`;
+    const work = `${dest}.partial`;
+    mkdirSync(work, { recursive: true });
+    const db = new Database('/data/relaycast.db', { readonly: true, fileMustExist: true });
+    await db.backup(`${work}/relaycast.db`);
+    db.close();
+    const check = new Database(`${work}/relaycast.db`, { readonly: true });
+    const integrity = check.pragma('integrity_check', { simple: true });
+    check.close();
+    if (integrity !== 'ok') throw new Error(`backup integrity_check failed: ${integrity}`);
+    if (existsSync('/data/relaycast-files')) cpSync('/data/relaycast-files', `${work}/relaycast-files`, { recursive: true });
+    writeFileSync(`${work}/COMPLETE`, `${stamp}\n`);
+    renameSync(work, dest);
+    const done = readdirSync('/backup')
+      .filter((n) => /^relaycast-\d{8}T\d{6}Z$/.test(n) && existsSync(`/backup/${n}/COMPLETE`))
+      .sort();
+    for (const old of done.slice(0, Math.max(0, done.length - keep))) rmSync(`/backup/${old}`, { recursive: true, force: true });
+    for (const n of readdirSync('/backup').filter((n) => n.endsWith('.partial') && `/backup/${n}` !== work)) {
+      if (Date.now() - statSync(`/backup/${n}`).mtimeMs > 86_400_000) rmSync(`/backup/${n}`, { recursive: true, force: true });
+    }
+    console.log(JSON.stringify({ backup: dest.slice('/backup/'.length), kept: Math.min(done.length, keep) }));
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-backup
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            # Not the Service selector labels: backup pods must never receive traffic.
+            app.kubernetes.io/name: {{ printf "%s-backup" (include "relaycast.name" .) }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "relaycast.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          # The data claim is ReadWriteOnce: run on the Relaycast pod's node.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      {{- include "relaycast.selectorLabels" . | nindent 22 }}
+                  topologyKey: kubernetes.io/hostname
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: backup
+              image: {{ include "relaycast.image" . | quote }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["node", "/scripts/backup.mjs"]
+              env:
+                - name: BACKUP_KEEP
+                  value: {{ .Values.backup.keep | quote }}
+              securityContext:
+                {{- toYaml .Values.containerSecurityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                # Writable: a WAL-mode reader must update the -shm index to
+                # read consistently alongside the running engine. The script
+                # opens the database read-only.
+                - name: data
+                  mountPath: /data
+                - name: backup
+                  mountPath: /backup
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "relaycast.claimName" . }}
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "relaycast.backupClaimName" . }}
+            - name: scripts
+              configMap:
+                name: {{ $fullname }}-backup
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+{{- end }}

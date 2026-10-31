@@ -51,6 +51,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s@%s" .Values.image.repository $digest }}
 {{- end }}
 
+{{- define "relaycast.backupClaimName" -}}
+{{- default (printf "%s-backup" (include "relaycast.fullname" .)) .Values.backup.existingClaim }}
+{{- end }}
+
+{{- define "relaycast.denyServiceName" -}}
+{{- printf "%s-deny" (include "relaycast.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "relaycast.secretMountPath" -}}
+/run/secrets/relaycast
+{{- end }}
+
 {{- define "relaycast.validate" -}}
 {{- if ne (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must be 1: Relaycast self-host stores SQLite and uploaded files on one persistent volume" }}
@@ -59,11 +71,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "runtime.backend must be sqlite: no HA Relaycast backend has been released and proven yet" }}
 {{- end }}
 {{- if not .Values.baseUrl }}
-{{- fail "baseUrl is required and must be the public HTTPS Relaycast origin" }}
+{{- fail "baseUrl is required: the HTTPS origin clients use, or an http:// cluster-internal origin with allowInsecureBaseUrl=true" }}
 {{- end }}
+{{- if .Values.allowInsecureBaseUrl }}
+{{- if not (regexMatch "^https?://[A-Za-z0-9.:\\[\\]-]+$" .Values.baseUrl) }}
+{{- fail "baseUrl must be an origin (scheme://host[:port]) with no credentials, path, query, or fragment" }}
+{{- end }}
+{{- else }}
 {{- $originPattern := "^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(:[0-9]{1,5})?$" }}
 {{- if not (regexMatch $originPattern .Values.baseUrl) }}
-{{- fail "baseUrl must be an HTTPS origin with public multi-label DNS and no credentials, path, query, or fragment" }}
+{{- fail "baseUrl must be an HTTPS origin with public multi-label DNS and no credentials, path, query, or fragment (set allowInsecureBaseUrl=true for a cluster-internal http origin)" }}
 {{- end }}
 {{- if regexMatch "(?i)\\.local(:[0-9]{1,5})?$" .Values.baseUrl }}
 {{- fail "baseUrl must not use the special-use .local namespace" }}
@@ -71,12 +88,24 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if regexMatch "(?i)\\.localhost(:[0-9]{1,5})?$" .Values.baseUrl }}
 {{- fail "baseUrl must not use the special-use .localhost namespace" }}
 {{- end }}
+{{- end }}
 {{- $portToken := regexFind ":[0-9]+$" .Values.baseUrl }}
 {{- if and $portToken (or (lt (int (trimPrefix ":" $portToken)) 1) (gt (int (trimPrefix ":" $portToken)) 65535)) }}
 {{- fail "baseUrl port must be between 1 and 65535" }}
 {{- end }}
+{{- if not .Values.existingSecret }}
+{{- fail "existingSecret is required: create a Secret holding the internal and workspace-bootstrap secrets (see the chart README); the chart never renders secret values" }}
+{{- end }}
+{{- range $name, $key := .Values.secretKeys }}
+{{- if not (regexMatch "^[-._a-zA-Z0-9]+$" (toString $key)) }}
+{{- fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}
+{{- end }}
+{{- end }}
+{{- if not (kindIs "bool" .Values.publicWorkspaceCreate) }}
+{{- fail "publicWorkspaceCreate must be true or false" }}
+{{- end }}
 {{- if ne .Values.service.type "ClusterIP" }}
-{{- fail "service.type must be ClusterIP: the pinned Relaycast image cannot protect anonymous workspace creation on a directly exposed Service" }}
+{{- fail "service.type must be ClusterIP: expose Relaycast through ingress, which blocks the admin and workspace-create paths at the edge" }}
 {{- end }}
 {{- if not (has .Values.persistence.accessMode (list "ReadWriteOnce" "ReadWriteOncePod")) }}
 {{- fail "persistence.accessMode must be ReadWriteOnce or ReadWriteOncePod for the single-writer SQLite volume" }}
@@ -91,15 +120,34 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "mailbox.depthCap must be a positive integer when set" }}
 {{- end }}
 {{- if .Values.ingress.enabled }}
-{{- fail "ingress.enabled must remain false: the pinned Relaycast image cannot authenticate anonymous workspace creation safely behind a public Ingress" }}
+{{- if .Values.publicWorkspaceCreate }}
+{{- fail "ingress.enabled requires publicWorkspaceCreate=false: anonymous workspace creation must never be reachable from a public edge" }}
+{{- end }}
+{{- if .Values.allowInsecureBaseUrl }}
+{{- fail "ingress.enabled requires an HTTPS public baseUrl; unset allowInsecureBaseUrl" }}
+{{- end }}
+{{- if not .Values.ingress.hosts }}
+{{- fail "ingress.enabled=true requires at least one host" }}
+{{- end }}
+{{- $baseHost := regexReplaceAll "^https://([^:/]+)(:[0-9]+)?$" .Values.baseUrl "${1}" }}
+{{- if not (has $baseHost .Values.ingress.hosts) }}
+{{- fail "ingress.hosts must include the baseUrl host" }}
+{{- end }}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.ingressFrom) }}
+{{- fail "ingress with networkPolicy requires networkPolicy.ingressFrom (the ingress controller's namespace or pods)" }}
+{{- end }}
+{{- end }}
+{{- if .Values.backup.enabled }}
+{{- if ne .Values.persistence.accessMode "ReadWriteOnce" }}
+{{- fail "backup.enabled requires persistence.accessMode=ReadWriteOnce: the backup pod mounts the data claim on the same node" }}
+{{- end }}
+{{- if not (regexMatch "^[1-9][0-9]*$" (toString .Values.backup.keep)) }}
+{{- fail "backup.keep must be a positive integer" }}
+{{- end }}
 {{- end }}
 {{- range .Values.extraEnv }}
-{{- if has .name (list "PORT" "RELAYCAST_DB_PATH" "RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET" "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED" "RELAYCAST_MESSAGE_TTL_DAYS" "RELAYCAST_MAILBOX_TTL_MS" "RELAYCAST_MAILBOX_DEPTH_CAP") }}
-{{- if has .name (list "RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET" "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED") }}
-{{- fail (printf "%s is not supported by the pinned Relaycast 8.0.0 image" .name) }}
-{{- else }}
+{{- if or (has .name (list "PORT" "RELAYCAST_DB_PATH" "RELAYCAST_ENV" "RELAYCAST_MESSAGE_TTL_DAYS" "RELAYCAST_MAILBOX_TTL_MS" "RELAYCAST_MAILBOX_DEPTH_CAP" "RELAYCAST_PUBLIC_WORKSPACE_CREATE" "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED" "RELAYCAST_ALLOW_INSECURE_BASE_URL" "RELAYCAST_PRIVATE_DNS_SUFFIXES" "RELAYCAST_INSECURE_BASE_URL_HOSTS")) (hasPrefix "RELAYCAST_INTERNAL_SECRET" .name) (hasPrefix "RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET" .name) }}
 {{- fail (printf "%s is managed by structured chart values and must not appear in extraEnv" .name) }}
-{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
