@@ -78,6 +78,13 @@ expect_fail "kubectlImage.digest must be sha256" "${on[@]}" --set searchWorkerRo
 expect_fail "needs worker.migrations.waitForRole.enabled" "${on[@]}" --set worker.migrations.waitForRole.enabled=false
 expect_fail "waitForRole.image must be a full image reference" "${on[@]}" --set worker.migrations.waitForRole.image=postgres:17
 
+# 4a. migrate always runs the phase 2 verify; nothing can turn it off.
+for o in "$(render "${base[@]}")" "$out"; do
+  [ "$(yq -r 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-migrate") | [.spec.template.spec.containers[0].env[] | select(.name == "HOOPDB_ROLE_VERIFY") | .value] | join(",")' <<<"$o" | grep .)" = "true" ] || err "migrate does not set HOOPDB_ROLE_VERIFY=true exactly once"
+done
+[ -z "$(render "${on[@]}" | yq -r '.. | select(type == "!!map" and .name == "HOOPDB_ROLE_VERIFY" and .value != "true") | .value' | grep .)" ] || err "HOOPDB_ROLE_VERIFY rendered with a value other than true"
+expect_fail "extraEnv must not set HOOPDB_ROLE_VERIFY" "${on[@]}" --set 'worker.extraEnv[0].name=HOOPDB_ROLE_VERIFY' --set 'worker.extraEnv[0].value=false'
+
 # 5. values.yaml ends with exactly one newline.
 [ "$(tail -c 2 "$CHART/values.yaml" | od -An -c | tr -d ' ')" != '\n\n' ] && [ "$(tail -c 1 "$CHART/values.yaml" | od -An -c | tr -d ' ')" = '\n' ] || err "charts/96bulls/values.yaml must end with a single newline"
 

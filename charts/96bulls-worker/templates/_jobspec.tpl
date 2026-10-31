@@ -66,6 +66,9 @@ template:
           {{- if eq .job "migrate" }}
           - name: HOOPDB_SUPABASE_SHIM
             value: {{ ternary "true" "false" $.Values.migrations.supabaseShim | quote }}
+          # Always on: readiness needs the phase 2 PASS marker this run writes.
+          - name: HOOPDB_ROLE_VERIFY
+            value: "true"
           {{- end }}
         {{- with $.Values.containerSecurityContext }}
         securityContext:

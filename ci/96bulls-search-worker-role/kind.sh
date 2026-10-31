@@ -5,20 +5,21 @@
 # exactly statement_timeout=2s, no membership (the migration owner hoop has no
 # membership and no ADMIN). The Job is run twice (idempotent), and once against
 # a drifted role (must fail, 55000, changing nothing).
-# Then, with SERVICES_IMAGE, the full release: see "Full flow" below.
+# Then the full release: see "Full flow" below.
 #
-# Real CNPG (deps/pins.txt) on kind. The only stand-in: the services image that
-# carries the bootstrap file is a local busybox image with the vendored fixture
-# at the same path (session_directory_search_worker.sql here); the rendered Job's
-# initContainer image is pointed at it. Everything else is applied as rendered.
-# Usage: ci/96bulls-search-worker-role/kind.sh
+# Real CNPG (deps/pins.txt) on kind, and the real services image
+# (SERVICES_IMAGE, required), built from the 96BullSessions commit in
+# services-commit. The published image is private, so CI builds it. Local
+# images cannot be referenced by registry digest, so the only change to the
+# render is that the bootstrap Job's sql image points at that tag
+# (imagePullPolicy Never). Everything else is applied as rendered.
+# Usage: SERVICES_IMAGE=<local image> ci/96bulls-search-worker-role/kind.sh
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 HERE="$ROOT/ci/96bulls-search-worker-role"
 CLUSTER=${CLUSTER:-96bulls-role}
 CTX="kind-$CLUSTER"
 k() { kubectl --context "$CTX" "$@"; }
-FIXTURE_IMAGE=96bulls-role-fixture:kind
 
 # On any failure: Job/pod state, events, init container and Job logs, and
 # readiness probe failures for every namespace this test uses. No Secret
@@ -42,15 +43,18 @@ diagnose() {
   echo "::endgroup::"
 }
 
+# Required: the full release runs on the real services image, built from the
+# pinned 96BullSessions commit (services-commit). There is no skip.
+[ -n "${SERVICES_IMAGE:-}" ] || { echo "SERVICES_IMAGE is required: a services image built from 96BullSessions $(cat "$HERE/services-commit")" >&2; exit 2; }
+docker image inspect "$SERVICES_IMAGE" >/dev/null || { echo "SERVICES_IMAGE $SERVICES_IMAGE is not a local image" >&2; exit 2; }
+if [ -n "${SERVICES_SRC:-}" ]; then
+  [ "$(git -C "$SERVICES_SRC" rev-parse HEAD)" = "$(tr -d '[:space:]' < "$HERE/services-commit")" ] || { echo "SERVICES_SRC is not at services-commit" >&2; exit 2; }
+fi
+
 kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --wait 120s
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/role-fixture.XXXXXX")
-trap 'diagnose; rm -rf "$work"' EXIT
-mkdir -p "$work/app/supabase/bootstrap"
-cp "$HERE/session_directory_search_worker.sql" "$work/app/supabase/bootstrap/"
-printf 'FROM busybox:1.37\nCOPY app /app\nUSER 65534\n' > "$work/Dockerfile"
-docker build -q -t "$FIXTURE_IMAGE" "$work" >/dev/null
-kind load docker-image "$FIXTURE_IMAGE" --name "$CLUSTER"
+trap diagnose EXIT
+kind load docker-image "$SERVICES_IMAGE" --name "$CLUSTER"
 
 # CloudNativePG operator from the pins.
 helm repo add cnpg https://cloudnative-pg.github.io/charts >/dev/null 2>&1 || true
@@ -94,7 +98,7 @@ JOB_LOG= JOB_EXIT=
 run_job() { # ns suffix -> 0 if the Job completed; sets JOB_LOG and JOB_EXIT (the bootstrap container's exit code)
   local ns=$1 suffix=$2 name
   render "$ns" | bootstrap_of \
-    | yq "(select(.kind == \"Job\") | .metadata.name) += \"-$suffix\" | (select(.kind == \"Job\") | .spec.backoffLimit) = 0 | (select(.kind == \"Job\") | .spec.template.spec.initContainers[0].image) = \"$FIXTURE_IMAGE\"" \
+    | yq "(select(.kind == \"Job\") | .metadata.name) += \"-$suffix\" | (select(.kind == \"Job\") | .spec.backoffLimit) = 0 | (select(.kind == \"Job\") | .spec.template.spec.initContainers[0].image) = \"$SERVICES_IMAGE\" | (select(.kind == \"Job\") | .spec.template.spec.initContainers[0].imagePullPolicy) = \"Never\"" \
     | k -n "$ns" apply --server-side --force-conflicts -f -
   name=$(render "$ns" | bootstrap_of | yq -r 'select(.kind == "Job") | .metadata.name')-$suffix
   k -n "$ns" wait "job/$name" --for=jsonpath='{.status.conditions[0].status}'=True --timeout=300s >/dev/null || true
@@ -137,22 +141,15 @@ assert_sqlstate 55000 "drifted role"
 echo "search-worker-role kind: role OK (fresh and existing converge; idempotent; drift refused with 55000, exit 3)"
 
 # ---------------------------------------------------------------------------
-# Full flow: the whole umbrella release, as Alchemy applies it, on the real
-# services image (SERVICES_IMAGE, built from 96BullSessions with the bootstrap
-# and verify files): bootstrap -> migrate (wait-for-role, phase 1 verify,
-# migrations, phase 2 verify) -> workloads ready. The services image is
-# private; without SERVICES_IMAGE this part does not run and says so.
+# Full flow: the whole umbrella release, as Alchemy applies it, on the
+# services image: bootstrap -> migrate (wait-for-role, phase 1 verify,
+# migrations, phase 2 verify) -> workloads ready.
 # ---------------------------------------------------------------------------
-if [ -z "${SERVICES_IMAGE:-}" ]; then
-  msg="search-worker-role kind: FULL FLOW NOT RUN (set SERVICES_IMAGE to a local services image; the published one is private)"
-  if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::warning::$msg"; else echo "$msg"; fi
-  exit 0
-fi
-kind load docker-image "$SERVICES_IMAGE" --name "$CLUSTER"
 k delete namespace fresh existing --wait=false >/dev/null 2>&1 || true
 IMG_REPO=${SERVICES_IMAGE%:*} IMG_TAG=${SERVICES_IMAGE##*:}
-full_render() { # ns
-  helm template bulls "$ROOT/charts/96bulls" --namespace "$1" --no-hooks \
+full_render() { # ns [helm args]
+  local ns=$1; shift
+  helm template bulls "$ROOT/charts/96bulls" --namespace "$ns" --no-hooks "$@" \
     -f "$ROOT/charts/96bulls/ci/kind-values.yaml" \
     --set global.imageRegistry= --set hoopdb.cluster.storage.size=1Gi --set otel.enabled=false --set global.otel.endpoint= \
     --set "worker.image.repository=$IMG_REPO" --set "worker.image.tag=$IMG_TAG" --set worker.image.digest= \
@@ -193,6 +190,10 @@ cstat() { # ns pod jsonpath-under-status
 }
 epoch() { date -d "$1" +%s; }
 
+# The image's migration generation: readiness needs PASS for exactly this.
+gen=$(docker run --rm --entrypoint bun "$SERVICES_IMAGE" src/hoopdb/migrate.ts --generation | tr -d '[:space:]')
+[[ "$gen" =~ ^[0-9a-f]{64}$ ]] || { echo "cannot read the image's migration generation ($gen)"; exit 1; }
+
 # 1. EXISTING cluster without the role. Apply everything but the bootstrap
 # Job and hold it back for a window: migrate must wait, workloads stay unready.
 prepare_ns flow-existing absent
@@ -225,11 +226,41 @@ w_end=$(epoch "$(cstat flow-existing "$mp" 'initContainerStatuses[?(@.name=="wai
 m_start=$(epoch "$(cstat flow-existing "$mp" 'containerStatuses[?(@.name=="migrate")].state.terminated.startedAt')")
 [ "$w_end" -ge "$b_start" ] && [ "$m_start" -ge "$b_start" ] || { echo "flow-existing: order violated (bootstrap start $b_start, wait end $w_end, migrate start $m_start)"; exit 1; }
 mlog=$(k -n flow-existing logs "$mp" -c migrate)
-for step in bootstrap verify; do
-  grep '"message":"role check passed"' <<<"$mlog" | grep -qF "\"reason\":\"$step:session_directory_search_worker\"" || { echo "flow-existing: migrate did not pass $step:session_directory_search_worker"; exit 1; }
-done
+# Phase 1 passed; phase 2 passed and recorded PASS for this image's generation.
+grep '"message":"role check passed"' <<<"$mlog" | grep -qF '"reason":"bootstrap:session_directory_search_worker"' || { echo "flow-existing: migrate did not pass phase 1"; exit 1; }
+grep '"message":"role validation pending"' <<<"$mlog" | grep -qF "\"reason\":\"$gen\"" || { echo "flow-existing: migrate did not mark validation pending for $gen"; exit 1; }
+grep '"message":"role validation passed"' <<<"$mlog" | grep -qF "\"reason\":\"$gen\"" || { echo "flow-existing: migrate did not pass phase 2 for $gen"; exit 1; }
 [ "$(psql_in flow-existing "$CHECK")" = "$want" ] || { echo "flow-existing: role does not match the spec after the full flow"; exit 1; }
 echo "flow-existing: bootstrap started $b_start <= wait-for-role released $w_end <= migrate started $m_start; phase 1 + phase 2 passed; $(app_ready flow-existing) app pods ready"
+
+# 3. PHASE-2-ONLY failure after the ledger is complete (the crash window).
+# Readiness reads the role validation marker on every probe: ready only while it
+# is 'pass' for the image's own generation (96BullSessions #96).
+MARKER="SELECT status || '|' || generation FROM sessions.__96bulls_role_validation WHERE name = 'session_directory_search_worker'"
+LEDGER="SELECT count(*) FROM sessions.__96bulls_migrations"
+[ "$(psql_in flow-existing "$MARKER")" = "pass|$gen" ] || { echo "phase2: marker is not pass for $gen after a good migrate: $(psql_in flow-existing "$MARKER")"; exit 1; }
+ledger_before=$(psql_in flow-existing "$LEDGER")
+# A direct table privilege: phase 1 ignores grants, phase 2's allowlist refuses it.
+psql_in flow-existing "GRANT SELECT ON sessions.session_index TO session_directory_search_worker" >/dev/null
+# The next deploy's migrate (a new content-addressed Job; no retries).
+full_render flow-existing --set worker.migrations.activeDeadlineSeconds=3599 \
+  | yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-migrate") | .spec.backoffLimit = 0' \
+  | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
+mj2=$(k -n flow-existing get jobs -l app.kubernetes.io/component=hoopdb-migrate -o json | jq -r --arg old "$mj" '[.items[] | select(.metadata.name != $old)][0].metadata.name')
+[ -n "$mj2" ] && [ "$mj2" != null ] || { echo "phase2: no second migrate Job"; exit 1; }
+k -n flow-existing wait --for=condition=failed "job/$mj2" --timeout=600s >/dev/null || { echo "phase2: the second migrate did not fail"; exit 1; }
+mlog=$(k -n flow-existing logs "$(pod_of flow-existing "$mj2")" -c migrate 2>&1)
+grep '"message":"role check passed"' <<<"$mlog" | grep -qF '"reason":"bootstrap:session_directory_search_worker"' || { echo "phase2: phase 1 did not pass (the fault must be phase-2-only)"; exit 1; }
+grep '"message":"role check failed"' <<<"$mlog" | grep -F '"reason":"verify:session_directory_search_worker"' | grep -qF '"error_code":"55000"' \
+  || { echo "$mlog" | tail -5; echo "phase2: phase 2 did not refuse the grant with 55000"; exit 1; }
+[ "$(psql_in flow-existing "$LEDGER")" = "$ledger_before" ] || { echo "phase2: the ledger changed"; exit 1; }
+[ "$(psql_in flow-existing "$MARKER")" = "pending|$gen" ] || { echo "phase2: marker is not pending for $gen: $(psql_in flow-existing "$MARKER")"; exit 1; }
+# Running pods drop out (probe re-reads the marker) and new pods never become ready.
+for i in $(seq 1 18); do [ "$(app_ready flow-existing)" = 0 ] && break; sleep 10; done
+[ "$(app_ready flow-existing)" = 0 ] || { echo "phase2: running workloads stayed ready after the phase 2 failure"; exit 1; }
+k -n flow-existing delete pods -l 'app.kubernetes.io/name in (worker,alleyoop)' --wait=false >/dev/null
+for i in $(seq 1 9); do sleep 10; [ "$(app_ready flow-existing)" = 0 ] || { echo "phase2: a workload became ready while phase 2 fails"; exit 1; }; done
+echo "flow-existing phase2: ledger complete ($ledger_before rows, unchanged); phase 1 passed, phase 2 55000; marker pending|${gen:0:12}; 0 app pods ready (running and restarted, 90s)"
 k delete namespace flow-existing --wait=false >/dev/null
 
 # 3. DRIFTED: a role that differs from the spec, then the whole release at

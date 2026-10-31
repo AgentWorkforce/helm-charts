@@ -17,6 +17,9 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
 {{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}
+{{- /* Phase 2 role verify must run in migrate: with it off, readiness never passes
+unless a separate mark_pass step runs, which this chart does not have. */ -}}
+{{- range .Values.extraEnv }}{{ if eq (.name | default "") "HOOPDB_ROLE_VERIFY" }}{{ fail "96bulls-worker: extraEnv must not set HOOPDB_ROLE_VERIFY (migrate always runs the phase 2 role verify)" }}{{ end }}{{ end -}}
 {{- $bob := index .Values.components "bob-costas" -}}
 {{- if and $bob.enabled (not (.Values.summaryEncryption.existingSecret | default .Values.existingSecret)) }}{{ fail "96bulls-worker: summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" }}{{ end -}}
 {{- if and $bob.enabled (not .Values.summaryEncryption.key) }}{{ fail "96bulls-worker: summaryEncryption.key is required when bob-costas is enabled" }}{{ end -}}

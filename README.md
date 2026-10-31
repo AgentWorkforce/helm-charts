@@ -152,19 +152,31 @@ provisions it (96BullSessions `runbooks/session-directory-search-worker-bootstra
   (`worker.migrations.waitForRole`, on by default in the umbrella, on the pinned
   HoopDb image) polls HoopDb until the role exists, so bootstrap and migrate are
   applied together. migrate then verifies the role (phase 1), migrates, and
-  checks its grants (phase 2); workloads stay unready until it completes. A
-  drifted role fails both Jobs with `55000` and nothing becomes ready.
+  checks its grants (phase 2) and records PASS for the image's migration
+  generation in `sessions.__96bulls_role_validation`. Workloads are ready only
+  while that PASS is current, so a phase 2 failure after the ledger is
+  complete leaves everything unready. migrate always sets
+  `HOOPDB_ROLE_VERIFY=true`, and `worker.extraEnv` may not override it: with
+  verify off, readiness would need a separate mark_pass step, which this chart
+  does not run. A drifted role fails both Jobs with `55000` and nothing
+  becomes ready.
 - **Disabling** the Job removes the Job and its RBAC; the role is never dropped
   (see the runbook's "Rollback and removal").
 
 `ci/96bulls-search-worker-role/render.sh` asserts the rendered objects;
-`ci/96bulls-search-worker-role/kind.sh` proves a fresh and an existing CNPG
-cluster converge to the same role on kind, and that a drifted role is refused
-with `55000` (exit 3). With `SERVICES_IMAGE` (a local services image; the
-published one is private) it also runs the whole release: migrate waits while
-the bootstrap is held back and no workload is ready; after the bootstrap,
-migrate passes both role checks and the workloads become ready; with a drifted
-role both Jobs fail with `55000` and nothing becomes ready.
+`ci/96bulls-search-worker-role/kind.sh` (required in CI) runs on the real
+services image, which CI builds from the 96BullSessions commit in
+`ci/96bulls-search-worker-role/services-commit` (the published image is
+private; locally, pass `SERVICES_IMAGE`). It proves:
+- a fresh and an existing CNPG cluster converge to the same role;
+- a drifted role is refused with `55000` (exit 3);
+- in the whole release, migrate waits while the bootstrap is held back and no
+  workload is ready; after the bootstrap, migrate passes both role checks and
+  the workloads become ready;
+- a phase-2-only failure after the ledger is complete (a direct grant) sets the
+  role validation marker to pending, and running and restarted workloads go
+  unready;
+- with a drifted role, both Jobs fail with `55000` and nothing becomes ready.
 
 ### Install the 96Bulls app charts individually
 
