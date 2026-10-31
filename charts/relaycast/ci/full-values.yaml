@@ -1,0 +1,21 @@
+# Everything optional switched on: ingress (cert-manager style TLS) with the
+# edge denials, NetworkPolicy admitting the controller, and backups.
+baseUrl: https://relay.example.com
+existingSecret: relaycast-secrets
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts: [relay.example.com]
+  tls:
+    - secretName: relay-example-com-tls
+      hosts: [relay.example.com]
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+backup:
+  enabled: true

@@ -4,8 +4,10 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/agentworkforce/relaycast-self-host
-  # Immutable multi-platform 8.0.0 manifest (linux/amd64 and linux/arm64).
-  digest: sha256:5c86c095a335259060dc34ce7aa2e90809267395af915977a1ae608f93a83b98
+  # relaycast-self-host:12.2.1-selfhost.1, built from relaycast main bdf1b69c
+  # (engine 12.2.1 + the internal admin API). Immutable multi-platform
+  # manifest (linux/amd64 and linux/arm64).
+  digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -17,14 +19,48 @@ server:
   environment: production
 
 runtime:
-  # The released self-host image currently implements only the portable
-  # single-node SQLite adapter. Future HA adapters must be implemented and
-  # proven in the Relaycast engine before this chart can select them.
+  # The released self-host image implements only the portable single-node
+  # SQLite adapter. Future HA adapters must be implemented and proven in the
+  # Relaycast engine before this chart can select them.
   backend: sqlite
 
-# REQUIRED. Relaycast embeds this authority in signed file URLs and A2A cards.
-# It must be an HTTPS origin with public, multi-label DNS, without a path.
+# REQUIRED. Relaycast embeds this origin in signed file URLs and A2A cards.
+# By default it must be an HTTPS origin with public, multi-label DNS, without a
+# path. For a cluster-internal deployment set allowInsecureBaseUrl=true and use
+# the Service name, e.g. http://relaycast.relaycast.svc:8787.
 baseUrl: ""
+
+# Accept an http:// baseUrl whose host is loopback or private (RFC 1918, ULA,
+# *.svc, *.svc.cluster.local, single-label service names, ...). The image
+# refuses public hosts over http. Not allowed together with ingress.enabled.
+allowInsecureBaseUrl: false
+# With allowInsecureBaseUrl: extra private DNS suffixes for a custom
+# clusterDomain (RELAYCAST_PRIVATE_DNS_SUFFIXES), e.g. [".svc.corp"].
+privateDnsSuffixes: []
+# With allowInsecureBaseUrl: exact private hosts (RELAYCAST_INSECURE_BASE_URL_HOSTS),
+# e.g. ["relaycast.relaycast"] for a <svc>.<ns> short name.
+insecureBaseUrlHosts: []
+
+# REQUIRED. Name of an existing Secret in the release namespace. The chart
+# never renders a secret value; both keys below are mounted read-only as files
+# under /run/secrets/relaycast and passed to the engine as *_FILE paths.
+existingSecret: ""
+secretKeys:
+  # RELAYCAST_INTERNAL_SECRET_FILE: bearer secret (>= 32 characters) for the
+  # in-cluster /internal admin API, used to create the first workspace.
+  internalSecret: internal-secret
+  # RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE: stable derivation secret for
+  # keyed workspace-create retries. Keep it stable across upgrades.
+  bootstrapSecret: workspace-bootstrap-secret
+
+# Anonymous POST /v1/workspaces. Off by default: workspaces are created through
+# the internal admin API (see the README's first-run section). Turning it on
+# lets any caller that can reach the Service allocate workspaces, so it is
+# refused together with ingress.enabled.
+publicWorkspaceCreate: false
+
+# Require bootstrap-secret proof for anonymous keyed creates.
+bootstrapProofRequired: false
 
 retention:
   # Empty keeps messages forever. Positive values set
@@ -37,33 +73,67 @@ mailbox:
   depthCap: null
 
 service:
-  # ClusterIP is enforced until the runtime can authenticate anonymous
-  # workspace creation. Access this profile only from inside the cluster or
-  # through an operator-controlled port-forward.
+  # ClusterIP only. Expose Relaycast publicly through ingress below, which
+  # blocks the admin and workspace-create paths at the edge.
   type: ClusterIP
   port: 8787
   annotations: {}
 
-# Public ingress is unavailable for the pinned runtime because it cannot
-# authenticate anonymous workspace creation. Enabling it fails rendering.
-# Keep the shape reserved for a later, separately proven image contract.
+# Optional public edge. Requires publicWorkspaceCreate=false and an HTTPS
+# baseUrl whose host is listed in hosts. Every host routes Prefix "/" to
+# Relaycast except two paths, which are routed to a Service with no endpoints
+# so the controller answers 503 and the request never reaches the engine:
+#   Prefix /internal        (admin API)
+#   Exact  /v1/workspaces   (anonymous workspace creation)
+# cert-manager: set annotations (e.g. cert-manager.io/cluster-issuer) and a
+# tls entry with a secretName; cert-manager creates and renews that Secret.
 ingress:
   enabled: false
   className: ""
   annotations: {}
+  # cert-manager.io/cluster-issuer: letsencrypt
   hosts: []
   # - relay.example.com
+  # Required unless externalTls: the Ingress must serve HTTPS itself.
   tls: []
   # - secretName: relay-example-com-tls
   #   hosts: [relay.example.com]
+  # Set true only when a load balancer in front of the controller terminates
+  # TLS for these hosts (then tls may stay empty).
+  externalTls: false
 
 persistence:
   existingClaim: ""
   storageClass: ""
+  # ReadWriteOnce is required when backup.enabled: the backup pod is scheduled
+  # onto the Relaycast pod's node and mounts the same claim.
   accessMode: ReadWriteOnce
   size: 10Gi
   annotations:
     helm.sh/resource-policy: keep
+
+# Scheduled online backups of the SQLite database (SQLite backup API, safe
+# while the engine runs) and the uploaded-file directory to a second PVC.
+# See the README for the restore procedure.
+backup:
+  enabled: false
+  schedule: "17 3 * * *"
+  # Number of backups kept on the backup volume; older ones are pruned.
+  keep: 7
+  existingClaim: ""
+  storageClass: ""
+  size: 20Gi
+  annotations:
+    helm.sh/resource-policy: keep
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  activeDeadlineSeconds: 3600
 
 serviceAccount:
   create: true
@@ -119,8 +189,9 @@ readinessProbe:
   timeoutSeconds: 5
 
 networkPolicy:
-  enabled: false
-  # Empty allows callers only from the release namespace.
+  enabled: true
+  # Empty allows callers only from the release namespace. With ingress enabled,
+  # list the ingress controller's namespace/pods here (required).
   ingressFrom: []
 
 terminationGracePeriodSeconds: 30
@@ -130,7 +201,5 @@ affinity: {}
 topologySpreadConstraints: []
 
 # Additional non-secret environment variables. Names managed by the structured
-# values above are reserved and rejected here. The pinned 8.0.0 image does not
-# support the later workspace-bootstrap Secret variables; those are rejected so
-# a release cannot silently ignore them.
+# values above are reserved and rejected here.
 extraEnv: []

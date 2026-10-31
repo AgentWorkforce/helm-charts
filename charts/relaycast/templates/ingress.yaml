@@ -1,0 +1,79 @@
+{{- include "relaycast.validate" . }}
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "relaycast.fullname" . }}
+{{- $deny := include "relaycast.denyServiceName" . }}
+{{- $port := .Values.service.port }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ . | quote }}
+      http:
+        paths:
+          # Edge denials: these paths go to a Service with no endpoints, so the
+          # controller answers 503 and the request never reaches Relaycast.
+          # Exact and longer Prefix matches take precedence over "/".
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $deny }}
+                port:
+                  number: {{ $port }}
+          - path: /v1/workspaces
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $deny }}
+                port:
+                  number: {{ $port }}
+          - path: /v1/workspaces/
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $deny }}
+                port:
+                  number: {{ $port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullname }}
+                port:
+                  number: {{ $port }}
+    {{- end }}
+---
+# Deliberately selects no pods: the edge-denied ingress paths resolve to no
+# endpoints. Do not add a selector.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $deny }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge-deny
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $port }}
+      protocol: TCP
+{{- end }}

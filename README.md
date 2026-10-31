@@ -28,12 +28,17 @@ add-ons and are not installed with it:
 
 ```bash
 kubectl create namespace relaycast
+kubectl -n relaycast create secret generic relaycast-secrets \
+  --from-literal=internal-secret="$(openssl rand -hex 32)" \
+  --from-literal=workspace-bootstrap-secret="$(openssl rand -hex 32)"
 helm install relaycast agentworkforce/relaycast -n relaycast \
-  --set baseUrl=https://relay.example.com
+  --set baseUrl=https://relay.example.com \
+  --set existingSecret=relaycast-secrets
 ```
 
-See [charts/relaycast/README.md](charts/relaycast/README.md) for private access,
-persistence, and composition guidance. The staged AWS-first/GCP-second adapter
+Anonymous workspace creation is off; see
+[charts/relaycast/README.md](charts/relaycast/README.md) for the first-run
+workspace bootstrap, ingress, backups and restore, and upgrading from 0.1.0. The staged AWS-first/GCP-second adapter
 plan and its proof gates are in
 [docs/self-hosted-reference-architecture.md](docs/self-hosted-reference-architecture.md).
 
