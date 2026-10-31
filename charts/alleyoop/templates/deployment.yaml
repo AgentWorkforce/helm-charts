@@ -53,7 +53,7 @@ spec:
                   key: {{ .Values.secretKeys.jwksJson }}
             {{- end }}
             {{- with .Values.ingest.env }}
-            {{- toYaml . | nindent 12 }}
+            {{- include "alleyoop.renderEnv" . | nindent 12 }}
             {{- end }}
           {{- with .Values.startupProbe }}
           startupProbe:

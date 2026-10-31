@@ -21,6 +21,27 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- end }}
 
 {{/*
+Render Kubernetes EnvVar entries without letting YAML reinterpret a string such
+as "6378" as a number. valueFrom is kept as structured YAML.
+*/}}
+{{- define "alleyoop.renderEnv" -}}
+{{- range $entry := . }}
+- name: {{ $entry.name | quote }}
+{{- if hasKey $entry "value" }}
+{{- if kindIs "invalid" $entry.value }}
+  value: ""
+{{- else }}
+  value: {{ $entry.value | toString | quote }}
+{{- end }}
+{{- end }}
+{{- with $entry.valueFrom }}
+  valueFrom:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 Shared environment: the services' env contract (names must not change).
 Usage: include "alleyoop.env" (dict "context" . "service" "referee")
 */}}
@@ -75,7 +96,7 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
 - name: TMPDIR
   value: /tmp
 {{- with $v.extraEnv }}
-{{ toYaml . }}
+{{ include "alleyoop.renderEnv" . }}
 {{- end }}
 {{- end }}
 

@@ -1,10 +1,10 @@
 dependencies:
 - name: 96bulls-worker
   repository: file://../96bulls-worker
-  version: 0.4.0
+  version: 0.4.1
 - name: alleyoop
   repository: file://../alleyoop
-  version: 0.3.0
+  version: 0.3.1
 - name: cluster
   repository: https://cloudnative-pg.github.io/charts
   version: 0.9.0
@@ -14,5 +14,5 @@ dependencies:
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   version: 0.178.0
-digest: sha256:49f35a8dc6ac1e9d277639ce6db0f92b7bdd68aa496186216fdf13396a3f2793
-generated: "2026-10-29T12:08:33.214183824-07:00"
+digest: sha256:8fc298eeab8f34434826223a1e7a57e9ea3b3109e1c76dbe537ee39b4f79861f
+generated: "2026-10-30T18:15:27.589149639-07:00"

@@ -53,6 +53,39 @@ for chart in "${charts[@]}"; do
         args=(); [ -n "$v" ] && args=(-f "$v")
         helm lint --strict "charts/$chart" "${args[@]}" >/dev/null || { helm lint --strict "charts/$chart" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
         out=$(render "$chart" "$v") || { err "$label: render failed"; continue; }
+        if [[ "$v" == *numeric-extra-env-values.yaml ]]; then
+          count_quoted_env() {
+            local name=$1 value=$2
+            awk -v name="$name" -v value="$value" '
+              index($0, "- name: \"" name "\"") || index($0, "- name: " name) { found=1; next }
+              found && index($0, "value: \"" value "\"") { quoted++; found=0 }
+              found && /value:/ { found=0 }
+              END { print quoted + 0 }
+            ' <<<"$out"
+          }
+          count_value_from_env() {
+            local name=$1
+            awk -v name="$name" '
+              index($0, "- name: \"" name "\"") || index($0, "- name: " name) { found=1; next }
+              found && /valueFrom:/ { structured++; found=0 }
+              found && /- name:/ { found=0 }
+              END { print structured + 0 }
+            ' <<<"$out"
+          }
+          case $chart in
+            alleyoop) expected_shared=1; component_env=INGEST_RETRY_LIMIT ;;
+            96bulls-worker) expected_shared=5; component_env=REFEREE_RETRY_LIMIT ;;
+            *) err "$label: numeric env fixture is unsupported for $chart"; expected_shared=0; component_env=UNKNOWN ;;
+          esac
+          [ "$(count_quoted_env REDIS_PORT 6378)" -eq "$expected_shared" ] \
+            || err "$label: REDIS_PORT must render as the quoted string \"6378\" in all $expected_shared workloads"
+          [ "$(count_value_from_env REDIS_PASSWORD)" -eq "$expected_shared" ] \
+            || err "$label: REDIS_PASSWORD valueFrom must remain structured in all $expected_shared workloads"
+          [ "$(count_quoted_env OPTIONAL_FLAG '')" -eq "$expected_shared" ] \
+            || err "$label: null OPTIONAL_FLAG must render as an empty string in all $expected_shared workloads"
+          [ "$(count_quoted_env "$component_env" 6379)" -eq 1 ] \
+            || err "$label: component EnvVar $component_env must render as the quoted string \"6379\""
+        fi
         if [[ "$v" == *pod-identity-values.yaml ]] && grep -Eq '^[[:space:]]*- name: LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*$' <<<"$out"; then
           err "$label: podIdentity mode renders a static Locker credential environment variable"
         fi
