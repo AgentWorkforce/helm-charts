@@ -21,6 +21,10 @@ global:
 
 # Shared by both app charts (YAML anchors keep one copy).
 shared: &shared
+  # Pull credentials for the private services image: every workload and Job,
+  # including searchWorkerRole.bootstrapJob (which reads worker.imagePullSecrets).
+  # Empty on hosted EKS (node role pulls from ECR).
+  imagePullSecrets: []
   existingSecret: 96bulls-locker
   secretKeys:
     hoopdbUrl: HOOPDB_URL
@@ -49,6 +53,13 @@ shared: &shared
 
 worker:
   <<: *shared
+  migrations:
+    # migrate waits until session_directory_search_worker exists (created by
+    # initdb on a new cluster, by searchWorkerRole.bootstrapJob on an existing
+    # one, by the runbook on Supabase). Same pinned image as hoopdb.cluster.imageName.
+    waitForRole:
+      enabled: true
+      image: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3
 
 alleyoop:
   <<: *shared
@@ -172,8 +183,11 @@ otel:
 # step under the deploy approval. Disabling it (or deleting the release)
 # removes the Job and its RBAC; the role itself is never dropped (see the
 # runbook's "Rollback and removal").
-# The migrate Job fails closed (42704) until the role exists and retries
-# (worker.migrations.backoffLimit), so the two may be applied together.
+# Order: the migrate Job's wait-for-role init container (worker.migrations.
+# waitForRole) blocks migrate until the role exists, so the two are applied
+# together. Workloads stay unready until migrate (phase 1 verify, migrations,
+# phase 2 verify) completes; a drifted role fails both Jobs (55000).
+# Pull auth: worker.imagePullSecrets (the shared value above).
 # ---------------------------------------------------------------------------
 searchWorkerRole:
   bootstrapJob:
@@ -196,4 +210,3 @@ searchWorkerRole:
     resources:
       requests: { cpu: 10m, memory: 64Mi }
       limits: { memory: 256Mi }
-

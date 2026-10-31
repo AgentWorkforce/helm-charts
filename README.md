@@ -144,13 +144,27 @@ provisions it (96BullSessions `runbooks/session-directory-search-worker-bootstra
   image's `supabase/bootstrap/session_directory_search_worker.sql` as `postgres`
   by `kubectl exec` into the primary. `enableSuperuserAccess` stays false. It is
   idempotent and never alters a role that differs from the spec (it fails with
-  `55000`). The migrate Job fails closed until the role exists and retries.
+  `55000`). The sql init container, which runs the services image, gets no API
+  token: the pod has `automountServiceAccountToken: false` and only the kubectl
+  container mounts a projected token. Pull auth is `worker.imagePullSecrets`
+  (the umbrella's shared `imagePullSecrets`), the same Secret as the workloads.
+- **Order** (no Helm hooks): the migrate Job's `wait-for-role` init container
+  (`worker.migrations.waitForRole`, on by default in the umbrella, on the pinned
+  HoopDb image) polls HoopDb until the role exists, so bootstrap and migrate are
+  applied together. migrate then verifies the role (phase 1), migrates, and
+  checks its grants (phase 2); workloads stay unready until it completes. A
+  drifted role fails both Jobs with `55000` and nothing becomes ready.
 - **Disabling** the Job removes the Job and its RBAC; the role is never dropped
   (see the runbook's "Rollback and removal").
 
 `ci/96bulls-search-worker-role/render.sh` asserts the rendered objects;
 `ci/96bulls-search-worker-role/kind.sh` proves a fresh and an existing CNPG
-cluster converge to the same role on kind.
+cluster converge to the same role on kind, and that a drifted role is refused
+with `55000` (exit 3). With `SERVICES_IMAGE` (a local services image; the
+published one is private) it also runs the whole release: migrate waits while
+the bootstrap is held back and no workload is ready; after the bootstrap,
+migrate passes both role checks and the workloads become ready; with a drifted
+role both Jobs fail with `55000` and nothing becomes ready.
 
 ### Install the 96Bulls app charts individually
 

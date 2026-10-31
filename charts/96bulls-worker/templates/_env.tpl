@@ -58,11 +58,7 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ .service | quote }}
 - name: OTEL_SERVICE_NAME
   value: {{ .service | quote }}
-- name: HOOPDB_URL
-  valueFrom:
-    secretKeyRef:
-      name: {{ $v.hoopdb.existingSecret | default $v.existingSecret }}
-      key: {{ $v.hoopdb.key | default $v.secretKeys.hoopdbUrl }}
+{{ include "96bulls-worker.hoopdbUrlEnv" .context }}
 - name: LOCKER_ENDPOINT
   value: {{ $v.locker.endpoint | quote }}
 - name: LOCKER_BUCKET
@@ -151,4 +147,15 @@ volumes:
         - key: {{ $ctx.Values.summaryEncryption.key | quote }}
           path: {{ $ctx.Values.summaryEncryption.fileName | quote }}
 {{- end }}
+{{- end }}
+
+{{/*
+HOOPDB_URL from the HoopDb Secret (context: the chart root).
+*/}}
+{{- define "96bulls-worker.hoopdbUrlEnv" -}}
+- name: HOOPDB_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.hoopdb.existingSecret | default .Values.existingSecret }}
+      key: {{ .Values.hoopdb.key | default .Values.secretKeys.hoopdbUrl }}
 {{- end }}

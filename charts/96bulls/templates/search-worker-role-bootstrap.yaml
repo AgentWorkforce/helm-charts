@@ -4,13 +4,16 @@ Existing-cluster path for the session directory search Worker role
 Runs the HoopDb bootstrap file, taken from the pinned services image, as the
 CNPG superuser `postgres` by `kubectl exec` into the primary. Separate from the
 hoopdb-migrate Job: its own ServiceAccount, and a Role that may only find and
-exec into pods in this namespace. No Helm hooks (Alchemy renders --no-hooks).
+exec into pods in this namespace. No Helm hooks (Alchemy renders --no-hooks):
+migrate is ordered after it by its wait-for-role init container
+(worker.migrations.waitForRole). Only the kubectl container holds an API token.
 */ -}}
 {{- with .Values.searchWorkerRole.bootstrapJob }}
 {{- if .enabled }}
 {{- if not (and .sqlImage.repository .sqlImage.digest) }}{{ fail "searchWorkerRole.bootstrapJob.sqlImage.repository and .digest are required: the services image that carries the bootstrap file, by digest" }}{{ end }}
 {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .sqlImage.digest) }}{{ fail "searchWorkerRole.bootstrapJob.sqlImage.digest must be sha256:<64 hex>" }}{{ end }}
 {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .kubectlImage.digest) }}{{ fail "searchWorkerRole.bootstrapJob.kubectlImage.digest must be sha256:<64 hex>" }}{{ end }}
+{{- if not $.Values.worker.migrations.waitForRole.enabled }}{{ fail "searchWorkerRole.bootstrapJob needs worker.migrations.waitForRole.enabled: it orders migrate after the bootstrap" }}{{ end }}
 {{- $name := printf "%s-search-worker-role" $.Release.Name | trunc 50 | trimSuffix "-" }}
 {{- $labels := dict "app.kubernetes.io/name" "search-worker-role-bootstrap" "app.kubernetes.io/instance" $.Release.Name "app.kubernetes.io/component" "search-worker-role-bootstrap" "app.kubernetes.io/part-of" "96bulls" }}
 ---
@@ -80,8 +83,14 @@ template:
   spec:
     restartPolicy: Never
     serviceAccountName: {{ .name }}
-    # kubectl needs the API token; this pod is the only one bound to the Role.
-    automountServiceAccountToken: true
+    # No pod-wide token: only the kubectl container gets one (projected below).
+    # The sql initContainer runs the services image without API credentials.
+    automountServiceAccountToken: false
+    {{- with .root.Values.worker.imagePullSecrets }}
+    # The services image is private: the same pull Secret as the workloads.
+    imagePullSecrets:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     securityContext:
       runAsNonRoot: true
       runAsUser: 65534
@@ -116,7 +125,12 @@ template:
             pod=$(kubectl get pods -l "cnpg.io/cluster=${CLUSTER},cnpg.io/instanceRole=primary" -o jsonpath='{.items[0].metadata.name}')
             [ -n "$pod" ] || { echo "no CNPG primary for ${CLUSTER}" >&2; exit 1; }
             echo "bootstrap session_directory_search_worker via ${pod}"
-            kubectl exec -i "$pod" -c postgres -- psql -v ON_ERROR_STOP=1 -X -d "${DATABASE}" -f - < /work/bootstrap.sql
+            # VERBOSITY=verbose prints the SQLSTATE (42501, 55000) on failure;
+            # psql exits 3 on a script error and kubectl exec passes it through.
+            rc=0
+            kubectl exec -i "$pod" -c postgres -- psql -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -X -d "${DATABASE}" -f - < /work/bootstrap.sql || rc=$?
+            echo "bootstrap session_directory_search_worker: psql exit ${rc}"
+            exit "$rc"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -126,7 +140,16 @@ template:
         volumeMounts:
           - { name: work, mountPath: /work, readOnly: true }
           - { name: tmp, mountPath: /tmp }
+          # kubectl's in-cluster config path; this container only.
+          - { name: kube-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true }
     volumes:
       - { name: work, emptyDir: { sizeLimit: 1Mi } }
       - { name: tmp, emptyDir: { sizeLimit: 16Mi } }
+      - name: kube-api
+        projected:
+          defaultMode: 0444
+          sources:
+            - serviceAccountToken: { path: token, expirationSeconds: 3600 }
+            - configMap: { name: kube-root-ca.crt, items: [{ key: ca.crt, path: ca.crt }] }
+            - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
 {{- end }}

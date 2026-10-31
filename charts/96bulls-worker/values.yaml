@@ -98,6 +98,20 @@ migrations:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 512Mi }
+  # Orders the migrate Job after the session_directory_search_worker role
+  # bootstrap without Helm hooks (Alchemy renders --no-hooks): an init
+  # container that polls HoopDb (HOOPDB_URL) until the role exists. The
+  # migration and its phase 1/phase 2 checks then verify the role itself.
+  # Needs an image with sh and psql, by digest. Bounded by activeDeadlineSeconds.
+  waitForRole:
+    enabled: false
+    role: session_directory_search_worker
+    # Full reference with @sha256 digest, e.g. the CNPG Postgres image.
+    image: ""
+    intervalSeconds: 5
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 64Mi }
 
 # Creates the Locker bucket (idempotent). Replaces upstream MinIO's
 # post-install bucket hook, which never runs under --no-hooks.

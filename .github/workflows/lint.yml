@@ -146,6 +146,6 @@ jobs:
         with:
           cluster_name: 96bulls-role
 
-      - name: Fresh and existing CNPG clusters converge
+      - name: Fresh and existing CNPG clusters converge; drift refused (55000)
         if: steps.changed.outputs.run == 'true'
         run: ci/96bulls-search-worker-role/kind.sh
