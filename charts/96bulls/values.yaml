@@ -49,6 +49,12 @@ shared: &shared
 
 worker:
   <<: *shared
+  # Use a separate owner URL for the one-shot migration Job while services use
+  # the least-privilege URL in worker.hoopdb. Both fields stay empty by default.
+  migrations:
+    hoopdb:
+      existingSecret: ""
+      key: ""
 
 alleyoop:
   <<: *shared

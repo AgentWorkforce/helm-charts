@@ -13,6 +13,7 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "96bulls-worker: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}
 {{- if and (eq $credentialsMode "secret") (not .Values.existingSecret) }}{{ fail "96bulls-worker: existingSecret is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if and (not .Values.hoopdb.existingSecret) (not .Values.existingSecret) }}{{ fail "96bulls-worker: hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" }}{{ end -}}
+{{- if ne (empty .Values.migrations.hoopdb.existingSecret) (empty .Values.migrations.hoopdb.key) }}{{ fail "96bulls-worker: migrations.hoopdb.existingSecret and key must be set together" }}{{ end -}}
 {{- if and (eq $credentialsMode "secret") (not .Values.locker.endpoint) }}{{ fail "96bulls-worker: locker.endpoint is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
@@ -54,6 +55,12 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
 */}}
 {{- define "96bulls-worker.env" -}}
 {{- $v := .context.Values -}}
+{{- $hoopdbSecret := $v.hoopdb.existingSecret | default $v.existingSecret -}}
+{{- $hoopdbKey := $v.hoopdb.key | default $v.secretKeys.hoopdbUrl -}}
+{{- if eq .service "hoopdb-migrate" -}}
+{{- $hoopdbSecret = $v.migrations.hoopdb.existingSecret | default $hoopdbSecret -}}
+{{- $hoopdbKey = $v.migrations.hoopdb.key | default $hoopdbKey -}}
+{{- end -}}
 - name: SERVICE
   value: {{ .service | quote }}
 - name: OTEL_SERVICE_NAME
@@ -61,8 +68,8 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
 - name: HOOPDB_URL
   valueFrom:
     secretKeyRef:
-      name: {{ $v.hoopdb.existingSecret | default $v.existingSecret }}
-      key: {{ $v.hoopdb.key | default $v.secretKeys.hoopdbUrl }}
+      name: {{ $hoopdbSecret }}
+      key: {{ $hoopdbKey }}
 - name: LOCKER_ENDPOINT
   value: {{ $v.locker.endpoint | quote }}
 - name: LOCKER_BUCKET

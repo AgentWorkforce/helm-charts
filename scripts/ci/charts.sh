@@ -89,6 +89,14 @@ for chart in "${charts[@]}"; do
         if [[ "$v" == *pod-identity-values.yaml ]] && grep -Eq '^[[:space:]]*- name: LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)[[:space:]]*$' <<<"$out"; then
           err "$label: podIdentity mode renders a static Locker credential environment variable"
         fi
+        if [[ "$v" == *migration-owner-values.yaml ]]; then
+          migration_ref=$(yq 'select(.kind == "Job" and (.metadata.name | contains("migrate"))) | .spec.template.spec.containers[0].env[] | select(.name == "HOOPDB_URL") | .valueFrom.secretKeyRef | .name + "/" + .key' <<<"$out")
+          [ "$migration_ref" = "hoopdb-migration/HOOPDB_MIGRATION_URL" ] \
+            || err "$label: migrate Job must read only the migration-owner URL, got $migration_ref"
+          runtime_refs=$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "HOOPDB_URL") | .valueFrom.secretKeyRef | .name + "/" + .key' <<<"$out" | grep -v '^---$' | sort -u)
+          [ "$runtime_refs" = "hoopdb-runtime/HOOPDB_URL" ] \
+            || err "$label: long-running workloads must read only the runtime URL, got $runtime_refs"
+        fi
         if [ "$chart" = "96bulls-worker" ]; then
           summary_file_refs=$(grep -Ec '^[[:space:]]*- name: SUMMARY_MASTER_KEYS_FILE[[:space:]]*$' <<<"$out" || true)
           summary_value_refs=$(grep -Ec '^[[:space:]]*- name: SUMMARY_MASTER_KEYS[[:space:]]*$' <<<"$out" || true)
@@ -118,6 +126,8 @@ for chart in "${charts[@]}"; do
         v=charts/96bulls-worker/ci/pod-identity-values.yaml
         expect_render_failure "$chart" "$v" "unknown credential mode" "locker.credentials.mode must be secret or podIdentity" --set locker.credentials.mode=invalid
         expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
+        expect_render_failure "$chart" "$v" "migration Secret without key" "migrations.hoopdb.existingSecret and key must be set together" --set migrations.hoopdb.existingSecret=hoopdb-migration
+        expect_render_failure "$chart" "$v" "migration key without Secret" "migrations.hoopdb.existingSecret and key must be set together" --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL
         expect_render_failure "$chart" "$v" "missing summary Secret" "summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" --set summaryEncryption.existingSecret=
         expect_render_failure "$chart" "$v" "duplicate summary key env" "configure summaryEncryption instead of components.bob-costas.env" --set-json 'components.bob-costas.env=[{"name":"SUMMARY_MASTER_KEYS","value":"not-a-real-key"}]'
         expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
