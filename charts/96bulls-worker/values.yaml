@@ -89,6 +89,12 @@ automountServiceAccountToken: false
 # deleted object as drift and would recreate (re-run) the Job.
 migrations:
   enabled: true
+  # Optional migration-owner connection. When set, only the migrate Job reads
+  # this Secret/key; every long-running workload keeps using hoopdb above.
+  # Set both fields together. Empty preserves the historical shared URL.
+  hoopdb:
+    existingSecret: ""
+    key: ""
   # Plain Postgres needs the Supabase role shim; managed Supabase does not.
   supabaseShim: true
   backoffLimit: 3

@@ -1,0 +1,17 @@
+hoopdb:
+  existingSecret: hoopdb-runtime
+  key: HOOPDB_URL
+migrations:
+  hoopdb:
+    existingSecret: hoopdb-migration
+    key: HOOPDB_MIGRATION_URL
+summaryEncryption:
+  existingSecret: 96bulls-summary
+locker:
+  endpoint: ""
+  bucket: 96bulls-ci
+  region: us-west-2
+  credentials:
+    mode: podIdentity
+tenant:
+  orgId: org_ci
