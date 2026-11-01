@@ -10,6 +10,8 @@ jobs:
   # Same checks as pull requests; nothing publishes unless they pass on main.
   lint:
     uses: ./.github/workflows/lint.yml
+    secrets:
+      BULLS96_READ_TOKEN: ${{ secrets.BULLS96_READ_TOKEN }}
 
   release:
     needs: lint

@@ -5,6 +5,11 @@ migrations:
   hoopdb:
     existingSecret: hoopdb-migration
     key: HOOPDB_MIGRATION_URL
+  databaseMode: selfhosted
+  supabaseShim: true
+  runtimeRole: bulls96_runtime
+  runtimeRoleLogin: true
+  functionBoundaryMode: global-default-revoke
 summaryEncryption:
   existingSecret: 96bulls-summary
 locker:

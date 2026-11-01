@@ -15,10 +15,11 @@ image:
   # Defaults to Chart.appVersion when empty.
   tag: ""
   # sha256 digest; when set it wins over tag. Default: the services image
-  # built from 96BullSessions main db2663d (linux/amd64+arm64). This hosted
+  # built from 96BullSessions main b47c1e6 (#99 + #106; GHCR publish-image run
+  # 41333160108; migration generation 1d99ccc8...4718). This hosted
   # service package is private: add imagePullSecrets for direct installs.
   # When overriding repository or tag, clear digest or set a matching digest.
-  digest: "sha256:245a75f9d7abdbd2167108db6e4fa852df844b41a22eaebcd64b4dd7b753b2aa"
+  digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   pullPolicy: IfNotPresent
 
 # Optional; passed to every workload and Job.
@@ -95,8 +96,40 @@ migrations:
   hoopdb:
     existingSecret: ""
     key: ""
-  # Plain Postgres needs the Supabase role shim; managed Supabase does not.
-  supabaseShim: true
+  # The migrator's database profile (96BullSessions src/hoopdb/migrate.ts
+  # migrationProfile(), 96BullSessions #99). Each value is rendered at most once,
+  # into the migrate container only. Do not set these via extraEnv or component
+  # env; the render refuses that. Where the migrator has no default, neither does
+  # the chart: an unset required value fails the render.
+  # REQUIRED. HOOPDB_DB_MODE: local | selfhosted (CNPG, RDS, any
+  # operator-controlled plain Postgres) | cloudsql (Google Cloud SQL) | supabase.
+  databaseMode: ""
+  # HOOPDB_ROLE_BOOTSTRAP (optional): true/false; the migrator defaults it to the
+  # shim choice. Refused as true in supabase mode. Cloud SQL sets false (no
+  # customer superuser; the operator provisions the search Worker role).
+  roleBootstrap: null
+  # HOOPDB_SUPABASE_SHIM: true/false. Required in local, selfhosted and cloudsql
+  # (Cloud SQL: false; its operator bootstrap creates the compatibility roles). In
+  # supabase mode it must be unset or false and is rendered "false". The
+  # migrator also refuses the shim and the role bootstrap there.
+  supabaseShim: null
+  # REQUIRED. HOOPDB_RUNTIME_ROLE: the role the services connect as. Outside
+  # local mode it must be a dedicated role, not the migration owner.
+  runtimeRole: ""
+  # HOOPDB_RUNTIME_ROLE_LOGIN: true/false. Required outside local mode; rendered
+  # only when set.
+  runtimeRoleLogin: null
+  # HOOPDB_RUNTIME_WORKLOAD_ROLE (optional): the one role allowed to be a member
+  # of the runtime role.
+  runtimeWorkloadRole: ""
+  # HOOPDB_FUNCTION_BOUNDARY_MODE: global-default-revoke, the only implemented
+  # mode (event-trigger is refused, as the migrator refuses it). Required in
+  # selfhosted and cloudsql mode: the database is dedicated to HoopDb, and the privileged
+  # supabase/bootstrap/hoopdb_function_default_revoke.sql installs the control.
+  # Optional in supabase mode: the operator decides (96BullSessions #98), and
+  # with it unset the migrator's function-boundary gate fails closed. The old
+  # name, HOOPDB_FUNCTION_BOUNDARY_APPROVED, is refused.
+  functionBoundaryMode: ""
   backoffLimit: 3
   activeDeadlineSeconds: 3600
   # Opt-in TTL for plain `helm install` users only. Leave 0 under Alchemy.
@@ -104,6 +137,24 @@ migrations:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 512Mi }
+  # Orders the migrate Job after the privileged bootstraps without Helm hooks
+  # (Alchemy renders --no-hooks). An init container polls HoopDb (HOOPDB_URL)
+  # until `role` and, outside local mode, runtimeRole exist. With
+  # functionDefault, it also waits until the migration owner's global function
+  # default is exactly {<owner>:EXECUTE}, the state the default-revoke bootstrap
+  # leaves. The migrator then verifies all of it itself. Refused in supabase
+  # mode: there the roles are operator steps, and the migrator refuses on its own.
+  # Needs an image with sh and psql, by digest. Bounded by activeDeadlineSeconds.
+  waitForRole:
+    enabled: false
+    role: session_directory_search_worker
+    functionDefault: false
+    # Full reference with @sha256 digest, e.g. the CNPG Postgres image.
+    image: ""
+    intervalSeconds: 5
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 64Mi }
 
 # Creates the Locker bucket (idempotent). Replaces upstream MinIO's
 # post-install bucket hook, which never runs under --no-hooks.

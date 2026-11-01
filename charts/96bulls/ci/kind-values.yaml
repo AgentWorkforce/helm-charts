@@ -1,4 +1,6 @@
 # kind: small volumes, local JWKS, images loaded into kind (pullPolicy Never).
+# In-cluster CNPG HoopDb, selfhosted mode. kind.sh points the bootstrap Jobs'
+# sql image at the services image it builds.
 global:
   otel:
     endpoint: http://otel-collector:4318
@@ -7,6 +9,15 @@ global:
 worker:
   image: { pullPolicy: Never }
   environment: local
+  migrations:
+    databaseMode: selfhosted
+    supabaseShim: true
+    runtimeRole: bulls96_runtime
+    runtimeRoleLogin: true
+    functionBoundaryMode: global-default-revoke
+    waitForRole:
+      enabled: true
+      functionDefault: true
 alleyoop:
   image: { pullPolicy: Never }
   environment: local
@@ -23,3 +34,12 @@ locker:
     requests: { memory: 256Mi }
 otel:
   enabled: true
+runtimeRole:
+  bootstrapJob:
+    enabled: true
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: true
+privilegedSql:
+  sqlImage:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"

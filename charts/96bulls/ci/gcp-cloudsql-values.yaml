@@ -1,0 +1,58 @@
+# GKE + Cloud SQL (stacks/gcp/config.ts at 96BullSessions b47c1e6): cloudsql
+# mode, the generic shim off, HOOPDB_ROLE_BOOTSTRAP false (no customer
+# superuser), global-default-revoke, the dedicated runtime role, and a separate
+# migration-owner URL (HOOPDB_MIGRATION_URL) for migrate only. The operator runs
+# cloudsql_migration_roles.sql, session_directory_search_worker.sql and
+# cloudsql_owner_function_default_revoke.sql as the migration owner, so there
+# are no in-cluster SQL Jobs. migrate still waits for the roles. The managed
+# bucket uses Workload Identity (podIdentity mode).
+global:
+  tenant:
+    orgId: org_ci
+worker:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+  existingSecret: 96bulls-gcp
+  summaryEncryption:
+    existingSecret: 96bulls-gcp
+    key: SUMMARY_MASTER_KEYS
+  hoopdb:
+    existingSecret: 96bulls-gcp
+    key: HOOPDB_URL
+  locker:
+    endpoint: ""
+    bucket: 96bulls-ci
+    region: us-central1
+    credentials:
+      mode: podIdentity
+  lockerInit:
+    enabled: false
+  migrations:
+    hoopdb:
+      existingSecret: 96bulls-gcp
+      key: HOOPDB_MIGRATION_URL
+    databaseMode: cloudsql
+    supabaseShim: false
+    roleBootstrap: false
+    runtimeRole: bulls96_runtime
+    runtimeRoleLogin: true
+    functionBoundaryMode: global-default-revoke
+alleyoop:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+  existingSecret: 96bulls-gcp
+  hoopdb:
+    existingSecret: 96bulls-gcp
+    key: HOOPDB_URL
+  locker:
+    endpoint: ""
+    bucket: 96bulls-ci
+    region: us-central1
+    credentials:
+      mode: podIdentity
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+hoopdb:
+  enabled: false
+locker:
+  enabled: false

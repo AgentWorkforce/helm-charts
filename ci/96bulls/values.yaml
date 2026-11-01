@@ -20,3 +20,9 @@ deployment:
 environment: local
 auth:
   localJwks: true
+migrations:
+  databaseMode: selfhosted
+  supabaseShim: true
+  runtimeRole: bulls96_runtime
+  runtimeRoleLogin: true
+  functionBoundaryMode: global-default-revoke

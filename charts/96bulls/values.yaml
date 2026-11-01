@@ -21,6 +21,10 @@ global:
 
 # Shared by both app charts (YAML anchors keep one copy).
 shared: &shared
+  # Pull credentials for the private services image: every workload and Job,
+  # including searchWorkerRole.bootstrapJob (which reads worker.imagePullSecrets).
+  # Empty on hosted EKS (node role pulls from ECR).
+  imagePullSecrets: []
   existingSecret: 96bulls-locker
   secretKeys:
     hoopdbUrl: HOOPDB_URL
@@ -49,12 +53,27 @@ shared: &shared
 
 worker:
   <<: *shared
-  # Use a separate owner URL for the one-shot migration Job while services use
-  # the least-privilege URL in worker.hoopdb. Both fields stay empty by default.
+  # Use a separate owner URL for the one-shot migration Job (and its
+  # wait-for-role) while services use the least-privilege URL in worker.hoopdb.
+  # Both fields stay empty by default.
   migrations:
     hoopdb:
       existingSecret: ""
       key: ""
+    # The migrator's database profile has no defaults. Start from a profile in
+    # charts/96bulls/profiles/ (see the README) or set databaseMode, supabaseShim,
+    # runtimeRole, runtimeRoleLogin and functionBoundaryMode yourself; see
+    # charts/96bulls-worker/values.yaml. With hoopdb.enabled you need:
+    # databaseMode selfhosted, a runtimeRole other than
+    # hoopdb.cluster.initdb.owner, runtimeRole.bootstrapJob and
+    # functionDefaultRevoke.bootstrapJob enabled, and waitForRole.functionDefault.
+    # migrate waits until session_directory_search_worker exists. initdb creates
+    # it on a new cluster and searchWorkerRole.bootstrapJob on an existing one;
+    # an external database pre-provisions it. Same pinned image as
+    # hoopdb.cluster.imageName. Supabase mode refuses waitForRole: disable it.
+    waitForRole:
+      enabled: true
+      image: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3
 
 alleyoop:
   <<: *shared
@@ -103,6 +122,14 @@ hoopdb:
         - CREATE ROLE anon NOLOGIN NOINHERIT
         - CREATE ROLE authenticated NOLOGIN NOINHERIT
         - CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS
+        # The session directory search Worker role (96BullSessions
+        # runbooks/session-directory-search-worker-bootstrap.md). The HoopDb
+        # migration only verifies it; creating it and setting a role parameter
+        # need a superuser on PostgreSQL 16+, which postInit SQL runs as. New
+        # clusters only: existing clusters use searchWorkerRole.bootstrapJob.
+        # Remove these two lines to opt out (the role is then never created).
+        - CREATE ROLE session_directory_search_worker NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        - ALTER ROLE session_directory_search_worker SET statement_timeout = '2s'
   backups:
     enabled: false
 
@@ -156,3 +183,124 @@ otel:
         traces: { receivers: [otlp], exporters: [nop] }
         metrics: { receivers: [otlp], exporters: [nop] }
         logs: { receivers: [otlp], exporters: [nop] }
+
+# ---------------------------------------------------------------------------
+# The privileged in-cluster SQL Jobs below (searchWorkerRole, runtimeRole,
+# functionDefaultRevoke) copy their bootstrap file from the services image
+# built from 96BullSessions. A Job's own sqlImage wins; when it is empty, the
+# Job uses this shared one. The digest is REQUIRED for any enabled Job and has
+# no default here: pass the digest of the services release you deploy.
+# ---------------------------------------------------------------------------
+privilegedSql:
+  sqlImage:
+    repository: ghcr.io/agentworkforce/96bulls-services
+    digest: ""
+
+# ---------------------------------------------------------------------------
+# session_directory_search_worker on an EXISTING HoopDb cluster.
+# postInitApplicationSQL above only runs at initdb. This Job runs the HoopDb
+# bootstrap file (supabase/bootstrap/session_directory_search_worker.sql,
+# taken from the pinned services image) as the CNPG superuser `postgres`, by
+# `kubectl exec` into the primary: no superuser Secret, enableSuperuserAccess
+# stays false. Idempotent and atomic (it never alters an existing role; a
+# role that differs from the spec fails it with 55000). Separate from the
+# hoopdb-migrate Job, with its own ServiceAccount and a namespace Role that
+# can only list/get pods and exec. Off by default: running it is an operator
+# step under the deploy approval. Disabling it (or deleting the release)
+# removes the Job and its RBAC; the role itself is never dropped (see the
+# runbook's "Rollback and removal").
+# Order: the migrate Job's wait-for-role init container (worker.migrations.
+# waitForRole) blocks migrate until the role exists, so the two are applied
+# together. Workloads stay unready until migrate (phase 1 verify, migrations,
+# phase 2 verify) completes; a drifted role fails both Jobs (55000).
+# Pull auth: worker.imagePullSecrets (the shared value above).
+# ---------------------------------------------------------------------------
+searchWorkerRole:
+  bootstrapJob:
+    enabled: false
+    # Empty: privilegedSql.sqlImage. The services image that carries the file, by digest.
+    sqlImage:
+      repository: ""
+      digest: ""
+    sqlPath: /app/supabase/bootstrap/session_directory_search_worker.sql
+    # kubectl (with a shell) to exec into the CNPG primary. alpine/k8s 1.34.1.
+    kubectlImage: &kubectlImage
+      repository: docker.io/alpine/k8s
+      tag: "1.34.1"
+      digest: "sha256:ec714df3813b5405292860f8a1c55c5727bf8c33c88992f1e981efad8065547f"
+    # The CNPG Cluster (hoopdb.fullnameOverride) and its application database.
+    cluster: hoopdb
+    database: hoopdb
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 256Mi }
+
+# ---------------------------------------------------------------------------
+# The dedicated HoopDb runtime role (worker.migrations.runtimeRole) on the
+# in-cluster HoopDb, selfhosted mode. Required there: nothing else creates it.
+# Runs supabase/bootstrap/hoopdb_runtime_role.sql from the services image as
+# `postgres` in the HoopDb database (kubectl exec, like searchWorkerRole), with
+# -v runtime_role / runtime_login from worker.migrations. It also revokes
+# TEMPORARY on the HoopDb database from PUBLIC (database-wide: the owner and
+# superusers keep it) and grants the role CONNECT. Never rendered for an
+# external database (hoopdb.enabled=false): that role is pre-provisioned.
+# ---------------------------------------------------------------------------
+runtimeRole:
+  bootstrapJob:
+    enabled: false
+    # Empty: privilegedSql.sqlImage.
+    sqlImage:
+      repository: ""
+      digest: ""
+    sqlPath: /app/supabase/bootstrap/hoopdb_runtime_role.sql
+    kubectlImage: *kubectlImage
+    cluster: hoopdb
+    database: hoopdb
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 256Mi }
+
+# ---------------------------------------------------------------------------
+# The durable function boundary on the in-cluster HoopDb (selfhosted mode,
+# HOOPDB_FUNCTION_BOUNDARY_MODE=global-default-revoke). Required with
+# hoopdb.enabled: nothing else installs it, and the migrator's function-boundary
+# gate refuses without it. Runs supabase/bootstrap/hoopdb_function_default_revoke.sql
+# from the services image as `postgres` in the HoopDb database, with
+# -v migration_owner=hoopdb.cluster.initdb.owner. In this database it sets the
+# global function default of the owner and every superuser to {<self>:EXECUTE}.
+# That is safe only because the database is dedicated to HoopDb. It refuses
+# poisoned defaults (55000, nothing changed) and is idempotent. migrate waits
+# for the result (worker.migrations.waitForRole.functionDefault).
+# CNPG/selfhost only. It never runs for an external database, and never on
+# Supabase: there the owner is postgres, so the change would reach every schema
+# of the project. That is an operator decision (96BullSessions #98).
+# ---------------------------------------------------------------------------
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: false
+    # Empty: privilegedSql.sqlImage.
+    sqlImage:
+      repository: ""
+      digest: ""
+    sqlPath: /app/supabase/bootstrap/hoopdb_function_default_revoke.sql
+    kubectlImage: *kubectlImage
+    cluster: hoopdb
+    database: hoopdb
+    backoffLimit: 3
+    activeDeadlineSeconds: 600
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 256Mi }
+
+# ---------------------------------------------------------------------------
+# External-Supabase activation hold. profiles/external-supabase.yaml sets it,
+# so that profile does not render. It stays fail-closed until the
+# 96BullSessions PostgreSQL 16+ Supabase creator-edge compatibility change
+# merges and its exact merge, image and generation are pinned in the profile.
+# ---------------------------------------------------------------------------
+supabaseActivation:
+  hold: false

@@ -40,5 +40,9 @@ cluster:
       - CREATE ROLE anon NOLOGIN NOINHERIT
       - CREATE ROLE authenticated NOLOGIN NOINHERIT
       - CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS
+      # The session directory search Worker role; the migration only verifies
+      # it (96BullSessions runbooks/session-directory-search-worker-bootstrap.md).
+      - CREATE ROLE session_directory_search_worker NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+      - ALTER ROLE session_directory_search_worker SET statement_timeout = '2s'
 backups:
   enabled: false

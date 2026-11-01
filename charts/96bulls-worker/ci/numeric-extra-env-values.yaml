@@ -19,3 +19,9 @@ components:
     env:
       - name: REFEREE_RETRY_LIMIT
         value: 6379
+migrations:
+  databaseMode: selfhosted
+  supabaseShim: true
+  runtimeRole: bulls96_runtime
+  runtimeRoleLogin: true
+  functionBoundaryMode: global-default-revoke

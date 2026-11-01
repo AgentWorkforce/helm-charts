@@ -1,0 +1,55 @@
+# Profile: an EXTERNAL operator-controlled plain-Postgres HoopDb (RDS, your own
+# Postgres 17 with vector and pg_trgm) that is dedicated to HoopDb. selfhosted
+# mode (96BullSessions migrate.ts). Google Cloud SQL is its own mode, cloudsql;
+# see charts/96bulls/ci/gcp-cloudsql-values.yaml.
+#   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/external-selfhosted.yaml \
+#     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> \
+#     --set worker.migrations.runtimeRole=<role> --set worker.migrations.runtimeRoleLogin=<true|false>
+# The chart cannot exec into an external database, so there are no in-cluster
+# SQL Jobs. migrate waits until the roles exist.
+# Operator prerequisites, each run by a superuser before the first migrate:
+#   1. A Secret named 96bulls-hoopdb, key HOOPDB_URL, holding the connection
+#      string for the migration owner.
+#   2. supabase/bootstrap/session_directory_search_worker.sql.
+#   3. supabase/bootstrap/hoopdb_runtime_role.sql with -v runtime_role and
+#      -v runtime_login matching worker.migrations. It revokes TEMPORARY from
+#      PUBLIC on the database and grants the role CONNECT.
+#   4. supabase/bootstrap/hoopdb_function_default_revoke.sql with
+#      -v migration_owner=<owner>. Without it the migrator refuses with
+#      function_boundary_unproven. A platform with no superuser cannot run it,
+#      so migrate stays refused there.
+# All files come from the services image you deploy. Pinned: GHCR, built from
+# 96BullSessions main b47c1e6af43140de8395c1aa20178d014c92bbb7 (publish-image
+# run 41333160108), generation 1d99ccc8...4718.
+hoopdb:
+  enabled: false
+worker:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+  hoopdb:
+    existingSecret: 96bulls-hoopdb
+    key: HOOPDB_URL
+  migrations:
+    databaseMode: selfhosted
+    supabaseShim: true
+    runtimeRole: ""
+    runtimeRoleLogin: null
+    functionBoundaryMode: global-default-revoke
+    waitForRole:
+      enabled: true
+      functionDefault: false
+alleyoop:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+  hoopdb:
+    existingSecret: 96bulls-hoopdb
+    key: HOOPDB_URL
+searchWorkerRole:
+  bootstrapJob:
+    enabled: false
+runtimeRole:
+  bootstrapJob:
+    enabled: false
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: false
