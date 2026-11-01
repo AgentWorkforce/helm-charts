@@ -89,6 +89,12 @@ automountServiceAccountToken: false
 # deleted object as drift and would recreate (re-run) the Job.
 migrations:
   enabled: true
+  # Optional migration-owner connection. When set, only the migrate Job reads
+  # this Secret/key; every long-running workload keeps using hoopdb above.
+  # Set both fields together. Empty preserves the historical shared URL.
+  hoopdb:
+    existingSecret: ""
+    key: ""
   # The migrator's database profile (96BullSessions src/hoopdb/migrate.ts
   # migrationProfile(), 96BullSessions #99). Each value is rendered at most once,
   # into the migrate container only. Do not set these via extraEnv or component

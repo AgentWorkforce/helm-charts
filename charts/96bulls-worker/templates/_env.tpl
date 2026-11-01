@@ -10,9 +10,12 @@ Fail early on missing required values (render time, not crash-loop time).
 */}}
 {{- define "96bulls-worker.validate" -}}
 {{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
+{{- $migrations := .Values.migrations | default dict -}}
+{{- $migrationHoopdb := get $migrations "hoopdb" | default dict -}}
 {{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "96bulls-worker: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}
 {{- if and (eq $credentialsMode "secret") (not .Values.existingSecret) }}{{ fail "96bulls-worker: existingSecret is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if and (not .Values.hoopdb.existingSecret) (not .Values.existingSecret) }}{{ fail "96bulls-worker: hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" }}{{ end -}}
+{{- if ne (empty (get $migrationHoopdb "existingSecret")) (empty (get $migrationHoopdb "key")) }}{{ fail "96bulls-worker: migrations.hoopdb.existingSecret and key must be set together" }}{{ end -}}
 {{- if and (eq $credentialsMode "secret") (not .Values.locker.endpoint) }}{{ fail "96bulls-worker: locker.endpoint is required when locker.credentials.mode=secret" }}{{ end -}}
 {{- if not (include "96bulls-worker.orgId" .) }}{{ fail "96bulls-worker: tenant.orgId (or global.tenant.orgId) is required" }}{{ end -}}
 {{- $idx := index .Values.components "hoopdb-indexer" -}}
@@ -64,7 +67,7 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ .service | quote }}
 - name: OTEL_SERVICE_NAME
   value: {{ .service | quote }}
-{{ include "96bulls-worker.hoopdbUrlEnv" .context }}
+{{ include "96bulls-worker.hoopdbUrlEnv" (dict "root" .context "migrate" (eq .service "hoopdb-migrate")) }}
 - name: LOCKER_ENDPOINT
   value: {{ $v.locker.endpoint | quote }}
 - name: LOCKER_BUCKET
@@ -159,11 +162,23 @@ volumes:
 HOOPDB_URL from the HoopDb Secret (context: the chart root).
 */}}
 {{- define "96bulls-worker.hoopdbUrlEnv" -}}
+{{- $v := .root.Values -}}
+{{- $secret := $v.hoopdb.existingSecret | default $v.existingSecret -}}
+{{- $key := $v.hoopdb.key | default $v.secretKeys.hoopdbUrl -}}
+{{- if .migrate -}}
+{{- /* migrate and its wait-for-role: the migration-owner URL when set
+(migrations.hoopdb). wait-for-role checks current_user's function default, so
+it must connect as the same owner as the migrator. */ -}}
+{{- $migrations := $v.migrations | default dict -}}
+{{- $migrationHoopdb := get $migrations "hoopdb" | default dict -}}
+{{- $secret = get $migrationHoopdb "existingSecret" | default $secret -}}
+{{- $key = get $migrationHoopdb "key" | default $key -}}
+{{- end -}}
 - name: HOOPDB_URL
   valueFrom:
     secretKeyRef:
-      name: {{ .Values.hoopdb.existingSecret | default .Values.existingSecret }}
-      key: {{ .Values.hoopdb.key | default .Values.secretKeys.hoopdbUrl }}
+      name: {{ $secret | quote }}
+      key: {{ $key | quote }}
 {{- end }}
 
 {{/*

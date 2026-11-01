@@ -33,7 +33,7 @@ template:
         image: {{ $w.image | quote }}
         imagePullPolicy: IfNotPresent
         env:
-          {{- include "96bulls-worker.hoopdbUrlEnv" $ | nindent 10 }}
+          {{- include "96bulls-worker.hoopdbUrlEnv" (dict "root" $ "migrate" true) | nindent 10 }}
           {{- $roles := list $w.role }}{{ if ne $.Values.migrations.databaseMode "local" }}{{ $roles = append $roles $.Values.migrations.runtimeRole }}{{ end }}
           - { name: ROLES, value: {{ join " " $roles | quote }} }
           - { name: FUNCTION_DEFAULT, value: {{ ternary "true" "false" (eq $w.functionDefault true) | quote }} }

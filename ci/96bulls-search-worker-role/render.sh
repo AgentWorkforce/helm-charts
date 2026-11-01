@@ -70,6 +70,14 @@ mig=$(yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/componen
 [ "$(yq -r 'select(.kind == "Cluster") | .spec.enableSuperuserAccess' <<<"$out")" = "false" ] || err "enableSuperuserAccess is not false"
 [ -z "$(yq 'select(.metadata.annotations."helm.sh/hook")' <<<"$out")" ] || err "a Helm hook was rendered"
 
+# 3d. A separate migration-owner URL (migrations.hoopdb) reaches migrate and its
+# wait-for-role (which checks the owner's own function default), never a workload.
+o=$(render "${on[@]}" --set worker.migrations.hoopdb.existingSecret=hoopdb-migration --set worker.migrations.hoopdb.key=HOOPDB_MIGRATION_URL)
+m=$(yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-migrate")' <<<"$o")
+[ "$(yq -r '.spec.template.spec.initContainers[0].env[] | select(.name == "HOOPDB_URL") | .valueFrom.secretKeyRef | .name + "/" + .key' <<<"$m")" = "hoopdb-migration/HOOPDB_MIGRATION_URL" ] || err "wait-for-role does not use the migration-owner URL"
+[ "$(yq -r '.spec.template.spec.containers[0].env[] | select(.name == "HOOPDB_URL") | .valueFrom.secretKeyRef | .name + "/" + .key' <<<"$m")" = "hoopdb-migration/HOOPDB_MIGRATION_URL" ] || err "migrate does not use the migration-owner URL"
+[ -z "$(yq -r 'select(.kind == "Deployment") | .spec.template.spec | ((.initContainers // []) + .containers)[] | (.env // [])[] | select(.name == "HOOPDB_URL") | .valueFrom.secretKeyRef.name' <<<"$o" | grep -x hoopdb-migration)" ] || err "a workload reads the migration-owner URL"
+
 # 4. Misconfiguration fails the render.
 expect_fail() { local msg=$1; shift; if o=$(render "$@" 2>&1); then err "rendered despite: $msg"; elif ! grep -qF "$msg" <<<"$o"; then err "wrong error for $msg: $o"; fi; }
 expect_fail "sqlImage.repository and .digest are required" "${base[@]}" --set searchWorkerRole.bootstrapJob.enabled=true --set privilegedSql.sqlImage.digest=

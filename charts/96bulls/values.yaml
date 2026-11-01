@@ -53,7 +53,13 @@ shared: &shared
 
 worker:
   <<: *shared
+  # Use a separate owner URL for the one-shot migration Job (and its
+  # wait-for-role) while services use the least-privilege URL in worker.hoopdb.
+  # Both fields stay empty by default.
   migrations:
+    hoopdb:
+      existingSecret: ""
+      key: ""
     # The migrator's database profile has no defaults. Start from a profile in
     # charts/96bulls/profiles/ (see the README) or set databaseMode, supabaseShim,
     # runtimeRole, runtimeRoleLogin and functionBoundaryMode yourself; see
