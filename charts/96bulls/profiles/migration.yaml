@@ -1,0 +1,27 @@
+# Profile: migrate an EXISTING self-host release (a CloudNativePG HoopDb
+# cluster created before session_directory_search_worker existed).
+#   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/migration.yaml \
+#     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> \
+#     --set searchWorkerRole.bootstrapJob.sqlImage.digest=sha256:<services image digest>
+# initdb SQL never runs again on an existing cluster, so the privileged
+# bootstrap Job creates (or verifies) the role from the services image's
+# bootstrap SQL, and migrate's wait-for-role init container holds the
+# migration until the role exists. The services image digest is REQUIRED and
+# deliberately not set here: pass the digest of the release you deploy. The
+# render fails without it.
+hoopdb:
+  enabled: true
+locker:
+  enabled: true
+otel:
+  enabled: false
+searchWorkerRole:
+  bootstrapJob:
+    enabled: true
+    sqlImage:
+      repository: ghcr.io/agentworkforce/96bulls-services
+      digest: ""
+worker:
+  migrations:
+    waitForRole:
+      enabled: true

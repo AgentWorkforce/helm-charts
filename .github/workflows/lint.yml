@@ -3,6 +3,9 @@ name: Lint Charts
 on:
   pull_request:
   workflow_call:  # release.yml runs the same checks before publishing
+    secrets:
+      BULLS96_READ_TOKEN:
+        required: false  # search-worker-role-kind fails closed without it
 
 permissions:
   contents: read
@@ -46,6 +49,11 @@ jobs:
           helm dependency build charts/96bulls >/dev/null
           ci/96bulls-search-worker-role/render.sh
 
+      # Every 96bulls profile (charts/96bulls/profiles/*.yaml and ci/*-values.yaml)
+      # renders with the manifests and role bootstrap path it must produce.
+      - name: 96bulls profile render matrix
+        run: ci/96bulls-profiles/matrix.sh static
+
       - name: Chart version bumped
         if: github.event_name == 'pull_request'
         run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"
@@ -81,6 +89,10 @@ jobs:
       # so the API server validates every object.
       - name: Server-side dry-run apply
         run: scripts/ci/charts.sh dryrun
+
+      # The same 96bulls profile matrix, applied server-side (dry run).
+      - name: 96bulls profile matrix (server-side dry run)
+        run: ci/96bulls-profiles/matrix.sh dryrun
 
   # Live install of charts/relaycast on kind against the pinned image:
   # upgrade from the published 0.1.0, first-run bootstrap, register -> node
@@ -124,8 +136,10 @@ jobs:
   # published image is private). The role part (fresh and existing clusters
   # converge, idempotent, drift refused) and the full release (bootstrap ->
   # migrate -> phase 2 verify -> workloads, drift and phase-2-only failures)
-  # both run. Required: no success on skip. If the token cannot be minted or
-  # the image cannot be built, the job fails.
+  # both run. Required: no success on skip. The 96BullSessions checkout uses
+  # the BULLS96_READ_TOKEN Actions secret (read-only, that repository only).
+  # Fork PRs and any run without the secret fail closed, as does a failed
+  # checkout or image build.
   search-worker-role-kind:
     runs-on: ubuntu-latest
     steps:
@@ -137,7 +151,7 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" != pull_request ] \
-            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|ci/96bulls-search-worker-role/|\.github/workflows/lint\.yml$)'; then
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|deps/pins\.txt$|ci/96bulls-search-worker-role/|ci/96bulls-profiles/|\.github/workflows/(lint|release)\.yml$)'; then
             echo run=true >> "$GITHUB_OUTPUT"
           fi
 
@@ -149,25 +163,24 @@ jobs:
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::services-commit must be a full 40-hex commit sha"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # Read-only, single-repository token (the org's pusher GitHub App, as in
-      # AgentWorkforce/cloud's private-artifact workflows).
-      - name: Mint a read token for 96BullSessions
+      # Fail closed: a fork PR (no secrets) or a missing secret is a failure,
+      # never a skip. The value is only tested for emptiness, never printed.
+      - name: Require the 96BullSessions read token
         if: steps.changed.outputs.run == 'true'
-        id: token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.GH_APP_PUSHER_ID }}
-          private-key: ${{ secrets.GH_APP_PUSHER_PRIVATE_KEY }}
-          owner: AgentWorkforce
-          repositories: 96BullSessions
-          permission-contents: read
+        env:
+          BULLS96_READ_TOKEN: ${{ secrets.BULLS96_READ_TOKEN }}
+        run: |
+          if [ -z "$BULLS96_READ_TOKEN" ]; then
+            echo "::error::BULLS96_READ_TOKEN is not available to this run (fork pull request, or the Actions secret is missing). This job builds the private 96BullSessions services image and is required: it fails rather than skips. A maintainer must run it from a branch in AgentWorkforce/helm-charts."
+            exit 1
+          fi
 
       - uses: actions/checkout@v4
         if: steps.changed.outputs.run == 'true'
         with:
           repository: AgentWorkforce/96BullSessions
           ref: ${{ steps.pin.outputs.sha }}
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ secrets.BULLS96_READ_TOKEN }}
           path: .services-src
           persist-credentials: false
 

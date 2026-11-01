@@ -1,0 +1,20 @@
+# Profile: default self-host, Postgres only (a NEW install).
+#   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/selfhost-postgres.yaml \
+#     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
+# HoopDb is an in-cluster CloudNativePG Cluster (the only database; no
+# Supabase). Its initdb SQL creates session_directory_search_worker, so the
+# existing-cluster bootstrap Job stays off. Locker is in-cluster MinIO.
+# Needs the CloudNativePG operator (deps/cnpg-operator-values.yaml).
+hoopdb:
+  enabled: true
+locker:
+  enabled: true
+otel:
+  enabled: false
+searchWorkerRole:
+  bootstrapJob:
+    enabled: false
+worker:
+  migrations:
+    waitForRole:
+      enabled: true

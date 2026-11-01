@@ -128,6 +128,19 @@ otherwise the worker role needs permission to create the bucket and enable
 versioning.
 `ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
 
+#### Profiles
+
+`charts/96bulls/profiles/` ships two values profiles:
+
+- `selfhost-postgres.yaml`: a new self-host install. The in-cluster CNPG HoopDb is the only database, and its initdb SQL creates the search Worker role.
+- `migration.yaml`: an existing self-host release whose HoopDb cluster predates the role. This profile enables `searchWorkerRole.bootstrapJob`, and migrate waits for the role. Pass `searchWorkerRole.bootstrapJob.sqlImage.digest` for the services release you deploy. The profile pins no services image, and the chart does not render without that digest.
+
+Both profiles also need `global.tenant.orgId` and `alleyoop.auth.jwksUrl`.
+`ci/96bulls-profiles/matrix.sh` renders every profile and every
+`charts/96bulls/ci/*-values.yaml`. It asserts the manifests each one must
+produce: the workloads, migrate, HoopDb, Locker and the role bootstrap path.
+CI runs it offline (`static`) and as a server-side dry run on kind (`dryrun`).
+
 #### Session directory search Worker role
 
 HoopDb's session directory migration only *verifies* the role
