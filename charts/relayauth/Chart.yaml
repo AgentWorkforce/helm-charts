@@ -2,8 +2,8 @@ apiVersion: v2
 name: relayauth
 description: RelayAuth identity and token issuer for self-hosted Agent Relay stacks
 type: application
-version: 0.1.0
-appVersion: "0.2.32"
+version: 0.1.1
+appVersion: "0.2.34"
 home: https://github.com/AgentWorkforce/relayauth
 keywords:
   - relayauth
