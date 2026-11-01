@@ -130,6 +130,8 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "migration key without Secret" "migrations.hoopdb.existingSecret and key must be set together" --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL
         v=charts/96bulls-worker/ci/external-secrets-values.yaml
         expect_render_failure "$chart" "$v" "unmapped managed migration key" "externalSecrets.data must map HOOPDB_MIGRATION_URL" --set migrations.hoopdb.existingSecret=96bulls --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL
+        render "$chart" "$v" --set migrations.enabled=false --set migrations.hoopdb.existingSecret=96bulls --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL >/dev/null \
+          || err "$chart: disabled migrations must not require the unused managed migration key"
         v=charts/96bulls-worker/ci/pod-identity-values.yaml
         expect_render_failure "$chart" "$v" "missing summary Secret" "summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" --set summaryEncryption.existingSecret=
         expect_render_failure "$chart" "$v" "duplicate summary key env" "configure summaryEncryption instead of components.bob-costas.env" --set-json 'components.bob-costas.env=[{"name":"SUMMARY_MASTER_KEYS","value":"not-a-real-key"}]'
