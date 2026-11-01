@@ -409,6 +409,29 @@ entries:
     version: 0.1.0
   relayauth:
   - apiVersion: v2
+    appVersion: 0.2.34
+    created: "2026-11-01T05:49:24.99641029Z"
+    description: RelayAuth identity and token issuer for self-hosted Agent Relay stacks
+    digest: add6f2b3fe55a301a99b0ab43ad28a84c79767793ae7d66a38281f9d61669121
+    home: https://github.com/AgentWorkforce/relayauth
+    keywords:
+    - relayauth
+    - oidc
+    - jwt
+    - jwks
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relayauth
+    sources:
+    - https://github.com/AgentWorkforce/relayauth
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayauth
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relayauth-0.1.1/relayauth-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
     appVersion: 0.2.32
     created: "2026-10-29T17:04:59.547926065Z"
     description: RelayAuth identity and token issuer for self-hosted Agent Relay stacks
@@ -637,4 +660,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relayflows-0.1.0/relayflows-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-31T03:42:29.52421901Z"
+generated: "2026-11-01T05:49:24.99644333Z"
