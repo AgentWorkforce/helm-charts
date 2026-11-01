@@ -137,7 +137,8 @@ jobs:
   # converge, idempotent, drift refused) and the full release (bootstrap ->
   # migrate -> phase 2 verify -> workloads, drift and phase-2-only failures)
   # both run. Required: no success on skip. The 96BullSessions checkout uses
-  # the BULLS96_READ_TOKEN Actions secret (read-only, that repository only).
+  # the BULLS96_READ_TOKEN Actions secret. It is kept for now: it is to be
+  # replaced by a repository-scoped read-only credential when one is available.
   # Fork PRs and any run without the secret fail closed, as does a failed
   # checkout or image build.
   search-worker-role-kind:

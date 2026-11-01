@@ -1,7 +1,17 @@
+# AWS EKS, external Supabase HoopDb (stacks/aws/eks.ts, hoopdb backend
+# "external"): supabase mode, no shim, no wait-for-role, no in-cluster SQL
+# Jobs, S3 Locker through Pod Identity.
 global:
   tenant:
     orgId: org_ci
 worker:
+  migrations:
+    databaseMode: supabase
+    supabaseShim: false
+    runtimeRole: bulls96_runtime
+    runtimeRoleLogin: true
+    waitForRole:
+      enabled: false
   existingSecret: ""
   summaryEncryption:
     existingSecret: 96bulls-summary

@@ -1,0 +1,49 @@
+# Profile: an EXTERNAL plain-Postgres HoopDb (Cloud SQL, RDS, your own
+# Postgres 17 with vector and pg_trgm), dedicated to HoopDb. selfhosted mode
+# (96BullSessions migrate.ts, #99).
+#   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/external-selfhosted.yaml \
+#     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> \
+#     --set worker.migrations.runtimeRole=<role> --set worker.migrations.runtimeRoleLogin=<true|false>
+# The chart cannot exec into an external database, so there are no in-cluster
+# SQL Jobs. migrate waits until the roles exist.
+# Operator prerequisites, each run by a superuser before the first migrate:
+#   1. A Secret named 96bulls-hoopdb, key HOOPDB_URL, holding the connection
+#      string for the migration owner.
+#   2. supabase/bootstrap/session_directory_search_worker.sql.
+#   3. supabase/bootstrap/hoopdb_runtime_role.sql with -v runtime_role and
+#      -v runtime_login matching worker.migrations. It revokes TEMPORARY from
+#      PUBLIC on the database and grants the role CONNECT.
+#   4. supabase/bootstrap/hoopdb_function_default_revoke.sql with
+#      -v migration_owner=<owner>. Without it the migrator refuses with
+#      function_boundary_unproven. A platform with no superuser (Cloud SQL)
+#      cannot run it, so migrate stays refused there until a reviewed control
+#      exists (96BullSessions #98).
+# All files come from the services image you deploy.
+hoopdb:
+  enabled: false
+worker:
+  hoopdb:
+    existingSecret: 96bulls-hoopdb
+    key: HOOPDB_URL
+  migrations:
+    databaseMode: selfhosted
+    supabaseShim: true
+    runtimeRole: ""
+    runtimeRoleLogin: null
+    functionBoundaryMode: global-default-revoke
+    waitForRole:
+      enabled: true
+      functionDefault: false
+alleyoop:
+  hoopdb:
+    existingSecret: 96bulls-hoopdb
+    key: HOOPDB_URL
+searchWorkerRole:
+  bootstrapJob:
+    enabled: false
+runtimeRole:
+  bootstrapJob:
+    enabled: false
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: false

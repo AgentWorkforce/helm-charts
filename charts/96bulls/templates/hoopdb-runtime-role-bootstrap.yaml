@@ -1,0 +1,22 @@
+{{- /*
+The dedicated HoopDb runtime role in selfhosted mode on the in-cluster CNPG
+HoopDb (96BullSessions supabase/bootstrap/hoopdb_runtime_role.sql): created if
+absent (NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS, LOGIN as
+configured), otherwise verified (55000 on a mismatch, nothing changed); then
+REVOKE TEMPORARY ON DATABASE FROM PUBLIC and GRANT CONNECT to the role. Run
+as `postgres` in the HoopDb database before migrate, every deploy. The role
+and login come from worker.migrations (the values HOOPDB_RUNTIME_ROLE and
+HOOPDB_RUNTIME_ROLE_LOGIN the migrator checks). External databases (supabase,
+or hoopdb.enabled=false) never get this Job: the role is pre-provisioned.
+*/ -}}
+{{- $m := .Values.worker.migrations -}}
+{{- $job := .Values.runtimeRole.bootstrapJob -}}
+{{- if .Values.hoopdb.enabled }}
+{{- if ne $m.databaseMode "selfhosted" }}{{ fail (printf "the in-cluster HoopDb (hoopdb.enabled) is plain Postgres: worker.migrations.databaseMode must be selfhosted, not %q" $m.databaseMode) }}{{ end }}
+{{- if eq $m.runtimeRole .Values.hoopdb.cluster.initdb.owner }}{{ fail (printf "worker.migrations.runtimeRole must not be the migration owner %q in selfhosted mode" $m.runtimeRole) }}{{ end }}
+{{- if not $job.enabled }}{{ fail "runtimeRole.bootstrapJob.enabled must be true with the in-cluster HoopDb in selfhosted mode: nothing else creates the runtime role" }}{{ end }}
+{{- else if $job.enabled }}{{ fail "runtimeRole.bootstrapJob is for the in-cluster HoopDb only (hoopdb.enabled); an external database's runtime role is pre-provisioned" }}{{ end }}
+{{- if $job.enabled }}
+{{- $login := ternary "true" "false" (eq $m.runtimeRoleLogin true) }}
+{{- include "96bulls.privilegedSqlJob" (dict "c" $job "root" . "component" "hoopdb-runtime-role-bootstrap" "suffix" "runtime-role" "what" (printf "hoopdb runtime role %s" $m.runtimeRole) "psqlVars" (list (printf "runtime_role=%s" $m.runtimeRole) (printf "runtime_login=%s" $login))) }}
+{{- end }}

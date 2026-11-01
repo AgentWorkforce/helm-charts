@@ -1,0 +1,2 @@
+{{- /* See supabaseActivation in values.yaml. */ -}}
+{{- if .Values.supabaseActivation.hold }}{{ fail "supabaseActivation.hold: the external-Supabase profile is fail-closed until the 96BullSessions PostgreSQL 16+ Supabase creator-edge compatibility change merges and its exact merge, image and generation are pinned in charts/96bulls/profiles/external-supabase.yaml" }}{{ end }}

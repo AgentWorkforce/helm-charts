@@ -34,19 +34,32 @@ template:
         imagePullPolicy: IfNotPresent
         env:
           {{- include "96bulls-worker.hoopdbUrlEnv" $ | nindent 10 }}
-          - { name: ROLE, value: {{ $w.role | quote }} }
+          {{- $roles := list $w.role }}{{ if ne $.Values.migrations.databaseMode "local" }}{{ $roles = append $roles $.Values.migrations.runtimeRole }}{{ end }}
+          - { name: ROLES, value: {{ join " " $roles | quote }} }
+          - { name: FUNCTION_DEFAULT, value: {{ ternary "true" "false" (eq $w.functionDefault true) | quote }} }
           - { name: INTERVAL, value: {{ $w.intervalSeconds | quote }} }
           - { name: HOME, value: /tmp }
         command: ["/bin/sh", "-c"]
         args:
           - |
             set -u
-            q="SELECT 1 FROM pg_roles WHERE rolname = '${ROLE}'"
-            until [ "$(psql "$HOOPDB_URL" -X -At -c "$q" 2>/dev/null)" = 1 ]; do
-              echo "wait-for-role: ${ROLE} not present yet"
+            n=0; list=""
+            for r in $ROLES; do n=$((n + 1)); list="${list:+$list,}'$r'"; done
+            q="SELECT (SELECT count(*) FROM pg_roles WHERE rolname IN ($list)) = $n"
+            what="$ROLES"
+            if [ "$FUNCTION_DEFAULT" = true ]; then
+              # The migration owner's (current_user's) global function default is
+              # exactly {<owner>:EXECUTE}: hoopdb_function_default_revoke.sql ran.
+              q="$q AND EXISTS (SELECT 1 FROM pg_default_acl d WHERE d.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = current_user) AND d.defaclnamespace = 0 AND d.defaclobjtype = 'f' AND (SELECT array_agg(a.grantee::text || ':' || a.privilege_type || ':' || a.is_grantable::text) FROM aclexplode(d.defaclacl) a) = ARRAY[d.defaclrole::text || ':EXECUTE:false'])"
+              what="$ROLES + owner function default"
+            fi
+            # A failed query (connection, auth) is logged, not hidden.
+            until out=$(psql "$HOOPDB_URL" -X -At -c "$q" 2>&1) && [ "$out" = t ]; do
+              case $out in t|f) ;; *) echo "wait-for-role: query failed: $out" ;; esac
+              echo "wait-for-role: waiting for ${what}"
               sleep "$INTERVAL"
             done
-            echo "wait-for-role: ${ROLE} present"
+            echo "wait-for-role: present: ${what}"
         {{- with $.Values.containerSecurityContext }}
         securityContext:
           {{- toYaml . | nindent 10 }}
@@ -64,8 +77,7 @@ template:
         env:
           {{- include "96bulls-worker.env" (dict "context" $ "service" .service) | nindent 10 }}
           {{- if eq .job "migrate" }}
-          - name: HOOPDB_SUPABASE_SHIM
-            value: {{ ternary "true" "false" $.Values.migrations.supabaseShim | quote }}
+          {{- include "96bulls-worker.profileEnv" $.Values.migrations | nindent 10 }}
           # Always on: readiness needs the phase 2 PASS marker this run writes.
           - name: HOOPDB_ROLE_VERIFY
             value: "true"

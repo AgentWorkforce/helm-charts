@@ -1,6 +1,27 @@
+# New self-host install, in-cluster CNPG HoopDb (selfhosted mode).
 global:
   tenant:
     orgId: org_ci
 alleyoop:
   auth:
     jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+worker:
+  migrations:
+    databaseMode: selfhosted
+    supabaseShim: true
+    runtimeRole: bulls96_runtime
+    runtimeRoleLogin: true
+    functionBoundaryMode: global-default-revoke
+    waitForRole:
+      enabled: true
+      functionDefault: true
+runtimeRole:
+  bootstrapJob:
+    enabled: true
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: true
+# CI placeholder digest: no image is pulled by the static checks.
+privilegedSql:
+  sqlImage:
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000001"

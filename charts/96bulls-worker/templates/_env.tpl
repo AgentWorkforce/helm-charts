@@ -19,7 +19,10 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if and $idx.enabled (gt (int $idx.replicas) 1) }}{{ fail "96bulls-worker: components.hoopdb-indexer.replicas must be 1 (manifest reconcile is not leader-elected)" }}{{ end -}}
 {{- /* Phase 2 role verify must run in migrate: with it off, readiness never passes
 unless a separate mark_pass step runs, which this chart does not have. */ -}}
-{{- range .Values.extraEnv }}{{ if eq (.name | default "") "HOOPDB_ROLE_VERIFY" }}{{ fail "96bulls-worker: extraEnv must not set HOOPDB_ROLE_VERIFY (migrate always runs the phase 2 role verify)" }}{{ end }}{{ end -}}
+{{- $reserved := list "HOOPDB_ROLE_VERIFY" "HOOPDB_ROLE_BOOTSTRAP" "HOOPDB_DB_MODE" "HOOPDB_SUPABASE_SHIM" "HOOPDB_RUNTIME_ROLE" "HOOPDB_RUNTIME_ROLE_LOGIN" "HOOPDB_RUNTIME_WORKLOAD_ROLE" "HOOPDB_FUNCTION_BOUNDARY_MODE" "HOOPDB_FUNCTION_BOUNDARY_APPROVED" -}}
+{{- range .Values.extraEnv }}{{ if has (.name | default "") $reserved }}{{ fail (printf "96bulls-worker: extraEnv must not set %s: it is a migrations.* value, rendered into migrate only" .name) }}{{ end }}{{ end -}}
+{{- range $n, $c := .Values.components }}{{ range ($c.env | default list) }}{{ if has (.name | default "") $reserved }}{{ fail (printf "96bulls-worker: components.%s.env must not set %s: it is a migrations.* value, rendered into migrate only" $n .name) }}{{ end }}{{ end }}{{ end -}}
+{{- if .Values.migrations.enabled }}{{ include "96bulls-worker.validateProfile" . }}{{ end -}}
 {{- $bob := index .Values.components "bob-costas" -}}
 {{- if and $bob.enabled (not (.Values.summaryEncryption.existingSecret | default .Values.existingSecret)) }}{{ fail "96bulls-worker: summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" }}{{ end -}}
 {{- if and $bob.enabled (not .Values.summaryEncryption.key) }}{{ fail "96bulls-worker: summaryEncryption.key is required when bob-costas is enabled" }}{{ end -}}
@@ -161,4 +164,56 @@ HOOPDB_URL from the HoopDb Secret (context: the chart root).
     secretKeyRef:
       name: {{ .Values.hoopdb.existingSecret | default .Values.existingSecret }}
       key: {{ .Values.hoopdb.key | default .Values.secretKeys.hoopdbUrl }}
+{{- end }}
+
+{{/*
+The migrator's database profile: the same refusals as 96BullSessions
+migrationProfile() (#99), at render time, plus the chart's own: wait-for-role
+is refused in supabase mode (no shim, no bootstrap, no in-cluster role steps).
+Role names follow the migrator's pattern exactly.
+*/}}
+{{- define "96bulls-worker.validateProfile" -}}
+{{- $m := .Values.migrations -}}
+{{- $ident := "^[A-Za-z_][A-Za-z0-9_$-]{0,62}$" -}}
+{{- if not (has $m.databaseMode (list "local" "selfhosted" "supabase")) }}{{ fail "96bulls-worker: migrations.databaseMode must be local, selfhosted or supabase (HOOPDB_DB_MODE has no default)" }}{{ end -}}
+{{- if not (or (kindIs "invalid" $m.supabaseShim) (kindIs "bool" $m.supabaseShim)) }}{{ fail "96bulls-worker: migrations.supabaseShim must be true or false" }}{{ end -}}
+{{- if not (or (kindIs "invalid" $m.runtimeRoleLogin) (kindIs "bool" $m.runtimeRoleLogin)) }}{{ fail "96bulls-worker: migrations.runtimeRoleLogin must be true or false" }}{{ end -}}
+{{- if eq $m.databaseMode "supabase" }}
+{{- if eq $m.supabaseShim true }}{{ fail "96bulls-worker: migrations.supabaseShim must not be true in supabase mode (the plain-Postgres role shim never runs there)" }}{{ end -}}
+{{- if $m.waitForRole.enabled }}{{ fail "96bulls-worker: migrations.waitForRole must be disabled in supabase mode (the roles are operator steps; the migrator verifies them)" }}{{ end -}}
+{{- else if kindIs "invalid" $m.supabaseShim }}{{ fail (printf "96bulls-worker: migrations.supabaseShim must be set (true or false) in %s mode" $m.databaseMode) }}{{ end -}}
+{{- if not (regexMatch $ident ($m.runtimeRole | default "")) }}{{ fail "96bulls-worker: migrations.runtimeRole is required: the role the services connect as (HOOPDB_RUNTIME_ROLE)" }}{{ end -}}
+{{- if eq $m.runtimeRole "session_directory_search_worker" }}{{ fail "96bulls-worker: migrations.runtimeRole must not be the search Worker role" }}{{ end -}}
+{{- if and (ne $m.databaseMode "local") (kindIs "invalid" $m.runtimeRoleLogin) }}{{ fail (printf "96bulls-worker: migrations.runtimeRoleLogin must be set (true or false) in %s mode" $m.databaseMode) }}{{ end -}}
+{{- if and $m.runtimeWorkloadRole (not (regexMatch $ident $m.runtimeWorkloadRole)) }}{{ fail "96bulls-worker: migrations.runtimeWorkloadRole must be a role name" }}{{ end -}}
+{{- if hasKey $m "functionBoundaryApproved" }}{{ fail "96bulls-worker: migrations.functionBoundaryApproved was renamed functionBoundaryMode (HOOPDB_FUNCTION_BOUNDARY_MODE); remove it" }}{{ end -}}
+{{- if eq ($m.functionBoundaryMode | default "") "event-trigger" }}{{ fail "96bulls-worker: migrations.functionBoundaryMode=event-trigger is not implemented by the migrator; use global-default-revoke" }}{{ end -}}
+{{- if and $m.functionBoundaryMode (ne $m.functionBoundaryMode "global-default-revoke") }}{{ fail "96bulls-worker: migrations.functionBoundaryMode must be global-default-revoke" }}{{ end -}}
+{{- if and (eq $m.databaseMode "selfhosted") (not $m.functionBoundaryMode) }}{{ fail "96bulls-worker: migrations.functionBoundaryMode is required in selfhosted mode (global-default-revoke; the migrator's function-boundary gate refuses without it)" }}{{ end -}}
+{{- if and $m.waitForRole.functionDefault (not $m.waitForRole.enabled) }}{{ fail "96bulls-worker: migrations.waitForRole.functionDefault needs migrations.waitForRole.enabled" }}{{ end -}}
+{{- if and $m.waitForRole.functionDefault (ne ($m.functionBoundaryMode | default "") "global-default-revoke") }}{{ fail "96bulls-worker: migrations.waitForRole.functionDefault needs functionBoundaryMode global-default-revoke" }}{{ end -}}
+{{- end }}
+
+{{/*
+The migrate container's profile env, each name exactly once (context: migrations).
+*/}}
+{{- define "96bulls-worker.profileEnv" -}}
+- name: HOOPDB_DB_MODE
+  value: {{ .databaseMode | quote }}
+- name: HOOPDB_SUPABASE_SHIM
+  value: {{ ternary "true" "false" (eq .supabaseShim true) | quote }}
+- name: HOOPDB_RUNTIME_ROLE
+  value: {{ .runtimeRole | quote }}
+{{- if not (kindIs "invalid" .runtimeRoleLogin) }}
+- name: HOOPDB_RUNTIME_ROLE_LOGIN
+  value: {{ ternary "true" "false" .runtimeRoleLogin | quote }}
+{{- end }}
+{{- with .runtimeWorkloadRole }}
+- name: HOOPDB_RUNTIME_WORKLOAD_ROLE
+  value: {{ . | quote }}
+{{- end }}
+{{- with .functionBoundaryMode }}
+- name: HOOPDB_FUNCTION_BOUNDARY_MODE
+  value: {{ . | quote }}
+{{- end }}
 {{- end }}

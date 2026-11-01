@@ -5,7 +5,11 @@
 # exactly statement_timeout=2s, no membership (the migration owner hoop has no
 # membership and no ADMIN). The Job is run twice (idempotent), and once against
 # a drifted role (must fail, 55000, changing nothing).
-# Then the full release: see "Full flow" below.
+# Then the full release: see "Full flow" below. In it, the runtime-role and
+# function-default Jobs (96BullSessions #99) run before migrate. A poisoned owner
+# function default is refused by the Job (55000) and held by wait-for-role. With
+# that wait bypassed, the migrator refuses it (function_boundary_unproven).
+# The image must carry the pinned generation (services-generation).
 #
 # Real CNPG (deps/pins.txt) on kind, and the real services image
 # (SERVICES_IMAGE, required), built from the 96BullSessions commit in
@@ -147,6 +151,8 @@ echo "search-worker-role kind: role OK (fresh and existing converge; idempotent;
 # ---------------------------------------------------------------------------
 k delete namespace fresh existing --wait=false >/dev/null 2>&1 || true
 IMG_REPO=${SERVICES_IMAGE%:*} IMG_TAG=${SERVICES_IMAGE##*:}
+# The three privileged in-cluster SQL Jobs (search Worker, runtime role, function default).
+BOOT_SEL='.kind == "Job" and (.metadata.labels."app.kubernetes.io/component" == "search-worker-role-bootstrap" or .metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap" or .metadata.labels."app.kubernetes.io/component" == "hoopdb-function-default-revoke")'
 full_render() { # ns [helm args]
   local ns=$1; shift
   helm template bulls "$ROOT/charts/96bulls" --namespace "$ns" --no-hooks "$@" \
@@ -155,14 +161,15 @@ full_render() { # ns [helm args]
     --set "worker.image.repository=$IMG_REPO" --set "worker.image.tag=$IMG_TAG" --set worker.image.digest= \
     --set "alleyoop.image.repository=$IMG_REPO" --set "alleyoop.image.tag=$IMG_TAG" --set alleyoop.image.digest= \
     --set searchWorkerRole.bootstrapJob.enabled=true \
-    --set "searchWorkerRole.bootstrapJob.sqlImage.repository=$IMG_REPO" \
-    --set "searchWorkerRole.bootstrapJob.sqlImage.digest=sha256:$(printf '%064d' 1)" \
-    | yq "(select(.metadata.labels.\"app.kubernetes.io/component\" == \"search-worker-role-bootstrap\" and .kind == \"Job\") | .spec.template.spec.initContainers[0].image) = \"$SERVICES_IMAGE\" | (select(.metadata.labels.\"app.kubernetes.io/component\" == \"search-worker-role-bootstrap\" and .kind == \"Job\") | .spec.template.spec.initContainers[0].imagePullPolicy) = \"Never\""
+    --set "privilegedSql.sqlImage.repository=$IMG_REPO" \
+    --set "privilegedSql.sqlImage.digest=sha256:$(printf '%064d' 1)" \
+    | yq "(select($BOOT_SEL) | .spec.template.spec.initContainers[0]) |= (.image = \"$SERVICES_IMAGE\" | .imagePullPolicy = \"Never\")"
   # The only change to the render: a local image cannot be referenced by
-  # registry digest, so the bootstrap Job's sql image points at the same tag.
+  # registry digest, so the bootstrap Jobs' sql image points at the same tag.
 }
-is_boot_job='select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "search-worker-role-bootstrap")'
-not_boot_job='select((.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "search-worker-role-bootstrap") | not)'
+is_boot_job="select($BOOT_SEL)"
+not_boot_job="select(($BOOT_SEL) | not)"
+RT=bulls96_runtime
 prepare_ns() { # ns with_role(fresh|absent|drifted)
   local ns=$1
   k create namespace "$ns" --dry-run=client -o yaml | k apply -f - >/dev/null
@@ -193,11 +200,14 @@ epoch() { date -d "$1" +%s; }
 # The image's migration generation: readiness needs PASS for exactly this.
 gen=$(docker run --rm --entrypoint bun "$SERVICES_IMAGE" src/hoopdb/migrate.ts --generation | tr -d '[:space:]')
 [[ "$gen" =~ ^[0-9a-f]{64}$ ]] || { echo "cannot read the image's migration generation ($gen)"; exit 1; }
+# The image is the pinned one: its generation is the reviewed one (services-generation).
+[ "$gen" = "$(tr -d '[:space:]' < "$HERE/services-generation")" ] || { echo "image generation $gen != pinned $(cat "$HERE/services-generation")"; exit 1; }
+echo "services image: source $(cat "$HERE/services-commit"), generation $gen (pinned)"
 
 # 1. EXISTING cluster without the role. Apply everything but the bootstrap
 # Job and hold it back for a window: migrate must wait, workloads stay unready.
 prepare_ns flow-existing absent
-[ -z "$(psql_in flow-existing "SELECT 1 FROM pg_roles WHERE rolname = 'session_directory_search_worker'")" ] || { echo "flow-existing: role present before bootstrap"; exit 1; }
+[ -z "$(psql_in flow-existing "SELECT 1 FROM pg_roles WHERE rolname IN ('session_directory_search_worker', '$RT')")" ] || { echo "flow-existing: a role is present before bootstrap"; exit 1; }
 full_render flow-existing | yq "$not_boot_job" | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
 [ "$(app_count flow-existing)" = 4 ] || { echo "flow-existing: expected 4 app Deployments"; exit 1; }
 mj=$(job_name flow-existing hoopdb-migrate)
@@ -210,13 +220,15 @@ done
 mp=$(pod_of flow-existing "$mj")
 [ -z "$(cstat flow-existing "$mp" 'containerStatuses[?(@.name=="migrate")].state.running')$(cstat flow-existing "$mp" 'containerStatuses[?(@.name=="migrate")].state.terminated')" ] \
   || { echo "flow-existing: the migrate container started while the role was absent"; exit 1; }
-k -n flow-existing logs "$mp" -c wait-for-role | grep -qF "wait-for-role: session_directory_search_worker not present yet" || { echo "flow-existing: wait-for-role did not wait"; exit 1; }
+k -n flow-existing logs "$mp" -c wait-for-role | grep -qF "wait-for-role: waiting for session_directory_search_worker $RT + owner function default" || { echo "flow-existing: wait-for-role did not wait for the roles and the function default"; exit 1; }
 echo "flow-existing: held 120s without the bootstrap: migrate waiting in wait-for-role, 0 app pods ready"
 
 # 2. Now the bootstrap Job. It runs; migrate follows; workloads become ready.
 full_render flow-existing | yq "$is_boot_job" | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
-bj=$(job_name flow-existing search-worker-role-bootstrap)
+bj=$(job_name flow-existing search-worker-role-bootstrap); rj=$(job_name flow-existing hoopdb-runtime-role-bootstrap); fj=$(job_name flow-existing hoopdb-function-default-revoke)
 k -n flow-existing wait --for=condition=complete "job/$bj" --timeout=300s >/dev/null || { k -n flow-existing logs "job/$bj" -c bootstrap; echo "flow-existing: bootstrap failed"; exit 1; }
+k -n flow-existing wait --for=condition=complete "job/$rj" --timeout=300s >/dev/null || { k -n flow-existing logs "job/$rj" -c bootstrap; echo "flow-existing: runtime role bootstrap failed"; exit 1; }
+k -n flow-existing wait --for=condition=complete "job/$fj" --timeout=300s >/dev/null || { k -n flow-existing logs "job/$fj" -c bootstrap; echo "flow-existing: function default bootstrap failed"; exit 1; }
 k -n flow-existing wait --for=condition=complete "job/$mj" --timeout=900s >/dev/null || { k -n flow-existing logs "job/$mj" --all-containers; echo "flow-existing: migrate failed"; exit 1; }
 k -n flow-existing rollout status deploy -l 'app.kubernetes.io/name in (worker,alleyoop)' --timeout=600s >/dev/null
 [ "$(app_ready flow-existing)" -ge 4 ] || { echo "flow-existing: workloads not ready after bootstrap+migrate"; exit 1; }
@@ -225,6 +237,32 @@ b_start=$(epoch "$(cstat flow-existing "$bp" 'containerStatuses[?(@.name=="boots
 w_end=$(epoch "$(cstat flow-existing "$mp" 'initContainerStatuses[?(@.name=="wait-for-role")].state.terminated.finishedAt')")
 m_start=$(epoch "$(cstat flow-existing "$mp" 'containerStatuses[?(@.name=="migrate")].state.terminated.startedAt')")
 [ "$w_end" -ge "$b_start" ] && [ "$m_start" -ge "$b_start" ] || { echo "flow-existing: order violated (bootstrap start $b_start, wait end $w_end, migrate start $m_start)"; exit 1; }
+r_start=$(epoch "$(cstat flow-existing "$(pod_of flow-existing "$rj")" 'containerStatuses[?(@.name=="bootstrap")].state.terminated.startedAt')")
+[ "$w_end" -ge "$r_start" ] && [ "$m_start" -ge "$r_start" ] || { echo "flow-existing: order violated (runtime role bootstrap start $r_start, wait end $w_end, migrate start $m_start)"; exit 1; }
+# The runtime role as hoopdb_runtime_role.sql leaves it, and as migrate accepted it:
+# no TEMP (PUBLIC's revoked too), CONNECT, least-privilege attributes, no memberships.
+RTCHECK="
+SELECT 'attrs', rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = '$RT';
+SELECT 'connect', has_database_privilege('$RT', 'hoopdb', 'CONNECT');
+SELECT 'temp', has_database_privilege('$RT', 'hoopdb', 'TEMPORARY');
+SELECT 'public_temp', EXISTS (SELECT 1 FROM pg_database d, aclexplode(coalesce(d.datacl, acldefault('d', d.datdba))) a WHERE d.datname = 'hoopdb' AND a.grantee = 0 AND a.privilege_type = 'TEMPORARY');
+SELECT 'members', count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member WHERE r.rolname = '$RT';
+"
+rt_got=$(psql_in flow-existing "$RTCHECK")
+[ "$rt_got" = $'attrs|t|f|f|f|f|f\nconnect|t\ntemp|f\npublic_temp|f\nmembers|0' ] || { echo "$rt_got"; echo "flow-existing: runtime role does not match (LOGIN, CONNECT, no TEMP, PUBLIC without TEMP, no memberships)"; exit 1; }
+k -n flow-existing logs "$(pod_of flow-existing "$rj")" -c bootstrap | grep -qxF "bootstrap hoopdb runtime role $RT: psql exit 0" || { echo "flow-existing: runtime role Job did not report psql exit 0"; exit 1; }
+echo "flow-existing: runtime role $RT: LOGIN, CONNECT yes, TEMP no (PUBLIC revoked), no memberships; bootstrap $r_start <= migrate $m_start"
+# The function boundary as hoopdb_function_default_revoke.sql leaves it: the owner's
+# and every superuser's global function default is exactly {<self>:EXECUTE}.
+f_start=$(epoch "$(cstat flow-existing "$(pod_of flow-existing "$fj")" 'containerStatuses[?(@.name=="bootstrap")].state.terminated.startedAt')")
+[ "$w_end" -ge "$f_start" ] && [ "$m_start" -ge "$f_start" ] || { echo "flow-existing: order violated (function default bootstrap start $f_start, wait end $w_end, migrate start $m_start)"; exit 1; }
+k -n flow-existing logs "$(pod_of flow-existing "$fj")" -c bootstrap | grep -qxF "bootstrap hoopdb function default for hoop: psql exit 0" || { echo "flow-existing: function default Job did not report psql exit 0"; exit 1; }
+FDCHECK="SELECT r.rolname, (SELECT array_agg(a.grantee::regrole::text || ':' || a.privilege_type || ':' || a.is_grantable::text) FROM pg_default_acl d, aclexplode(d.defaclacl) a WHERE d.defaclrole = r.oid AND d.defaclnamespace = 0 AND d.defaclobjtype = 'f') FROM pg_roles r WHERE r.rolname = 'hoop' OR r.rolsuper ORDER BY 1"
+FDACL="SELECT d.defaclacl FROM pg_default_acl d JOIN pg_roles r ON r.oid = d.defaclrole WHERE r.rolname = 'hoop' AND d.defaclnamespace = 0 AND d.defaclobjtype = 'f'"
+fd_got=$(psql_in flow-existing "$FDCHECK")
+[ "$fd_got" = $'hoop|{hoop:EXECUTE:false}\npostgres|{postgres:EXECUTE:false}' ] || { echo "$fd_got"; echo "flow-existing: owner/superuser function defaults are not exactly {<self>:EXECUTE}"; exit 1; }
+grep -qF '"error_code":"function_boundary_unproven"' <<<"$(k -n flow-existing logs "$mp" -c migrate)" && { echo "flow-existing: migrate reported function_boundary_unproven"; exit 1; }
+echo "flow-existing: function default hoop + postgres = {<self>:EXECUTE}; bootstrap $f_start <= migrate $m_start; migrate's global-default-revoke gate passed"
 mlog=$(k -n flow-existing logs "$mp" -c migrate)
 # Phase 1 passed; phase 2 passed and recorded PASS for this image's generation.
 grep '"message":"role check passed"' <<<"$mlog" | grep -qF '"reason":"bootstrap:session_directory_search_worker"' || { echo "flow-existing: migrate did not pass phase 1"; exit 1; }
@@ -261,6 +299,56 @@ for i in $(seq 1 18); do [ "$(app_ready flow-existing)" = 0 ] && break; sleep 10
 k -n flow-existing delete pods -l 'app.kubernetes.io/name in (worker,alleyoop)' --wait=false >/dev/null
 for i in $(seq 1 9); do sleep 10; [ "$(app_ready flow-existing)" = 0 ] || { echo "phase2: a workload became ready while phase 2 fails"; exit 1; }; done
 echo "flow-existing phase2: ledger complete ($ledger_before rows, unchanged); phase 1 passed, phase 2 55000; marker pending|${gen:0:12}; 0 app pods ready (running and restarted, 90s)"
+
+# 4. TEMP on the runtime role: the migrator refuses it before writing anything.
+psql_in flow-existing "REVOKE SELECT ON sessions.session_index FROM session_directory_search_worker" >/dev/null
+psql_in flow-existing "GRANT TEMPORARY ON DATABASE hoopdb TO $RT" >/dev/null
+full_render flow-existing --set worker.migrations.activeDeadlineSeconds=3598 \
+  | yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-migrate") | .spec.backoffLimit = 0' \
+  | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
+mj3=$(k -n flow-existing get jobs -l app.kubernetes.io/component=hoopdb-migrate -o json | jq -r --arg a "$mj" --arg b "$mj2" '[.items[] | select(.metadata.name != $a and .metadata.name != $b)][0].metadata.name')
+k -n flow-existing wait --for=condition=failed "job/$mj3" --timeout=600s >/dev/null || { echo "temp: migrate accepted a runtime role with TEMPORARY"; exit 1; }
+tlog=$(k -n flow-existing logs "$(pod_of flow-existing "$mj3")" -c migrate 2>&1)
+grep -qF '"error_code":"runtime_role_unsafe"' <<<"$tlog" || { echo "$tlog" | tail -5; echo "temp: migrate did not refuse with runtime_role_unsafe"; exit 1; }
+[ "$(psql_in flow-existing "$LEDGER")" = "$ledger_before" ] || { echo "temp: the ledger changed"; exit 1; }
+for i in $(seq 1 6); do sleep 10; [ "$(app_ready flow-existing)" = 0 ] || { echo "temp: a workload became ready"; exit 1; }; done
+echo "flow-existing temp: runtime role with TEMPORARY refused (runtime_role_unsafe), ledger unchanged, 0 app pods ready"
+
+# 5. A poisoned owner function default (EXECUTE to authenticated). The function
+# default Job refuses it (55000, pg_default_acl unchanged); wait-for-role holds
+# migrate; and with that wait bypassed (test-only edit of the rendered Job), the
+# migrator itself refuses with function_boundary_unproven before any write.
+psql_in flow-existing "REVOKE TEMPORARY ON DATABASE hoopdb FROM $RT" >/dev/null
+psql_in flow-existing "ALTER DEFAULT PRIVILEGES FOR ROLE hoop GRANT EXECUTE ON FUNCTIONS TO authenticated" >/dev/null
+acl_before=$(psql_in flow-existing "$FDACL")
+full_render flow-existing | yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-function-default-revoke") | .metadata.name += "-poisoned" | .spec.backoffLimit = 0' \
+  | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
+k -n flow-existing wait --for=condition=failed "job/$fj-poisoned" --timeout=300s >/dev/null || { echo "poisoned: the function default Job accepted a poisoned default"; exit 1; }
+plog=$(k -n flow-existing logs "job/$fj-poisoned" -c bootstrap 2>&1)
+grep -qF "55000: function default bootstrap refused (nothing changed): hoop has a poisoned function default (authenticated EXECUTE)" <<<"$plog" || { echo "$plog" | tail -5; echo "poisoned: no 55000 refusal naming the poisoned default"; exit 1; }
+grep -qxF "bootstrap hoopdb function default for hoop: psql exit 3" <<<"$plog" || { echo "poisoned: psql did not exit 3"; exit 1; }
+[ "$(psql_in flow-existing "$FDACL")" = "$acl_before" ] || { echo "poisoned: the refused Job changed pg_default_acl"; exit 1; }
+full_render flow-existing --set worker.migrations.activeDeadlineSeconds=3597 \
+  | yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-migrate") | .spec.backoffLimit = 0' \
+  | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
+mj4=$(k -n flow-existing get jobs -l app.kubernetes.io/component=hoopdb-migrate -o json | jq -r --arg a "$mj" --arg b "$mj2" --arg c "$mj3" '[.items[] | select(.metadata.name != $a and .metadata.name != $b and .metadata.name != $c)][0].metadata.name')
+for i in $(seq 1 6); do  # 60s
+  sleep 10
+  [ -z "$(cstat flow-existing "$(pod_of flow-existing "$mj4")" 'containerStatuses[?(@.name=="migrate")].state.running')$(cstat flow-existing "$(pod_of flow-existing "$mj4")" 'containerStatuses[?(@.name=="migrate")].state.terminated')" ] \
+    || { echo "poisoned: migrate started while the owner function default was poisoned"; exit 1; }
+done
+k -n flow-existing logs "$(pod_of flow-existing "$mj4")" -c wait-for-role | grep -qF "+ owner function default" || { echo "poisoned: wait-for-role did not wait for the function default"; exit 1; }
+k -n flow-existing delete job "$mj4" --wait=true >/dev/null
+full_render flow-existing --set worker.migrations.activeDeadlineSeconds=3596 \
+  | yq 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-migrate") | .spec.backoffLimit = 0 | (.spec.template.spec.initContainers[0].env[] | select(.name == "FUNCTION_DEFAULT") | .value) = "false"' \
+  | k -n flow-existing apply --server-side --force-conflicts --field-manager=role-test -f - >/dev/null
+mj5=$(k -n flow-existing get jobs -l app.kubernetes.io/component=hoopdb-migrate -o json | jq -r --arg a "$mj" --arg b "$mj2" --arg c "$mj3" '[.items[] | select(.metadata.name != $a and .metadata.name != $b and .metadata.name != $c)][0].metadata.name')
+k -n flow-existing wait --for=condition=failed "job/$mj5" --timeout=600s >/dev/null || { echo "poisoned: migrate accepted a poisoned owner function default"; exit 1; }
+flog=$(k -n flow-existing logs "$(pod_of flow-existing "$mj5")" -c migrate 2>&1)
+grep -qF '"error_code":"function_boundary_unproven"' <<<"$flog" || { echo "$flog" | tail -5; echo "poisoned: migrate did not refuse with function_boundary_unproven"; exit 1; }
+[ "$(psql_in flow-existing "$LEDGER")" = "$ledger_before" ] || { echo "poisoned: the ledger changed"; exit 1; }
+for i in $(seq 1 3); do sleep 10; [ "$(app_ready flow-existing)" = 0 ] || { echo "poisoned: a workload became ready"; exit 1; }; done
+echo "flow-existing poisoned: function default Job 55000 (exit 3, pg_default_acl unchanged); migrate held 60s in wait-for-role; with the wait bypassed, migrate refused function_boundary_unproven; ledger unchanged; 0 app pods ready"
 k delete namespace flow-existing --wait=false >/dev/null
 
 # 3. DRIFTED: a role that differs from the spec, then the whole release at

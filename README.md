@@ -128,18 +128,88 @@ otherwise the worker role needs permission to create the bucket and enable
 versioning.
 `ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
 
-#### Profiles
+#### Profiles and the HoopDb migration contract
 
-`charts/96bulls/profiles/` ships two values profiles:
+`worker.migrations` carries the migrator's database profile: 96BullSessions
+`src/hoopdb/migrate.ts` `migrationProfile()`, as merged in #99
+(`3b6001925ef2d8caf5190063e101e2ebf258e902`). Each value is rendered at most
+once, as an env var in the migrate container only. The render refuses these
+names in `worker.extraEnv` and component `env`, along with
+`HOOPDB_ROLE_BOOTSTRAP` and the old `HOOPDB_FUNCTION_BOUNDARY_APPROVED` name.
+Where the migrator has no default, neither does the chart:
 
-- `selfhost-postgres.yaml`: a new self-host install. The in-cluster CNPG HoopDb is the only database, and its initdb SQL creates the search Worker role.
-- `migration.yaml`: an existing self-host release whose HoopDb cluster predates the role. This profile enables `searchWorkerRole.bootstrapJob`, and migrate waits for the role. Pass `searchWorkerRole.bootstrapJob.sqlImage.digest` for the services release you deploy. The profile pins no services image, and the chart does not render without that digest.
+| value | env | rule |
+| --- | --- | --- |
+| `databaseMode` | `HOOPDB_DB_MODE` | Required: `local`, `selfhosted` or `supabase`. |
+| `supabaseShim` | `HOOPDB_SUPABASE_SHIM` | Required in local and selfhosted. In supabase mode it must be unset or false, and it is rendered `false`. |
+| `runtimeRole` | `HOOPDB_RUNTIME_ROLE` | Required. Outside local mode it must be a dedicated role, never the migration owner or the search Worker. |
+| `runtimeRoleLogin` | `HOOPDB_RUNTIME_ROLE_LOGIN` | Required in selfhosted and supabase; rendered only when set. |
+| `runtimeWorkloadRole` | `HOOPDB_RUNTIME_WORKLOAD_ROLE` | Optional. |
+| `functionBoundaryMode` | `HOOPDB_FUNCTION_BOUNDARY_MODE` | `global-default-revoke` is the only implemented mode; `event-trigger` is refused. Required in selfhosted. In supabase it is the operator's decision (96BullSessions #98); unset, migrate fails closed. |
 
-Both profiles also need `global.tenant.orgId` and `alleyoop.auth.jwksUrl`.
+`charts/96bulls/profiles/` ships four render shapes:
+
+- `selfhost-postgres.yaml`: a new install on the in-cluster CNPG HoopDb, in
+  selfhosted mode. initdb creates the search Worker role. Before migrate, two
+  privileged Jobs run as `postgres` on every deploy:
+  - `runtimeRole.bootstrapJob` runs `hoopdb_runtime_role.sql`. It creates or
+    verifies the runtime role, revokes TEMPORARY from PUBLIC on the database
+    (a database-wide change) and grants the role CONNECT.
+  - `functionDefaultRevoke.bootstrapJob` runs
+    `hoopdb_function_default_revoke.sql`. It sets the global function default
+    of the owner and every superuser to `{<self>:EXECUTE}` and refuses a
+    poisoned default (55000).
+
+  migrate's `wait-for-role` waits for both roles and for the owner's exact
+  function default.
+- `migration.yaml`: an existing in-cluster CNPG HoopDb from before the search
+  Worker role existed. It is `selfhost-postgres.yaml` plus
+  `searchWorkerRole.bootstrapJob`.
+- `external-selfhosted.yaml`: an external plain-Postgres HoopDb (Cloud SQL,
+  RDS) in selfhosted mode. There are no in-cluster SQL Jobs, and migrate waits
+  for the roles. The operator runs the three bootstrap files as a superuser.
+  On Cloud SQL, which has no superuser, the function boundary cannot be
+  installed, so migrate stays refused until a reviewed control exists (#98).
+- `external-supabase.yaml`: an external Supabase project in supabase mode. It
+  has no shim, no wait-for-role and no in-cluster SQL Jobs, and the chart
+  refuses each of those in supabase mode. Never run
+  `hoopdb_function_default_revoke.sql` on Supabase. The runtime role is
+  `bulls96_runtime` with LOGIN and no workload role. Do not use the drifted
+  legacy `relayhistory_runtime`. The Worker role is
+  `session_directory_search_worker`.
+
+  The profile is **fail-closed** in two ways. `supabaseActivation.hold`
+  stops it from rendering, and `functionBoundaryMode` is unset. Both hold
+  until the PostgreSQL 16+ Supabase creator-edge compatibility change in
+  96BullSessions merges and its exact merge, image and generation are pinned.
+  The operator prerequisites are listed in the profile.
+
+The in-cluster profiles pin the services image built from #99, GHCR
+`ghcr.io/agentworkforce/96bulls-services@sha256:213492add37db9bf528929909dce33f7415b9e569cd9df5a5f630f51180fca74`
+(publish-image run 41275610214). Its migration generation is
+`dd2ca0d4ce1cff4bb9e4017bf7e728b7abc7ff02300bdf59857d552531ba7d07`. The AWS
+proof values (`charts/96bulls/ci/aws-cnpg-values.yaml`) pin the immutable ECR
+digest from the same source,
+`500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:b77847dbd418e5eae32c2d75226e5eb6677f77b05921d665c52aebca87df513b`
+(publish-image-ecr run 41275714965). That image predates the Supabase
+compatibility fix, so production activation needs a republish. Every profile
+also needs `global.tenant.orgId` and `alleyoop.auth.jwksUrl`.
+
 `ci/96bulls-profiles/matrix.sh` renders every profile and every
-`charts/96bulls/ci/*-values.yaml`. It asserts the manifests each one must
-produce: the workloads, migrate, HoopDb, Locker and the role bootstrap path.
-CI runs it offline (`static`) and as a server-side dry run on kind (`dryrun`).
+`charts/96bulls/ci/*-values.yaml`. Those include the AWS CNPG proof, AWS
+external Supabase (`pod-identity`) and GCP Cloud SQL. For each one it asserts:
+- the workloads and migrate, with phase 2 verify;
+- the exact profile env, in migrate only;
+- HoopDb and Locker;
+- which privileged Jobs render, with their psql variables and files;
+- what migrate waits for;
+- the image pins.
+
+It also checks every mode combination the chart must refuse. CI runs it
+offline (`static`) and as a server-side dry run on kind (`dryrun`).
+`ci/96bulls-search-worker-role/kind.sh` builds the services image from
+`services-commit` (3b60019) and fails unless the image's generation equals
+`services-generation`.
 
 #### Session directory search Worker role
 

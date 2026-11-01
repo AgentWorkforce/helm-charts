@@ -1,20 +1,50 @@
-# Profile: default self-host, Postgres only (a NEW install).
+# Profile: a NEW self-host install with an in-cluster Postgres (CloudNativePG)
+# HoopDb, selfhosted mode (96BullSessions migrate.ts, #99).
 #   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/selfhost-postgres.yaml \
 #     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
-# HoopDb is an in-cluster CloudNativePG Cluster (the only database; no
-# Supabase). Its initdb SQL creates session_directory_search_worker, so the
-# existing-cluster bootstrap Job stays off. Locker is in-cluster MinIO.
-# Needs the CloudNativePG operator (deps/cnpg-operator-values.yaml).
+# initdb creates session_directory_search_worker. Before migrate, two privileged
+# Jobs run as the CNPG superuser on every deploy. hoopdb_runtime_role.sql
+# creates the dedicated runtime role: it revokes TEMPORARY from PUBLIC on the
+# database and grants the role CONNECT. hoopdb_function_default_revoke.sql
+# installs the global-default-revoke function boundary.
+# migrate's wait-for-role holds the migration until both roles exist and the
+# owner's function default is exact. Needs the CloudNativePG operator
+# (deps/cnpg-operator-values.yaml).
+# Pinned services image (workloads and the privileged SQL Jobs): GHCR, built
+# from 96BullSessions 3b6001925ef2d8caf5190063e101e2ebf258e902 (#99 merged),
+# publish-image run 41275610214, migration generation
+# dd2ca0d4ce1cff4bb9e4017bf7e728b7abc7ff02300bdf59857d552531ba7d07.
 hoopdb:
   enabled: true
 locker:
   enabled: true
 otel:
   enabled: false
+worker:
+  image:
+    digest: "sha256:213492add37db9bf528929909dce33f7415b9e569cd9df5a5f630f51180fca74"
+  migrations:
+    databaseMode: selfhosted
+    supabaseShim: true
+    runtimeRole: bulls96_runtime
+    runtimeRoleLogin: true
+    functionBoundaryMode: global-default-revoke
+    waitForRole:
+      enabled: true
+      functionDefault: true
+alleyoop:
+  image:
+    digest: "sha256:213492add37db9bf528929909dce33f7415b9e569cd9df5a5f630f51180fca74"
+privilegedSql:
+  sqlImage:
+    repository: ghcr.io/agentworkforce/96bulls-services
+    digest: "sha256:213492add37db9bf528929909dce33f7415b9e569cd9df5a5f630f51180fca74"
 searchWorkerRole:
   bootstrapJob:
     enabled: false
-worker:
-  migrations:
-    waitForRole:
-      enabled: true
+runtimeRole:
+  bootstrapJob:
+    enabled: true
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: true

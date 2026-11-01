@@ -10,3 +10,9 @@ locker:
   bucket: raw
 tenant:
   orgId: org_ci
+migrations:
+  databaseMode: selfhosted
+  supabaseShim: true
+  runtimeRole: bulls96_runtime
+  runtimeRoleLogin: true
+  functionBoundaryMode: global-default-revoke
