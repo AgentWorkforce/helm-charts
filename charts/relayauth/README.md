@@ -21,8 +21,10 @@ helm install relayauth oci://ghcr.io/agentworkforce/charts/relayauth \
 ```
 
 The Secret is mounted as files; no secret value or private key is accepted in
-chart values. The chart defaults to the public multi-platform RelayAuth image
-at `sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df`.
+chart values. Chart `0.1.1` defaults to the public multi-platform RelayAuth
+image built from source revision
+`784582ef983bb72b13b43512d9a4142ef5dfabb2` at
+`sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288`.
 Image overrides must also use an immutable SHA-256 digest; mutable tags are
 rejected during rendering.
 

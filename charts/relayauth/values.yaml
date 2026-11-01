@@ -7,7 +7,9 @@ image:
   # Immutable multi-platform release manifest (linux/amd64 and linux/arm64).
   # Tags are not accepted by this chart. Override only with another sha256
   # digest published by the RelayAuth image release workflow.
-  digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df
+  # Source: AgentWorkforce/relayauth@784582ef983bb72b13b43512d9a4142ef5dfabb2
+  # (includes the machine-bound History assertion contract from PR #113).
+  digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
