@@ -18,5 +18,7 @@ or hoopdb.enabled=false) never get this Job: the role is pre-provisioned.
 {{- else if $job.enabled }}{{ fail "runtimeRole.bootstrapJob is for the in-cluster HoopDb only (hoopdb.enabled); an external database's runtime role is pre-provisioned" }}{{ end }}
 {{- if $job.enabled }}
 {{- $login := ternary "true" "false" (eq $m.runtimeRoleLogin true) }}
-{{- include "96bulls.privilegedSqlJob" (dict "c" $job "root" . "component" "hoopdb-runtime-role-bootstrap" "suffix" "runtime-role" "what" (printf "hoopdb runtime role %s" $m.runtimeRole) "psqlVars" (list (printf "runtime_role=%s" $m.runtimeRole) (printf "runtime_login=%s" $login))) }}
+{{- $vars := list (printf "runtime_role=%s" $m.runtimeRole) (printf "runtime_login=%s" $login) }}
+{{- with $m.runtimeWorkloadRole }}{{ $vars = append $vars (printf "workload_role=%s" .) }}{{ end }}
+{{- include "96bulls.privilegedSqlJob" (dict "c" $job "root" . "component" "hoopdb-runtime-role-bootstrap" "suffix" "runtime-role" "what" (printf "hoopdb runtime role %s" $m.runtimeRole) "psqlVars" $vars) }}
 {{- end }}

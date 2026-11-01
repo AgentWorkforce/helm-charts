@@ -2,14 +2,15 @@
 # (96BullSessions migrate.ts, #99).
 #   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/external-supabase.yaml \
 #     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
+# Services image: GHCR, built from 96BullSessions main
+# b47c1e6af43140de8395c1aa20178d014c92bbb7 (includes the #106 PostgreSQL 16+
+# Supabase creator-edge compatibility change), publish-image run 41333160108,
+# generation 1d99ccc8222995c9f8c31334da1c574ca5a687436656d34d9521bc7859494718.
 # FAIL-CLOSED, twice over. First, supabaseActivation.hold stops this profile
-# from rendering. Second, functionBoundaryMode stays unset, so even a rendered
-# migrate refuses with function_boundary_unproven before it writes anything.
-# Both hold until the 96BullSessions PostgreSQL 16+ Supabase creator-edge
-# compatibility change merges and its exact merge, image digest and generation
-# are pinned here. The #99 image (3b60019) is NOT the production-Supabase pin:
-# that change will produce a new generation and digest. No services image is
-# pinned here yet.
+# from rendering. Second, functionBoundaryMode stays unset (an operator
+# decision, 96BullSessions #98), so even a rendered migrate refuses with
+# function_boundary_unproven before it writes anything. Lift the hold only when
+# this image is confirmed as the production-Supabase pin.
 # This profile turns off everything the self-host profiles carry: the in-cluster
 # HoopDb, the plain-Postgres role shim, wait-for-role and every privileged SQL
 # Job. The chart refuses each of those in supabase mode.
@@ -18,12 +19,16 @@
 # activation dossier):
 #   1. A Secret named 96bulls-hoopdb, key HOOPDB_URL, holding the Supabase
 #      connection string for the migration role.
-#   2. session_directory_search_worker, created and verified as the runbook
-#      says. The migrator only verifies it.
-#   3. The dedicated runtime role bulls96_runtime, LOGIN, with no workload role.
-#      It must not be the migration owner, and it needs least-privilege
-#      attributes, CONNECT, no TEMPORARY (none from PUBLIC either) and no role
-#      membership. The migrator only verifies it. Do not use the legacy
+#   2. session_directory_search_worker, created as postgres with
+#      supabase/bootstrap/session_directory_search_worker_supabase.sql (the
+#      Supabase-only, transactional wrapper). The migrator only verifies it.
+#   3. The dedicated runtime role bulls96_runtime, LOGIN, with no workload role,
+#      created as postgres with supabase/bootstrap/hoopdb_runtime_role_supabase.sql
+#      -v runtime_role=bulls96_runtime -v runtime_login=true. That wrapper accepts
+#      only the exact PG16+ creator edge from supabase_admin, and it keeps
+#      Supabase's PUBLIC TEMPORARY baseline, which the migrator validates. The
+#      role must not be the migration owner and needs least-privilege attributes
+#      and CONNECT. The migrator only verifies it. Do not use the legacy
 #      relayhistory_runtime: the production preflight found it drifted
 #      (BYPASSRLS, TEMPORARY, a creator edge).
 #   4. The function boundary. hoopdb_function_default_revoke.sql is CNPG/selfhost
@@ -38,6 +43,8 @@ supabaseActivation:
 hoopdb:
   enabled: false
 worker:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
@@ -54,6 +61,8 @@ worker:
       role: session_directory_search_worker
       functionDefault: false
 alleyoop:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL

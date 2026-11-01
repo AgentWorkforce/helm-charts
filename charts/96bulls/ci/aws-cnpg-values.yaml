@@ -1,10 +1,9 @@
 # AWS EKS CNPG proof stage (stacks/aws/eks.ts, hoopdb backend "cnpg"): the
 # in-cluster HoopDb in selfhosted mode with the privileged runtime-role and
 # function-default Jobs, S3 Locker through Pod Identity, otel collector on.
-# Pinned services image: the immutable ECR digest built from 96BullSessions
-# 3b6001925ef2d8caf5190063e101e2ebf258e902 (tag sha-3b60019..., amd64+arm64,
-# publish-image-ecr run 41275714965). It predates the Supabase compatibility
-# fix: production activation needs a republish.
+# Pinned services image: the immutable ECR digest (sessions-dev) built from
+# 96BullSessions main b47c1e6af43140de8395c1aa20178d014c92bbb7 (tag
+# sha-b47c1e6..., publish-image-ecr run 41333164245), generation 1d99ccc8...4718.
 global:
   imageRegistry: ""
   tenant:
@@ -14,7 +13,7 @@ global:
 worker:
   image:
     repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
-    digest: "sha256:b77847dbd418e5eae32c2d75226e5eb6677f77b05921d665c52aebca87df513b"
+    digest: "sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
   existingSecret: ""
   summaryEncryption:
     existingSecret: 96bulls-runtime
@@ -42,7 +41,7 @@ worker:
 alleyoop:
   image:
     repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
-    digest: "sha256:b77847dbd418e5eae32c2d75226e5eb6677f77b05921d665c52aebca87df513b"
+    digest: "sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
   existingSecret: ""
   locker:
     endpoint: ""
@@ -68,4 +67,4 @@ functionDefaultRevoke:
 privilegedSql:
   sqlImage:
     repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
-    digest: "sha256:b77847dbd418e5eae32c2d75226e5eb6677f77b05921d665c52aebca87df513b"
+    digest: "sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"

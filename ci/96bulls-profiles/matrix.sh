@@ -48,7 +48,7 @@ MATRIX=(
   "ci/search-worker-bootstrap-values.yaml|yes|yes|selfhosted|existing"
   "ci/aws-cnpg-values.yaml|yes|no|selfhosted|fresh"
   "ci/pod-identity-values.yaml|no|no|supabase|supabase"
-  "ci/gcp-cloudsql-values.yaml|no|no|selfhosted|external"
+  "ci/gcp-cloudsql-values.yaml|no|no|cloudsql|external"
 )
 
 # Every profile on disk has a row (a new profile cannot skip the matrix).
@@ -58,30 +58,31 @@ for f in "$CHART"/profiles/*.yaml "$CHART"/ci/*-values.yaml; do
 done
 
 # Services image pins. The in-cluster CNPG profiles and the AWS proof values
-# pin the image built from merged 96BullSessions #99 (3b60019): GHCR (publish-image
-# run 41275610214) and ECR (publish-image-ecr run 41275714965). The workloads and
+# pin the image built from 96BullSessions main b47c1e6 (#99 + #106): GHCR
+# (publish-image run 41333160108) and ECR (publish-image-ecr run 41333164245). The workloads and
 # the privileged SQL Jobs use the same image, and no Job overrides it. The
-# external profiles pin nothing. The Supabase profile in particular stays
-# unpinned and fail-closed until the compatibility change lands.
-GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:213492add37db9bf528929909dce33f7415b9e569cd9df5a5f630f51180fca74"
-ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:b77847dbd418e5eae32c2d75226e5eb6677f77b05921d665c52aebca87df513b"
+# external-selfhosted profile pins nothing (the operator's own Postgres). The
+# Supabase profile pins the GHCR image too, but stays fail-closed (hold, no
+# boundary mode).
+GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
 pins_of() { yq -r '[.worker.image.tag, .worker.image.digest, .alleyoop.image.tag, .alleyoop.image.digest, .privilegedSql.sqlImage.digest, .searchWorkerRole.bootstrapJob.sqlImage.digest, .runtimeRole.bootstrapJob.sqlImage.digest, .functionDefaultRevoke.bootstrapJob.sqlImage.digest] | map(select(. != null and . != "")) | join(",")' "$1"; }
-for f in "$CHART"/profiles/external-*.yaml; do
-  [ -z "$(pins_of "$f")" ] || err "${f#"$CHART"/}: pins a services image ($(pins_of "$f"))"
-done
+f="$CHART/profiles/external-selfhosted.yaml"
+[ -z "$(pins_of "$f")" ] || err "profiles/external-selfhosted.yaml: pins a services image ($(pins_of "$f"))"
 # Rendered image refs of every services container (workloads, migrate, the SQL Jobs' sql copy).
 services_refs() {
   render "$@" | yq -r 'select(.kind == "Deployment" or .kind == "Job") | .spec.template.spec | ((.initContainers // []) + .containers)[] | select(.image | test("96bulls-services")) | .image' | grep -v '^---$' | sort -u
 }
-for pair in "profiles/selfhost-postgres.yaml|$GHCR" "profiles/migration.yaml|$GHCR" "ci/aws-cnpg-values.yaml|$ECR"; do
+for pair in "profiles/selfhost-postgres.yaml|$GHCR" "profiles/migration.yaml|$GHCR" "profiles/external-supabase.yaml|$GHCR" "ci/aws-cnpg-values.yaml|$ECR"; do
   rel=${pair%%|*} want=${pair#*|}
   extra=(); [[ $rel == profiles/* ]] && extra=("${REQUIRED[@]}")
+  [[ $rel == profiles/external-supabase.yaml ]] && extra+=(--set supabaseActivation.hold=false)
   got=$(services_refs -f "$CHART/$rel" "${extra[@]}" | tr '\n' ' ' | sed 's/ $//')
   [ "$got" = "$want" ] || err "$rel: services images are [$got], want exactly [$want]"
 done
 
 ROLE_SQL="CREATE ROLE session_directory_search_worker NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION"
-PROFILE_ENV="HOOPDB_DB_MODE HOOPDB_SUPABASE_SHIM HOOPDB_RUNTIME_ROLE HOOPDB_RUNTIME_ROLE_LOGIN HOOPDB_RUNTIME_WORKLOAD_ROLE HOOPDB_FUNCTION_BOUNDARY_MODE"
+PROFILE_ENV="HOOPDB_DB_MODE HOOPDB_SUPABASE_SHIM HOOPDB_ROLE_BOOTSTRAP HOOPDB_RUNTIME_ROLE HOOPDB_RUNTIME_ROLE_LOGIN HOOPDB_RUNTIME_WORKLOAD_ROLE HOOPDB_FUNCTION_BOUNDARY_MODE"
 count() { yq "select($1)" <<<"$out" | yq -N 'select(. != null) | .kind' | grep -c . || true; }
 has() { [ "$(count "$1")" -ge 1 ]; }
 none() { [ "$(count "$1")" -eq 0 ]; }
@@ -133,13 +134,14 @@ for row in "${MATRIX[@]}"; do
   # The migrator profile (#99): exactly this env in migrate, nowhere else.
   case $dbmode in
     selfhosted) want=$'HOOPDB_DB_MODE=selfhosted\nHOOPDB_FUNCTION_BOUNDARY_MODE=global-default-revoke\nHOOPDB_RUNTIME_ROLE=bulls96_runtime\nHOOPDB_RUNTIME_ROLE_LOGIN=true\nHOOPDB_SUPABASE_SHIM=true' ;;
+    cloudsql)   want=$'HOOPDB_DB_MODE=cloudsql\nHOOPDB_FUNCTION_BOUNDARY_MODE=global-default-revoke\nHOOPDB_ROLE_BOOTSTRAP=false\nHOOPDB_RUNTIME_ROLE=bulls96_runtime\nHOOPDB_RUNTIME_ROLE_LOGIN=true\nHOOPDB_SUPABASE_SHIM=false' ;;
     supabase)   want=$'HOOPDB_DB_MODE=supabase\nHOOPDB_RUNTIME_ROLE=bulls96_runtime\nHOOPDB_RUNTIME_ROLE_LOGIN=true\nHOOPDB_SUPABASE_SHIM=false' ;;
   esac
   got=$(profile_env)
   [ "$got" = "$want" ] || err "$label: migrate profile env is [$(tr '\n' ' ' <<<"$got")], want [$(tr '\n' ' ' <<<"$want")]"
-  for n in $PROFILE_ENV HOOPDB_ROLE_BOOTSTRAP HOOPDB_FUNCTION_BOUNDARY_APPROVED; do
+  for n in $PROFILE_ENV HOOPDB_FUNCTION_BOUNDARY_APPROVED; do
     c=$(yq -r "[.. | select(type == \"!!map\" and .name == \"$n\" and has(\"value\"))] | length" <<<"$out" | awk '{s+=$1} END {print s+0}')
-    case $n in HOOPDB_ROLE_BOOTSTRAP|HOOPDB_FUNCTION_BOUNDARY_APPROVED) w=0 ;; *) w=$(grep -c "^$n=" <<<"$want" || true) ;; esac
+    case $n in HOOPDB_FUNCTION_BOUNDARY_APPROVED) w=0 ;; *) w=$(grep -c "^$n=" <<<"$want" || true) ;; esac
     [ "$c" = "$w" ] || err "$label: $n rendered $c times, want $w (migrate only)"
   done
 
@@ -222,7 +224,7 @@ if [ "$mode" = static ]; then
   IN=(-f "$CHART/ci/default-values.yaml")
   SB=(-f "$CHART/ci/pod-identity-values.yaml")
   GCP=(-f "$CHART/ci/gcp-cloudsql-values.yaml")
-  expect_fail "databaseMode must be local, selfhosted or supabase" "${IN[@]}" --set worker.migrations.databaseMode=
+  expect_fail "databaseMode must be local, selfhosted, cloudsql or supabase" "${IN[@]}" --set worker.migrations.databaseMode=
   expect_fail "worker.migrations.databaseMode must be selfhosted, not \"supabase\"" "${IN[@]}" --set worker.migrations.databaseMode=supabase --set worker.migrations.supabaseShim=false --set worker.migrations.waitForRole.enabled=false --set worker.migrations.waitForRole.functionDefault=false
   expect_fail "worker.migrations.databaseMode must be selfhosted, not \"local\"" "${IN[@]}" --set worker.migrations.databaseMode=local
   expect_fail "supabaseShim must not be true in supabase mode" "${SB[@]}" --set worker.migrations.supabaseShim=true
@@ -231,8 +233,13 @@ if [ "$mode" = static ]; then
   expect_fail "runtimeRole.bootstrapJob is for the in-cluster HoopDb only" "${SB[@]}" --set runtimeRole.bootstrapJob.enabled=true
   expect_fail "functionDefaultRevoke.bootstrapJob is for the in-cluster CNPG HoopDb only" "${GCP[@]}" --set functionDefaultRevoke.bootstrapJob.enabled=true
   expect_fail "runtimeRoleLogin must be set (true or false) in supabase mode" "${SB[@]}" --set worker.migrations.runtimeRoleLogin=null
-  expect_fail "supabaseShim must be set (true or false) in selfhosted mode" "${GCP[@]}" --set worker.migrations.supabaseShim=null
-  expect_fail "functionBoundaryMode is required in selfhosted mode" "${GCP[@]}" --set worker.migrations.functionBoundaryMode=
+  expect_fail "supabaseShim must be set (true or false) in cloudsql mode" "${GCP[@]}" --set worker.migrations.supabaseShim=null
+  expect_fail "functionBoundaryMode is required in cloudsql mode" "${GCP[@]}" --set worker.migrations.functionBoundaryMode=
+  expect_fail "functionBoundaryMode is required in selfhosted mode" "${IN[@]}" --set worker.migrations.functionBoundaryMode=
+  expect_fail "databaseMode must be local, selfhosted, cloudsql or supabase" "${GCP[@]}" --set worker.migrations.databaseMode=cloud
+  expect_fail "roleBootstrap must not be true in supabase mode" "${SB[@]}" --set worker.migrations.roleBootstrap=true
+  expect_fail "roleBootstrap must be true or false" "${GCP[@]}" --set-string worker.migrations.roleBootstrap=no
+  expect_fail "worker.migrations.databaseMode must be selfhosted, not \"cloudsql\"" "${IN[@]}" --set worker.migrations.databaseMode=cloudsql
   expect_fail "functionBoundaryMode=event-trigger is not implemented" "${GCP[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
   expect_fail "functionBoundaryMode=event-trigger is not implemented" "${SB[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
   expect_fail "functionBoundaryMode must be global-default-revoke" "${SB[@]}" --set worker.migrations.functionBoundaryMode=yes

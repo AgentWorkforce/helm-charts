@@ -190,12 +190,14 @@ Role names follow the migrator's pattern exactly.
 {{- define "96bulls-worker.validateProfile" -}}
 {{- $m := .Values.migrations -}}
 {{- $ident := "^[A-Za-z_][A-Za-z0-9_$-]{0,62}$" -}}
-{{- if not (has $m.databaseMode (list "local" "selfhosted" "supabase")) }}{{ fail "96bulls-worker: migrations.databaseMode must be local, selfhosted or supabase (HOOPDB_DB_MODE has no default)" }}{{ end -}}
+{{- if not (has $m.databaseMode (list "local" "selfhosted" "cloudsql" "supabase")) }}{{ fail "96bulls-worker: migrations.databaseMode must be local, selfhosted, cloudsql or supabase (HOOPDB_DB_MODE has no default)" }}{{ end -}}
+{{- if not (or (kindIs "invalid" $m.roleBootstrap) (kindIs "bool" $m.roleBootstrap)) }}{{ fail "96bulls-worker: migrations.roleBootstrap must be true or false" }}{{ end -}}
 {{- if not (or (kindIs "invalid" $m.supabaseShim) (kindIs "bool" $m.supabaseShim)) }}{{ fail "96bulls-worker: migrations.supabaseShim must be true or false" }}{{ end -}}
 {{- if not (or (kindIs "invalid" $m.runtimeRoleLogin) (kindIs "bool" $m.runtimeRoleLogin)) }}{{ fail "96bulls-worker: migrations.runtimeRoleLogin must be true or false" }}{{ end -}}
 {{- if eq $m.databaseMode "supabase" }}
 {{- if eq $m.supabaseShim true }}{{ fail "96bulls-worker: migrations.supabaseShim must not be true in supabase mode (the plain-Postgres role shim never runs there)" }}{{ end -}}
 {{- if $m.waitForRole.enabled }}{{ fail "96bulls-worker: migrations.waitForRole must be disabled in supabase mode (the roles are operator steps; the migrator verifies them)" }}{{ end -}}
+{{- if eq $m.roleBootstrap true }}{{ fail "96bulls-worker: migrations.roleBootstrap must not be true in supabase mode (the privileged role bootstrap never runs from the migrator there)" }}{{ end -}}
 {{- else if kindIs "invalid" $m.supabaseShim }}{{ fail (printf "96bulls-worker: migrations.supabaseShim must be set (true or false) in %s mode" $m.databaseMode) }}{{ end -}}
 {{- if not (regexMatch $ident ($m.runtimeRole | default "")) }}{{ fail "96bulls-worker: migrations.runtimeRole is required: the role the services connect as (HOOPDB_RUNTIME_ROLE)" }}{{ end -}}
 {{- if eq $m.runtimeRole "session_directory_search_worker" }}{{ fail "96bulls-worker: migrations.runtimeRole must not be the search Worker role" }}{{ end -}}
@@ -204,7 +206,7 @@ Role names follow the migrator's pattern exactly.
 {{- if hasKey $m "functionBoundaryApproved" }}{{ fail "96bulls-worker: migrations.functionBoundaryApproved was renamed functionBoundaryMode (HOOPDB_FUNCTION_BOUNDARY_MODE); remove it" }}{{ end -}}
 {{- if eq ($m.functionBoundaryMode | default "") "event-trigger" }}{{ fail "96bulls-worker: migrations.functionBoundaryMode=event-trigger is not implemented by the migrator; use global-default-revoke" }}{{ end -}}
 {{- if and $m.functionBoundaryMode (ne $m.functionBoundaryMode "global-default-revoke") }}{{ fail "96bulls-worker: migrations.functionBoundaryMode must be global-default-revoke" }}{{ end -}}
-{{- if and (eq $m.databaseMode "selfhosted") (not $m.functionBoundaryMode) }}{{ fail "96bulls-worker: migrations.functionBoundaryMode is required in selfhosted mode (global-default-revoke; the migrator's function-boundary gate refuses without it)" }}{{ end -}}
+{{- if and (has $m.databaseMode (list "selfhosted" "cloudsql")) (not $m.functionBoundaryMode) }}{{ fail (printf "96bulls-worker: migrations.functionBoundaryMode is required in %s mode (global-default-revoke; the migrator's function-boundary gate refuses without it)" $m.databaseMode) }}{{ end -}}
 {{- if and $m.waitForRole.functionDefault (not $m.waitForRole.enabled) }}{{ fail "96bulls-worker: migrations.waitForRole.functionDefault needs migrations.waitForRole.enabled" }}{{ end -}}
 {{- if and $m.waitForRole.functionDefault (ne ($m.functionBoundaryMode | default "") "global-default-revoke") }}{{ fail "96bulls-worker: migrations.waitForRole.functionDefault needs functionBoundaryMode global-default-revoke" }}{{ end -}}
 {{- end }}
@@ -226,6 +228,10 @@ The migrate container's profile env, each name exactly once (context: migrations
 {{- with .runtimeWorkloadRole }}
 - name: HOOPDB_RUNTIME_WORKLOAD_ROLE
   value: {{ . | quote }}
+{{- end }}
+{{- if not (kindIs "invalid" .roleBootstrap) }}
+- name: HOOPDB_ROLE_BOOTSTRAP
+  value: {{ ternary "true" "false" .roleBootstrap | quote }}
 {{- end }}
 {{- with .functionBoundaryMode }}
 - name: HOOPDB_FUNCTION_BOUNDARY_MODE

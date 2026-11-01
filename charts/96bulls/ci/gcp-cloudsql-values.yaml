@@ -1,8 +1,11 @@
-# GKE + Cloud SQL (stacks/gcp/config.ts): an external plain-Postgres HoopDb in
-# selfhosted mode, the shim on, global-default-revoke, the dedicated runtime
-# role. The roles and the function default are operator steps on Cloud SQL, so
-# there are no in-cluster SQL Jobs; migrate still waits for the roles. Managed
-# bucket through Workload Identity (podIdentity mode).
+# GKE + Cloud SQL (stacks/gcp/config.ts at 96BullSessions b47c1e6): cloudsql
+# mode, the generic shim off, HOOPDB_ROLE_BOOTSTRAP false (no customer
+# superuser), global-default-revoke, the dedicated runtime role, and a separate
+# migration-owner URL (HOOPDB_MIGRATION_URL) for migrate only. The operator runs
+# cloudsql_migration_roles.sql, session_directory_search_worker.sql and
+# cloudsql_owner_function_default_revoke.sql as the migration owner, so there
+# are no in-cluster SQL Jobs. migrate still waits for the roles. The managed
+# bucket uses Workload Identity (podIdentity mode).
 global:
   tenant:
     orgId: org_ci
@@ -23,8 +26,12 @@ worker:
   lockerInit:
     enabled: false
   migrations:
-    databaseMode: selfhosted
-    supabaseShim: true
+    hoopdb:
+      existingSecret: 96bulls-gcp
+      key: HOOPDB_MIGRATION_URL
+    databaseMode: cloudsql
+    supabaseShim: false
+    roleBootstrap: false
     runtimeRole: bulls96_runtime
     runtimeRoleLogin: true
     functionBoundaryMode: global-default-revoke

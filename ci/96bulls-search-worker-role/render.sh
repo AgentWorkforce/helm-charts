@@ -113,7 +113,7 @@ FB=HOOPDB_FUNCTION_BOUNDARY_MODE=global-default-revoke
 check_profile "selfhosted (CNPG)" "$out" HOOPDB_DB_MODE=selfhosted HOOPDB_SUPABASE_SHIM=true HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=true $FB HOOPDB_ROLE_VERIFY=true
 o=$(render "${on[@]}" --set worker.migrations.runtimeRoleLogin=false --set worker.migrations.runtimeWorkloadRole=bulls96_app)
 check_profile "selfhosted, login false + workload role" "$o" HOOPDB_DB_MODE=selfhosted HOOPDB_SUPABASE_SHIM=true HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=false HOOPDB_RUNTIME_WORKLOAD_ROLE=bulls96_app $FB HOOPDB_ROLE_VERIFY=true
-yq -r 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap") | .spec.template.spec.containers[0].args[0]' <<<"$o" | grep -qF -- "-v 'runtime_role=bulls96_runtime' -v 'runtime_login=false' -X -d \"\${DATABASE}\" -f -" || err "runtime-role Job does not pass runtime_login=false"
+yq -r 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap") | .spec.template.spec.containers[0].args[0]' <<<"$o" | grep -qF -- "-v 'runtime_role=bulls96_runtime' -v 'runtime_login=false' -v 'workload_role=bulls96_app' -X -d \"\${DATABASE}\" -f -" || err "runtime-role Job does not pass runtime_login=false"
 # External database (Supabase, or RDS / Cloud SQL): no in-cluster bootstrap.
 ext=(-f "$CHART/ci/default-values.yaml" --set hoopdb.enabled=false --set runtimeRole.bootstrapJob.enabled=false --set functionDefaultRevoke.bootstrapJob.enabled=false --set worker.migrations.waitForRole.functionDefault=false --set worker.hoopdb.existingSecret=ext-db --set alleyoop.hoopdb.existingSecret=ext-db)
 sb=("${ext[@]}" --set worker.migrations.databaseMode=supabase --set worker.migrations.supabaseShim=null --set worker.migrations.functionBoundaryMode= --set worker.migrations.waitForRole.enabled=false)
@@ -122,6 +122,11 @@ check_profile "supabase (external)" "$o" HOOPDB_DB_MODE=supabase HOOPDB_SUPABASE
 o=$(render "${sb[@]}" --set worker.migrations.functionBoundaryMode=global-default-revoke)
 check_profile "supabase, operator-selected boundary" "$o" HOOPDB_DB_MODE=supabase HOOPDB_SUPABASE_SHIM=false HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=true $FB HOOPDB_ROLE_VERIFY=true
 [ -z "$(yq -r 'select(.metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap" or .metadata.labels."app.kubernetes.io/component" == "search-worker-role-bootstrap" or .metadata.labels."app.kubernetes.io/component" == "hoopdb-function-default-revoke") | .kind' <<<"$o" | grep .)" ] || err "external database: an in-cluster bootstrap object rendered"
+# cloudsql mode with HOOPDB_ROLE_BOOTSTRAP=false, and a workload role passed to the runtime-role Job.
+o=$(render "${ext[@]}" --set worker.migrations.databaseMode=cloudsql --set worker.migrations.supabaseShim=false --set worker.migrations.roleBootstrap=false)
+check_profile "cloudsql (external, role bootstrap off)" "$o" HOOPDB_DB_MODE=cloudsql HOOPDB_SUPABASE_SHIM=false HOOPDB_ROLE_BOOTSTRAP=false HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=true $FB HOOPDB_ROLE_VERIFY=true
+o=$(render "${on[@]}" --set worker.migrations.runtimeWorkloadRole=bulls96_app)
+yq -r 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap") | .spec.template.spec.containers[0].args[0]' <<<"$o" | grep -qF -- "-v 'runtime_role=bulls96_runtime' -v 'runtime_login=true' -v 'workload_role=bulls96_app' -X" || err "runtime-role Job does not pass workload_role"
 # local mode: runtimeRoleLogin and functionBoundaryMode are optional; unset, neither is rendered.
 o=$(render "${ext[@]}" --set worker.migrations.databaseMode=local --set worker.migrations.runtimeRoleLogin=null --set worker.migrations.functionBoundaryMode=)
 check_profile "local (login and boundary unset)" "$o" HOOPDB_DB_MODE=local HOOPDB_SUPABASE_SHIM=true HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_ROLE_VERIFY=true
@@ -147,8 +152,8 @@ o=$(render "${on[@]}" --set 'worker.imagePullSecrets[0].name=ghcr-pull')
 [ "$(yq -r 'select(.kind == "Job" and .metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap") | .spec.template.spec.imagePullSecrets[0].name' <<<"$o" | grep .)" = "ghcr-pull" ] || err "runtime-role Job has no imagePullSecrets"
 
 # Refusals: the migrator's own, and the chart's placement rules.
-expect_fail "databaseMode must be local, selfhosted or supabase" "${on[@]}" --set worker.migrations.databaseMode=
-expect_fail "databaseMode must be local, selfhosted or supabase" "${on[@]}" --set worker.migrations.databaseMode=cloud
+expect_fail "databaseMode must be local, selfhosted, cloudsql or supabase" "${on[@]}" --set worker.migrations.databaseMode=
+expect_fail "databaseMode must be local, selfhosted, cloudsql or supabase" "${on[@]}" --set worker.migrations.databaseMode=cloud
 expect_fail "supabaseShim must be set (true or false) in selfhosted mode" "${on[@]}" --set worker.migrations.supabaseShim=null
 expect_fail "supabaseShim must not be true in supabase mode" "${sb[@]}" --set worker.migrations.supabaseShim=true
 expect_fail "waitForRole must be disabled in supabase mode" "${sb[@]}" --set worker.migrations.waitForRole.enabled=true
