@@ -18,10 +18,14 @@
 #      -v migration_owner=<owner>. Without it the migrator refuses with
 #      function_boundary_unproven. A platform with no superuser cannot run it,
 #      so migrate stays refused there.
-# All files come from the services image you deploy.
+# All files come from the services image you deploy. Pinned: GHCR, built from
+# 96BullSessions main b47c1e6af43140de8395c1aa20178d014c92bbb7 (publish-image
+# run 41333160108), generation 1d99ccc8...4718.
 hoopdb:
   enabled: false
 worker:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
@@ -35,6 +39,8 @@ worker:
       enabled: true
       functionDefault: false
 alleyoop:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL

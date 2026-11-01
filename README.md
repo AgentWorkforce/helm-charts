@@ -189,8 +189,8 @@ Where the migrator has no default, neither does the chart:
   production-Supabase pin. The operator prerequisites are listed in the
   profile, including the Supabase-only bootstrap wrappers.
 
-The in-cluster profiles and the Supabase profile pin the services image built
-from 96BullSessions main `b47c1e6`, GHCR
+Every profile, every CI values file, and the worker and alleyoop chart
+defaults pin the services image built from 96BullSessions main `b47c1e6`, GHCR
 `ghcr.io/agentworkforce/96bulls-services@sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a`
 (publish-image run 41333160108). Its migration generation is
 `1d99ccc8222995c9f8c31334da1c574ca5a687436656d34d9521bc7859494718`. The AWS
@@ -208,7 +208,7 @@ external Supabase (`pod-identity`) and GCP Cloud SQL. For each one it asserts:
 - HoopDb and Locker;
 - which privileged Jobs render, with their psql variables and files;
 - what migrate waits for;
-- the image pins.
+- the image pins: every row renders only the final images, and the ECR image only on the AWS path.
 
 It also checks every mode combination the chart must refuse. CI runs it
 offline (`static`) and as a server-side dry run on kind (`dryrun`).

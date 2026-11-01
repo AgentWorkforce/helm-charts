@@ -10,6 +10,8 @@ global:
   tenant:
     orgId: org_ci
 worker:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   existingSecret: 96bulls-gcp
   summaryEncryption:
     existingSecret: 96bulls-gcp
@@ -36,6 +38,8 @@ worker:
     runtimeRoleLogin: true
     functionBoundaryMode: global-default-revoke
 alleyoop:
+  image:
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
   existingSecret: 96bulls-gcp
   hoopdb:
     existingSecret: 96bulls-gcp

@@ -61,22 +61,27 @@ done
 # pin the image built from 96BullSessions main b47c1e6 (#99 + #106): GHCR
 # (publish-image run 41333160108) and ECR (publish-image-ecr run 41333164245). The workloads and
 # the privileged SQL Jobs use the same image, and no Job overrides it. The
-# external-selfhosted profile pins nothing (the operator's own Postgres). The
-# Supabase profile pins the GHCR image too, but stays fail-closed (hold, no
-# boundary mode).
+# Every other profile (external-selfhosted, and the external-Supabase one, which
+# stays fail-closed) and the GCP values pin the GHCR image too. The chart
+# defaults (worker and alleyoop image.digest) are the same GHCR image, so a path
+# that pins nothing still gets it. The row loop below asserts that every
+# matrix row renders only the final images.
 GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
 ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
 pins_of() { yq -r '[.worker.image.tag, .worker.image.digest, .alleyoop.image.tag, .alleyoop.image.digest, .privilegedSql.sqlImage.digest, .searchWorkerRole.bootstrapJob.sqlImage.digest, .runtimeRole.bootstrapJob.sqlImage.digest, .functionDefaultRevoke.bootstrapJob.sqlImage.digest] | map(select(. != null and . != "")) | join(",")' "$1"; }
-f="$CHART/profiles/external-selfhosted.yaml"
-[ -z "$(pins_of "$f")" ] || err "profiles/external-selfhosted.yaml: pins a services image ($(pins_of "$f"))"
 # Rendered image refs of every services container (workloads, migrate, the SQL Jobs' sql copy).
 services_refs() {
   render "$@" | yq -r 'select(.kind == "Deployment" or .kind == "Job") | .spec.template.spec | ((.initContainers // []) + .containers)[] | select(.image | test("96bulls-services")) | .image' | grep -v '^---$' | sort -u
 }
-for pair in "profiles/selfhost-postgres.yaml|$GHCR" "profiles/migration.yaml|$GHCR" "profiles/external-supabase.yaml|$GHCR" "ci/aws-cnpg-values.yaml|$ECR"; do
+# The chart defaults are the final GHCR image.
+for v in "$ROOT/charts/96bulls-worker/values.yaml" "$ROOT/charts/alleyoop/values.yaml"; do
+  [ "$(yq -r '.image.digest' "$v")" = "${GHCR#*@}" ] || err "${v#"$ROOT"/}: image.digest is not the final b47c1e6 GHCR digest"
+done
+for pair in "profiles/selfhost-postgres.yaml|$GHCR" "profiles/migration.yaml|$GHCR" "profiles/external-supabase.yaml|$GHCR" "profiles/external-selfhosted.yaml|$GHCR" "ci/gcp-cloudsql-values.yaml|$GHCR" "ci/aws-cnpg-values.yaml|$ECR"; do
   rel=${pair%%|*} want=${pair#*|}
   extra=(); [[ $rel == profiles/* ]] && extra=("${REQUIRED[@]}")
   [[ $rel == profiles/external-supabase.yaml ]] && extra+=(--set supabaseActivation.hold=false)
+  [[ $rel == profiles/external-selfhosted.yaml ]] && extra+=("${RUNTIME[@]}")
   got=$(services_refs -f "$CHART/$rel" "${extra[@]}" | tr '\n' ' ' | sed 's/ $//')
   [ "$got" = "$want" ] || err "$rel: services images are [$got], want exactly [$want]"
 done
@@ -121,6 +126,20 @@ for row in "${MATRIX[@]}"; do
   echo "--- $mode: $label"
   helm lint --strict "$CHART" "${args[@]}" >/dev/null || { helm lint --strict "$CHART" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
   out=$(render "${args[@]}") || { err "$label: render failed"; continue; }
+
+  # Every services image this row renders is a final b47c1e6 image: GHCR, or
+  # ECR on the AWS path only. Any other digest or tag (e.g. the old db2663d
+  # default) fails.
+  imgs=$(yq -r 'select(.kind == "Deployment" or .kind == "Job") | .spec.template.spec | ((.initContainers // []) + .containers)[] | select(.image | test("96bulls-services")) | .image' <<<"$out" | grep -v '^---$' | sort -u)
+  [ -n "$imgs" ] || err "$label: no services image rendered"
+  while read -r img; do
+    [ -z "$img" ] && continue
+    case $img in
+      "$GHCR") ;;
+      "$ECR") [ "$rel" = ci/aws-cnpg-values.yaml ] || err "$label: ECR image outside the AWS path: $img" ;;
+      *) err "$label: non-final services image: $img" ;;
+    esac
+  done <<<"$imgs"
 
   # App workloads and the migrate Job, in every profile.
   for d in ci-worker-referee ci-worker-bob-costas ci-worker-hoopdb-indexer ci-alleyoop-ingest; do

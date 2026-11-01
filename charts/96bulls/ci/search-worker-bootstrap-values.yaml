@@ -24,7 +24,7 @@ runtimeRole:
 functionDefaultRevoke:
   bootstrapJob:
     enabled: true
-# CI placeholder digest: no image is pulled by the static checks.
+# The final b47c1e6 services image (GHCR publish-image run 41333160108).
 privilegedSql:
   sqlImage:
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
