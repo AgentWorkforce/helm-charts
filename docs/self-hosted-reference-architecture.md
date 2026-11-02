@@ -70,7 +70,9 @@ not hidden in chart conditionals.
 Operator decision (2026-11-01): self-hosted deployments support two transcript
 search profiles. They select a backend; they do not fork RelayHistory
 behavior, which already has a Postgres search path and a derived ClickHouse
-path. No RelayHistory or ClickHouse chart ships in this repository today.
+path. A RelayHistory chart (`charts/relayhistory`, single-replica, digest-pinned
+proof image) ships on this branch; no ClickHouse chart ships in this repository
+today.
 
 ### Standard (default): PostgreSQL + `pg_trgm`
 
@@ -159,6 +161,19 @@ AWS proof is complete only when evidence covers:
   verdicts when that add-on is enabled;
 - add-ons independently disabled without breaking the Relaycast core;
 - no AWS-specific branches in provider-neutral engine behavior.
+
+## Release and migration safety
+
+Initial installation and upgrade are different operations: use `helm install`
+only for a confirmed absent release and `helm upgrade` only for a confirmed
+existing release. Do not use `helm upgrade --install` or `--atomic` for this
+suite. An atomic Helm failure can change Kubernetes resources, but it cannot
+reverse PostgreSQL or SQLite migrations or restore PVC and object-store data.
+
+Before an upgrade, require exact chart/image migration compatibility, a
+current complete backup, a successful isolated restore drill, and an approved
+database-aware recovery procedure. Helm rollback is not database rollback.
+See the [backup and restore runbook](selfhost-backup-restore.md).
 
 ## Unresolved decisions
 
