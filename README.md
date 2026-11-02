@@ -14,6 +14,37 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | [alleyoop](charts/alleyoop) | 96Bulls ingest: receives session manifests and chunks and lands them in the Locker (S3) |
 | [relayauth](charts/relayauth) | Self-hosted RelayAuth issuer: immutable image, externally managed keys, single-writer SQLite, and optional JWKS ingress |
 
+## Self-hosted requirements registry
+
+[`self-hosted/requirements.yaml`](self-hosted/requirements.yaml) is the single
+source of truth for what a self-hosted install needs: every **requirement**
+(Secrets with exact names and keys, database roles and extensions, DNS/TLS,
+workload identity, cluster capabilities) and every **option** (HoopDb backend,
+`databaseMode`, function boundary, search backend, ingress scheme, add-ons),
+per install profile, with the chart values, env vars and Secret keys each maps
+to, who provides it, how to verify it, and file:line sources. It also holds the
+compatibility matrix: chart versions, services image digests, the
+sessions-pipeline commit and migration generation, and the supported
+`databaseMode` + boundary combinations. The readable form,
+[docs/self-hosted-requirements.md](docs/self-hosted-requirements.md), is
+generated from it.
+
+To add or change an entry, edit the YAML (the field reference is at the top of
+the file), then:
+
+```bash
+node ci/self-hosted-requirements/registry.mjs render   # regenerate the doc
+node ci/self-hosted-requirements/registry.mjs check    # what CI runs
+```
+
+CI (`lint.yml`, static job) fails when the registry and the charts disagree:
+a template env var, Secret key or Secret values path that is not registered; a
+shipped entry whose values path, env var or Secret name/key the charts do not
+have; a template that references a `planned` entry; a matrix digest, commit,
+generation, chart version or release tag that differs from the pins; or a stale
+generated doc. A new chart version needs a `current` row in
+`compatibility.releases` (`status: unreleased` until its tag exists).
+
 ## Quick start
 
 ```bash
@@ -44,6 +75,8 @@ plan and its proof gates are in
 That document also records the transcript search decision: PostgreSQL 17 with
 `pg_trgm` is the default backend (`postgres`). ClickHouse OSS is an optional
 scale profile and is not charted yet.
+What each install profile must provide and can choose is in
+[docs/self-hosted-requirements.md](docs/self-hosted-requirements.md).
 
 ### Install relayfile
 
@@ -283,7 +316,8 @@ installs. No chart reads a `search.*` value, and core availability does not
 depend on ClickHouse. `neon` is a hosted-provider name, not the self-hosted
 search backend. `HOOPDB_DB_MODE=selfhosted` is unchanged. The decision and
 the planned Secret boundary are in
-[Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles).
+[Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles). The registry tracks it as the planned option
+[`opt.96bulls.search-backend`](docs/self-hosted-requirements.md#opt-96bulls-search-backend).
 
 ### Install the 96Bulls app charts individually
 
