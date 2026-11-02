@@ -1,4 +1,4 @@
-# GKE + Cloud SQL (stacks/gcp/config.ts at 96BullSessions fe5a2da): cloudsql
+# GKE + Cloud SQL (stacks/gcp/config.ts at 96BullSessions 7d7229b): cloudsql
 # mode, the generic shim off, HOOPDB_ROLE_BOOTSTRAP false (no customer
 # superuser), global-default-revoke, the dedicated runtime role, and a separate
 # migration-owner URL (HOOPDB_MIGRATION_URL) for migrate only. The operator runs
@@ -11,7 +11,7 @@ global:
     orgId: org_ci
 worker:
   image:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   existingSecret: 96bulls-gcp
   summaryEncryption:
     existingSecret: 96bulls-gcp
@@ -39,7 +39,7 @@ worker:
     functionBoundaryMode: global-default-revoke
 alleyoop:
   image:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   existingSecret: 96bulls-gcp
   hoopdb:
     existingSecret: 96bulls-gcp

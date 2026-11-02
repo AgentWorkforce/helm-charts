@@ -58,17 +58,17 @@ for f in "$CHART"/profiles/*.yaml "$CHART"/ci/*-values.yaml; do
 done
 
 # Services image pins. The in-cluster CNPG profiles and the AWS proof values
-# pin the image built from 96BullSessions main fe5a2da (#124 + #125 + #139,
+# pin the image built from 96BullSessions main 7d7229b (#124 + #125 + #139 + #137,
 # generation eff8b3be...259b): GHCR
-# (publish-image run 41371030320) and ECR (publish-image-ecr run 41371033477). The workloads and
+# (publish-image run 41375745173) and ECR (publish-image-ecr run 41375747474). The workloads and
 # the privileged SQL Jobs use the same image, and no Job overrides it. The
 # Every other profile (external-selfhosted, and the external-Supabase one, which
 # stays held) and the GCP values pin the GHCR image too. The chart
 # defaults (worker and alleyoop image.digest) are the same GHCR image, so a path
 # that pins nothing still gets it. The row loop below asserts that every
 # matrix row renders only the final images.
-GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
-ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:c2b1798a19b2884a91413909551294da2768abbc01bdfbebce5f9c573b6656f8"
+GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
+ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9"
 pins_of() { yq -r '[.worker.image.tag, .worker.image.digest, .alleyoop.image.tag, .alleyoop.image.digest, .privilegedSql.sqlImage.digest, .searchWorkerRole.bootstrapJob.sqlImage.digest, .runtimeRole.bootstrapJob.sqlImage.digest, .functionDefaultRevoke.bootstrapJob.sqlImage.digest] | map(select(. != null and . != "")) | join(",")' "$1"; }
 # Rendered image refs of every services container (workloads, migrate, the SQL Jobs' sql copy).
 services_refs() {
@@ -76,7 +76,7 @@ services_refs() {
 }
 # The chart defaults are the final GHCR image.
 for v in "$ROOT/charts/96bulls-worker/values.yaml" "$ROOT/charts/alleyoop/values.yaml"; do
-  [ "$(yq -r '.image.digest' "$v")" = "${GHCR#*@}" ] || err "${v#"$ROOT"/}: image.digest is not the final fe5a2da GHCR digest"
+  [ "$(yq -r '.image.digest' "$v")" = "${GHCR#*@}" ] || err "${v#"$ROOT"/}: image.digest is not the final 7d7229b GHCR digest"
 done
 for pair in "profiles/selfhost-postgres.yaml|$GHCR" "profiles/migration.yaml|$GHCR" "profiles/external-supabase.yaml|$GHCR" "profiles/external-selfhosted.yaml|$GHCR" "ci/gcp-cloudsql-values.yaml|$GHCR" "ci/aws-cnpg-values.yaml|$ECR"; do
   rel=${pair%%|*} want=${pair#*|}
@@ -128,7 +128,7 @@ for row in "${MATRIX[@]}"; do
   helm lint --strict "$CHART" "${args[@]}" >/dev/null || { helm lint --strict "$CHART" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
   out=$(render "${args[@]}") || { err "$label: render failed"; continue; }
 
-  # Every services image this row renders is a final fe5a2da image: GHCR, or
+  # Every services image this row renders is a final 7d7229b image: GHCR, or
   # ECR on the AWS path only. Any other digest or tag (e.g. the old db2663d
   # default) fails.
   imgs=$(yq -r 'select(.kind == "Deployment" or .kind == "Job") | .spec.template.spec | ((.initContainers // []) + .containers)[] | select(.image | test("96bulls-services")) | .image' <<<"$out" | grep -v '^---$' | sort -u)

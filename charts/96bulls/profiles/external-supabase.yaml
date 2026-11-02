@@ -3,13 +3,13 @@
 #   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/external-supabase.yaml \
 #     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
 # Services image: GHCR, built from 96BullSessions main
-# fe5a2da06c11ea75544601cf90806c8bd2610ea7 (#124 session list RPC, #125 the
-# Supabase event-trigger function boundary, #139 its manifest sync), publish-image
-# run 41371030320, generation
+# 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad (#124 session list RPC, #125 the
+# Supabase event-trigger function boundary, #139 its manifest sync, #137 the exact sessions
+# function ACL check in every non-local boundary mode), publish-image run 41375745173, generation
 # eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b.
 # Function boundary: event-trigger (HOOPDB_FUNCTION_BOUNDARY_MODE), the path
 # chosen for Supabase over the project-wide default revoke (96BullSessions
-# #125). migrationProfile() at fe5a2da accepts it only in supabase mode.
+# #125). migrationProfile() at 7d7229b accepts it only in supabase mode.
 # FAIL-CLOSED: supabaseActivation.hold stops this profile from rendering. Even
 # rendered, migrate refuses with function_boundary_unproven before any write
 # until the operator has installed the reviewed event trigger (prerequisite 4)
@@ -53,7 +53,7 @@ hoopdb:
   enabled: false
 worker:
   image:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
@@ -71,7 +71,7 @@ worker:
       functionDefault: false
 alleyoop:
   image:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL

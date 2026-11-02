@@ -132,8 +132,9 @@ versioning.
 
 `worker.migrations` carries the migrator's database profile: 96BullSessions
 `src/hoopdb/migrate.ts` `migrationProfile()` at main
-`fe5a2da06c11ea75544601cf90806c8bd2610ea7` (#124 session list RPC, #125 the
-Supabase event-trigger function boundary, #139 its manifest sync). Each value is rendered at most
+`7d7229bb31c121ecb98cd4e35c248fc2cf5669ad` (#124 session list RPC, #125 the
+Supabase event-trigger function boundary, #139 its manifest sync, #137 the exact sessions function ACL check in every
+non-local boundary mode). Each value is rendered at most
 once, as an env var in the migrate container only. The render refuses these
 names in `worker.extraEnv` and component `env`, along with
 `HOOPDB_ROLE_BOOTSTRAP` and the old `HOOPDB_FUNCTION_BOUNDARY_APPROVED` name.
@@ -182,7 +183,7 @@ Where the migrator has no default, neither does the chart:
   legacy `relayhistory_runtime`. The Worker role is
   `session_directory_search_worker`.
 
-  The profile pins the fe5a2da GHCR image and selects
+  The profile pins the 7d7229b GHCR image and selects
   `functionBoundaryMode: event-trigger` (96BullSessions #125). It is still
   **fail-closed**: `supabaseActivation.hold` stops it from rendering, and even
   rendered, migrate refuses (`function_boundary_unproven`) until the operator
@@ -193,14 +194,14 @@ Where the migrator has no default, neither does the chart:
   profile, including the Supabase-only bootstrap wrappers.
 
 Every profile, every CI values file, and the worker and alleyoop chart
-defaults pin the services image built from 96BullSessions main `fe5a2da`, GHCR
-`ghcr.io/agentworkforce/96bulls-services@sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062`
-(publish-image run 41371030320). Its migration generation is
+defaults pin the services image built from 96BullSessions main `7d7229b`, GHCR
+`ghcr.io/agentworkforce/96bulls-services@sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2`
+(publish-image run 41375745173). Its migration generation is
 `eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b`. The AWS
 proof values (`charts/96bulls/ci/aws-cnpg-values.yaml`) pin the immutable ECR
 digest from the same source,
-`500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:c2b1798a19b2884a91413909551294da2768abbc01bdfbebce5f9c573b6656f8`
-(publish-image-ecr run 41371033477). Every profile
+`500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9`
+(publish-image-ecr run 41375747474). Every profile
 also needs `global.tenant.orgId` and `alleyoop.auth.jwksUrl`.
 
 `ci/96bulls-profiles/matrix.sh` renders every profile and every
@@ -216,7 +217,7 @@ external Supabase (`pod-identity`) and GCP Cloud SQL. For each one it asserts:
 It also checks every mode combination the chart must refuse. CI runs it
 offline (`static`) and as a server-side dry run on kind (`dryrun`).
 `ci/96bulls-search-worker-role/kind.sh` builds the services image from
-`services-commit` (fe5a2da) and fails unless the image's generation equals
+`services-commit` (7d7229b) and fails unless the image's generation equals
 `services-generation`.
 
 #### Session directory search Worker role

@@ -21,7 +21,7 @@ runtimeRole:
 functionDefaultRevoke:
   bootstrapJob:
     enabled: true
-# The final fe5a2da services image (GHCR publish-image run 41371030320).
+# The final 7d7229b services image (GHCR publish-image run 41375745173).
 privilegedSql:
   sqlImage:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"

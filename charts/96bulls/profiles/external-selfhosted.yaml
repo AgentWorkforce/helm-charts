@@ -19,13 +19,13 @@
 #      function_boundary_unproven. A platform with no superuser cannot run it,
 #      so migrate stays refused there.
 # All files come from the services image you deploy. Pinned: GHCR, built from
-# 96BullSessions main fe5a2da06c11ea75544601cf90806c8bd2610ea7 (publish-image
-# run 41371030320), generation eff8b3be...259b.
+# 96BullSessions main 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad (publish-image
+# run 41375745173), generation eff8b3be...259b.
 hoopdb:
   enabled: false
 worker:
   image:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
@@ -40,7 +40,7 @@ worker:
       functionDefault: false
 alleyoop:
   image:
-    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
