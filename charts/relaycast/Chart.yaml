@@ -5,6 +5,9 @@ type: application
 version: 0.2.0
 appVersion: "12.2.1-selfhost.1"
 kubeVersion: ">=1.22.0-0"
+annotations:
+  artifacthub.io/license: Apache-2.0
+  agentworkforce.dev/license-scope: "First-party chart code only; dependencies and images retain their own licenses."
 home: https://github.com/AgentWorkforce/relaycast
 keywords:
   - relaycast

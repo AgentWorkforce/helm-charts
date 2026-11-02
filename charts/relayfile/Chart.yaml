@@ -9,6 +9,9 @@ description: >
   Relayfile — virtual filesystem sync for agents. A single Go binary that
   serves a workspace file-sync API over HTTP, backed by Postgres in
   production or in-memory for development.
+annotations:
+  artifacthub.io/license: Apache-2.0
+  agentworkforce.dev/license-scope: "First-party chart code only; dependencies and images retain their own licenses."
 home: https://github.com/AgentWorkforce/relayfile
 keywords:
   - relayfile
