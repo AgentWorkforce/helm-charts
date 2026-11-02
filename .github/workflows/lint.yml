@@ -54,6 +54,19 @@ jobs:
       - name: 96bulls profile render matrix
         run: ci/96bulls-profiles/matrix.sh static
 
+      # self-hosted/requirements.yaml against the charts: every template env var,
+      # Secret key and Secret values path is registered; shipped entries exist in
+      # the charts and planned ones are not referenced; the compatibility matrix
+      # equals the pinned digests, services commit/generation and release tags.
+      - name: Self-hosted requirements registry
+        run: node ci/self-hosted-requirements/registry.mjs check
+
+      - name: Self-hosted requirements doc is generated
+        run: |
+          node ci/self-hosted-requirements/registry.mjs render
+          git diff --exit-code -- docs/self-hosted-requirements.md \
+            || { echo "::error::docs/self-hosted-requirements.md is stale: run node ci/self-hosted-requirements/registry.mjs render and commit it"; exit 1; }
+
       - name: Chart version bumped
         if: github.event_name == 'pull_request'
         run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"

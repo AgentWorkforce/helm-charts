@@ -3,6 +3,11 @@
 Status: implementation kickoff. This document distinguishes released behavior
 from planned adapter work; it is not evidence that the HA profiles exist.
 
+The per-profile list of what an operator must provide and can choose, and the
+chart/image/migration compatibility matrix, are in the
+[self-hosted requirements registry](self-hosted-requirements.md), generated
+from [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml).
+
 ## Product shape
 
 The self-hosted product is composed rather than monolithic.
@@ -20,6 +25,10 @@ An add-on may consume core APIs, but the core availability path must never
 depend on an add-on. In particular, Relaycast does not require Relayflows.
 
 ## Runtime profiles
+
+Relaycast's options for these, including the planned `aws-ha` and `gcp-ha`
+backends, are registry entry
+[`opt.relaycast.runtime-backend`](self-hosted-requirements.md#opt-relaycast-runtime-backend).
 
 ### `portable-single` — implemented
 
@@ -113,6 +122,13 @@ The intended shape, to be confirmed when a chart and conformance tests exist:
 
 Selecting `clickhouse` keeps the Postgres path configured, so setting
 `search.backend` back to `postgres` is the single-switch rollback.
+
+Registry entries: the planned option
+[`opt.96bulls.search-backend`](self-hosted-requirements.md#opt-96bulls-search-backend)
+(CI fails if any template reads a `search.*` value while it is planned), and
+the shipped requirement
+[`req.db.postgres-17-extensions`](self-hosted-requirements.md#req-db-postgres-17-extensions)
+(`pg_trgm`, `btree_gin`) that the standard profile relies on.
 
 The 96Bulls chart notes in the [README](../README.md#transcript-search-profiles)
 point back to this section.
