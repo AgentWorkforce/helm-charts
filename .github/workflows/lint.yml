@@ -61,6 +61,11 @@ jobs:
       - name: Self-hosted requirements registry
         run: node ci/self-hosted-requirements/registry.mjs check
 
+      # The checks themselves: deliberately broken copies must fail (and comment-only
+      # mentions must not count as references).
+      - name: Self-hosted requirements registry regression tests
+        run: ci/self-hosted-requirements/test.sh
+
       - name: Self-hosted requirements doc is generated
         run: |
           node ci/self-hosted-requirements/registry.mjs render
