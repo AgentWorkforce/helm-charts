@@ -271,22 +271,15 @@ private; locally, pass `SERVICES_IMAGE`). It proves:
 
 #### Transcript search profiles
 
-The default transcript search profile is the HoopDb Postgres with `pg_trgm`
-(backend `postgres`); self-managed ClickHouse OSS is an optional derived index
-for high-volume installs. No chart exposes a `search.*` value yet. See
-[Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles)
-for the decision and the planned values/Secret boundary.
-
-#### Transcript search profiles
-
-Shared transcript search has two profiles, written in
-[docs/self-hosted-reference-architecture.md](docs/self-hosted-reference-architecture.md).
-The default backend is `postgres`: PostgreSQL 17 and `pg_trgm` on the HoopDb
-this chart already installs. The search Worker role above is the privilege
-boundary for that path. ClickHouse OSS is the optional high-volume index.
-Nothing in this repository reads a ClickHouse value, and core availability
-does not depend on it. `neon` is a hosted-provider name, not the self-hosted
-search backend. `HOOPDB_DB_MODE=selfhosted` is unchanged.
+Shared transcript search has two profiles. The default is `postgres`:
+PostgreSQL 17 and `pg_trgm` on the HoopDb this chart already installs. The
+search Worker role above is the privilege boundary for that path.
+Self-managed ClickHouse OSS is an optional derived index for high-volume
+installs. No chart reads a `search.*` value, and core availability does not
+depend on ClickHouse. `neon` is a hosted-provider name, not the self-hosted
+search backend. `HOOPDB_DB_MODE=selfhosted` is unchanged. The decision and
+the planned Secret boundary are in
+[Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles).
 
 ### Install the 96Bulls app charts individually
 
