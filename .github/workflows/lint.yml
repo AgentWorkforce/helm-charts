@@ -2,7 +2,7 @@ name: Lint Charts
 
 on:
   pull_request:
-  workflow_call:  # release.yml runs the same checks before publishing
+  workflow_call:  # release.yml calls this before publishing a chart
     secrets:
       BULLS96_READ_TOKEN:
         required: false  # search-worker-role-kind fails closed without it
@@ -38,6 +38,9 @@ jobs:
       - name: Static chart checks
         run: scripts/ci/charts.sh static
 
+      - name: Agent Relay GCP proof render contract
+        run: ci/agent-relay/render.sh
+
       - name: Dependency pins are hook-free
         run: scripts/ci/deps.sh
 
@@ -66,6 +69,9 @@ jobs:
       - name: Self-hosted requirements registry regression tests
         run: ci/self-hosted-requirements/test.sh
 
+      - name: Customer release gate regression tests
+        run: python3 ci/customer-release-gate/test.py
+
       - name: Self-hosted requirements doc is generated
         run: |
           node ci/self-hosted-requirements/registry.mjs render
@@ -75,6 +81,15 @@ jobs:
       - name: Chart version bumped
         if: github.event_name == 'pull_request'
         run: scripts/ci/version-bump.sh "origin/${{ github.base_ref }}"
+
+  # Produces the `customer-release-gate` check name that branch protection and
+  # self-hosted/customer-release-evidence.json's requiredStatusChecks refer to.
+  customer-release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Customer release gate regression tests
+        run: python3 ci/customer-release-gate/test.py
 
   kind:
     runs-on: ubuntu-latest
