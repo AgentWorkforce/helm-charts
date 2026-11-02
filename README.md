@@ -41,6 +41,9 @@ Anonymous workspace creation is off; see
 workspace bootstrap, ingress, backups and restore, and upgrading from 0.1.0. The staged AWS-first/GCP-second adapter
 plan and its proof gates are in
 [docs/self-hosted-reference-architecture.md](docs/self-hosted-reference-architecture.md).
+That document also records the transcript search decision: PostgreSQL 17 with
+`pg_trgm` is the default backend (`postgres`). ClickHouse OSS is an optional
+scale profile and is not charted yet.
 
 ### Install relayfile
 
@@ -265,6 +268,25 @@ private; locally, pass `SERVICES_IMAGE`). It proves:
   role validation marker to pending, and running and restarted workloads go
   unready;
 - with a drifted role, both Jobs fail with `55000` and nothing becomes ready.
+
+#### Transcript search profiles
+
+The default transcript search profile is the HoopDb Postgres with `pg_trgm`
+(backend `postgres`); self-managed ClickHouse OSS is an optional derived index
+for high-volume installs. No chart exposes a `search.*` value yet. See
+[Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles)
+for the decision and the planned values/Secret boundary.
+
+#### Transcript search profiles
+
+Shared transcript search has two profiles, written in
+[docs/self-hosted-reference-architecture.md](docs/self-hosted-reference-architecture.md).
+The default backend is `postgres`: PostgreSQL 17 and `pg_trgm` on the HoopDb
+this chart already installs. The search Worker role above is the privilege
+boundary for that path. ClickHouse OSS is the optional high-volume index.
+Nothing in this repository reads a ClickHouse value, and core availability
+does not depend on it. `neon` is a hosted-provider name, not the self-hosted
+search backend. `HOOPDB_DB_MODE=selfhosted` is unchanged.
 
 ### Install the 96Bulls app charts individually
 

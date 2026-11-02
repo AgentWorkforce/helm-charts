@@ -56,6 +56,58 @@ If GCP requires a core API or semantic change after the AWS pattern is frozen,
 that is evidence the boundary is incomplete and must be corrected explicitly,
 not hidden in chart conditionals.
 
+## Transcript search profiles
+
+Operator decision (2026-11-01): self-hosted deployments support two transcript
+search profiles. They select a backend; they do not fork RelayHistory
+behavior, which already has a Postgres search path and a derived ClickHouse
+path. No RelayHistory or ClickHouse chart ships in this repository today.
+
+### Standard (default): PostgreSQL + `pg_trgm`
+
+- PostgreSQL 17 is both the system of record and the search backend.
+- `pg_trgm` is enabled and the existing RelayHistory GIN expression indexes
+  are installed. The CNPG HoopDb image already ships the extension and its
+  bootstrap creates it (`deps/cnpg-cluster-values.yaml`, `deps/PINS.md`).
+- Exact `ILIKE` behavior and tenant filters are preserved.
+- It adds no service beyond the Postgres already in the stack, so it is the
+  default for small and standard installations.
+- The backend is named `postgres`. `neon` is a hosted-provider name, not the
+  self-hosted abstraction.
+
+### Scale/HA (optional): self-managed ClickHouse OSS
+
+- PostgreSQL remains the source of truth and the hydration/authorization
+  store. Open-source ClickHouse, run in the customer's cluster, is only a
+  derived candidate/search index, matching the Cloud architecture.
+- Prefer the official ClickHouse Kubernetes Operator for HA. ClickHouse is
+  either an external endpoint with credentials or an operator-managed cluster.
+- It is optional for high-volume installs, never a required dependency. Core
+  availability must not depend on it.
+- The Postgres fallback, tail guard, isolation checks, backfill/parity gates,
+  and single-switch rollback are retained.
+
+### Not options
+
+- SQLite FTS5: local/on-device private search only, not shared multi-user
+  server search.
+- ObsessionDB: not the self-hosted default at this maturity.
+
+### Values and Secret boundary
+
+**Planned — not implemented; no chart or conformance test ships this yet.**
+The intended shape, to be confirmed when a chart and conformance tests exist:
+
+- `search.backend: postgres | clickhouse`, default `postgres`;
+- `search.clickhouse.external.{url, database, existingSecret, secretKeys}` for
+  an operator-supplied ClickHouse, or `search.clickhouse.operator.enabled` for
+  an operator-managed cluster;
+- ClickHouse credentials only through an existing Kubernetes Secret, never
+  inline values.
+
+The 96Bulls chart notes in the [README](../README.md#transcript-search-profiles)
+point back to this section.
+
 ## Proof and commit gates
 
 The sequence is deliberate:
