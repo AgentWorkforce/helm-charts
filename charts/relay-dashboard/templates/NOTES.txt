@@ -1,0 +1,9 @@
+relay-dashboard {{ include "relay-dashboard.fullname" . }} is configured as one static replica.
+
+  Service:  {{ include "relay-dashboard.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
+  Public:   {{ .Values.runtime.publicUrl }}
+{{- if .Values.ingress.enabled }}
+  Ingress:  https://{{ .Values.ingress.host }} routes {{ .Values.runtime.apiBasePath }} and
+            {{ .Values.runtime.loginPath }} to {{ .Values.api.serviceName }}:{{ .Values.api.servicePort }},
+            and / to this Service.
+{{- end }}

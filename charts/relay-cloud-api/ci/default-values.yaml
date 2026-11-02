@@ -1,0 +1,25 @@
+image:
+  digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+publicUrl: https://api.gcp-proof.agentrelay.com
+existingSecret: relay-cloud-api
+database:
+  runtimeRole: selfhost_runtime
+services:
+  relayauthUrl: http://ci-agent-relay-relayauth:8787
+  relaycastUrl: http://ci-agent-relay-relaycast:8787
+  relaycastPublicUrl: https://cast.gcp-proof.agentrelay.com
+  relayhistoryUrl: http://ci-agent-relay-relayhistory:8080
+  relayhistoryPublicUrl: https://history.gcp-proof.agentrelay.com
+ingress:
+  enabled: true
+  className: gce
+  hosts: [api.gcp-proof.agentrelay.com]
+  tls:
+    - secretName: api-gcp-proof-agentrelay-com-tls
+      hosts: [api.gcp-proof.agentrelay.com]
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-system
+  allowAllEgress: true

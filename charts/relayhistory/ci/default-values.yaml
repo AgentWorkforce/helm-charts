@@ -1,0 +1,23 @@
+image:
+  digest: sha256:3333333333333333333333333333333333333333333333333333333333333333
+database:
+  existingSecret: relayhistory-db
+relayauth:
+  historyOrigin: https://history.gcp-proof.agentrelay.com
+  jwksUrl: https://gcp-proof.agentrelay.com/.well-known/jwks.json
+  issuer: https://gcp-proof.agentrelay.com
+agentRelayCloud:
+  apiUrl: https://gcp-proof.agentrelay.com/cloud
+ingress:
+  enabled: true
+  className: gce
+  hosts: [history.gcp-proof.agentrelay.com]
+  tls:
+    - secretName: history-gcp-proof-agentrelay-com-tls
+      hosts: [history.gcp-proof.agentrelay.com]
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-system
+  allowAllEgress: true

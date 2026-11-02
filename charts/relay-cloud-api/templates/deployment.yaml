@@ -1,0 +1,80 @@
+{{- include "relay-cloud-api.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "relay-cloud-api.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{ include "relay-cloud-api.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{ include "relay-cloud-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "relay-cloud-api.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "relay-cloud-api.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext: {{ toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "relay-cloud-api.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: {{ toYaml .Values.server.command | nindent 12 }}
+          args: {{ toYaml .Values.server.args | nindent 12 }}
+          securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - { name: http, containerPort: {{ .Values.server.port }}, protocol: TCP }
+          env:
+            - { name: PORT, value: {{ .Values.server.port | quote }} }
+            - { name: SELFHOST_PUBLIC_URL, value: {{ .Values.publicUrl | quote }} }
+            - { name: RELAYAUTH_URL, value: {{ .Values.services.relayauthUrl | quote }} }
+            - { name: RELAYCAST_URL, value: {{ .Values.services.relaycastUrl | quote }} }
+            - { name: RELAYCAST_PUBLIC_URL, value: {{ .Values.services.relaycastPublicUrl | quote }} }
+            - { name: RELAYHISTORY_URL, value: {{ .Values.services.relayhistoryUrl | quote }} }
+            - { name: RELAYHISTORY_PUBLIC_URL, value: {{ .Values.services.relayhistoryPublicUrl | quote }} }
+            {{- include "relay-cloud-api.secretEnv" . | nindent 12 }}
+          volumeMounts:
+            - { name: secrets, mountPath: /var/run/agent-relay/secrets, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ .Values.existingSecret }}
+            defaultMode: 0440
+            items:
+              - { key: {{ .Values.secretKeys.databaseUrl | quote }}, path: {{ .Values.secretKeys.databaseUrl | quote }} }
+              - { key: {{ .Values.secretKeys.relayauthApiKey | quote }}, path: {{ .Values.secretKeys.relayauthApiKey | quote }} }
+              - { key: {{ .Values.secretKeys.bootstrapToken | quote }}, path: {{ .Values.secretKeys.bootstrapToken | quote }} }
+              - { key: {{ .Values.secretKeys.encryptionKey | quote }}, path: {{ .Values.secretKeys.encryptionKey | quote }} }
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints: {{ toYaml . | nindent 8 }}
+      {{- end }}
