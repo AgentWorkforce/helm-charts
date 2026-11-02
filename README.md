@@ -132,8 +132,9 @@ versioning.
 
 `worker.migrations` carries the migrator's database profile: 96BullSessions
 `src/hoopdb/migrate.ts` `migrationProfile()` at main
-`b47c1e6af43140de8395c1aa20178d014c92bbb7` (#99 plus the #106 Supabase
-compatibility change). Each value is rendered at most
+`7d7229bb31c121ecb98cd4e35c248fc2cf5669ad` (#124 session list RPC, #125 the
+Supabase event-trigger function boundary, #139 its manifest sync, #137 the exact sessions function ACL check in every
+non-local boundary mode). Each value is rendered at most
 once, as an env var in the migrate container only. The render refuses these
 names in `worker.extraEnv` and component `env`, along with
 `HOOPDB_ROLE_BOOTSTRAP` and the old `HOOPDB_FUNCTION_BOUNDARY_APPROVED` name.
@@ -147,7 +148,7 @@ Where the migrator has no default, neither does the chart:
 | `runtimeRole` | `HOOPDB_RUNTIME_ROLE` | Required. Outside local mode it must be a dedicated role, never the migration owner or the search Worker. |
 | `runtimeRoleLogin` | `HOOPDB_RUNTIME_ROLE_LOGIN` | Required outside local mode; rendered only when set. |
 | `runtimeWorkloadRole` | `HOOPDB_RUNTIME_WORKLOAD_ROLE` | Optional. |
-| `functionBoundaryMode` | `HOOPDB_FUNCTION_BOUNDARY_MODE` | `global-default-revoke` is the only implemented mode; `event-trigger` is refused. Required in selfhosted and cloudsql. In supabase it is the operator's decision (96BullSessions #98); unset, migrate fails closed. |
+| `functionBoundaryMode` | `HOOPDB_FUNCTION_BOUNDARY_MODE` | `global-default-revoke`, or `event-trigger` in supabase mode only (refused in local, selfhosted and cloudsql, as the migrator refuses it). Required in selfhosted and cloudsql. Optional in supabase; unset, migrate fails closed. |
 
 `charts/96bulls/profiles/` ships four render shapes:
 
@@ -182,22 +183,25 @@ Where the migrator has no default, neither does the chart:
   legacy `relayhistory_runtime`. The Worker role is
   `session_directory_search_worker`.
 
-  The profile pins the b47c1e6 GHCR image, which includes #106, but it is
-  still **fail-closed** in two ways. `supabaseActivation.hold` stops it from
-  rendering, and `functionBoundaryMode` is unset (an operator decision,
-  96BullSessions #98). Lift the hold only once that image is confirmed as the
-  production-Supabase pin. The operator prerequisites are listed in the
+  The profile pins the 7d7229b GHCR image and selects
+  `functionBoundaryMode: event-trigger` (96BullSessions #125). It is still
+  **fail-closed**: `supabaseActivation.hold` stops it from rendering, and even
+  rendered, migrate refuses (`function_boundary_unproven`) until the operator
+  has installed `hoopdb_sessions_function_boundary_supabase.sql` and
+  `--activation-check` reports `event_trigger.verified: true`. Lift the hold
+  only once that image is confirmed as the production-Supabase pin and the live
+  Supabase steps are approved. The operator prerequisites are listed in the
   profile, including the Supabase-only bootstrap wrappers.
 
 Every profile, every CI values file, and the worker and alleyoop chart
-defaults pin the services image built from 96BullSessions main `b47c1e6`, GHCR
-`ghcr.io/agentworkforce/96bulls-services@sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a`
-(publish-image run 41333160108). Its migration generation is
-`1d99ccc8222995c9f8c31334da1c574ca5a687436656d34d9521bc7859494718`. The AWS
+defaults pin the services image built from 96BullSessions main `7d7229b`, GHCR
+`ghcr.io/agentworkforce/96bulls-services@sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2`
+(publish-image run 41375745173). Its migration generation is
+`eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b`. The AWS
 proof values (`charts/96bulls/ci/aws-cnpg-values.yaml`) pin the immutable ECR
 digest from the same source,
-`500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698`
-(publish-image-ecr run 41333164245). Every profile
+`500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9`
+(publish-image-ecr run 41375747474). Every profile
 also needs `global.tenant.orgId` and `alleyoop.auth.jwksUrl`.
 
 `ci/96bulls-profiles/matrix.sh` renders every profile and every
@@ -213,7 +217,7 @@ external Supabase (`pod-identity`) and GCP Cloud SQL. For each one it asserts:
 It also checks every mode combination the chart must refuse. CI runs it
 offline (`static`) and as a server-side dry run on kind (`dryrun`).
 `ci/96bulls-search-worker-role/kind.sh` builds the services image from
-`services-commit` (b47c1e6) and fails unless the image's generation equals
+`services-commit` (7d7229b) and fails unless the image's generation equals
 `services-generation`.
 
 #### Session directory search Worker role

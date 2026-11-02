@@ -3,14 +3,18 @@
 #   helm template 96bulls charts/96bulls -f charts/96bulls/profiles/external-supabase.yaml \
 #     --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
 # Services image: GHCR, built from 96BullSessions main
-# b47c1e6af43140de8395c1aa20178d014c92bbb7 (includes the #106 PostgreSQL 16+
-# Supabase creator-edge compatibility change), publish-image run 41333160108,
-# generation 1d99ccc8222995c9f8c31334da1c574ca5a687436656d34d9521bc7859494718.
-# FAIL-CLOSED, twice over. First, supabaseActivation.hold stops this profile
-# from rendering. Second, functionBoundaryMode stays unset (an operator
-# decision, 96BullSessions #98), so even a rendered migrate refuses with
-# function_boundary_unproven before it writes anything. Lift the hold only when
-# this image is confirmed as the production-Supabase pin.
+# 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad (#124 session list RPC, #125 the
+# Supabase event-trigger function boundary, #139 its manifest sync, #137 the exact sessions
+# function ACL check in every non-local boundary mode), publish-image run 41375745173, generation
+# eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b.
+# Function boundary: event-trigger (HOOPDB_FUNCTION_BOUNDARY_MODE), the path
+# chosen for Supabase over the project-wide default revoke (96BullSessions
+# #125). migrationProfile() at 7d7229b accepts it only in supabase mode.
+# FAIL-CLOSED: supabaseActivation.hold stops this profile from rendering. Even
+# rendered, migrate refuses with function_boundary_unproven before any write
+# until the operator has installed the reviewed event trigger (prerequisite 4)
+# and the catalog proves it. Lift the hold only when this image is confirmed as
+# the production-Supabase pin and the live Supabase steps are approved.
 # This profile turns off everything the self-host profiles carry: the in-cluster
 # HoopDb, the plain-Postgres role shim, wait-for-role and every privileged SQL
 # Job. The chart refuses each of those in supabase mode.
@@ -31,20 +35,25 @@
 #      and CONNECT. The migrator only verifies it. Do not use the legacy
 #      relayhistory_runtime: the production preflight found it drifted
 #      (BYPASSRLS, TEMPORARY, a creator edge).
-#   4. The function boundary. hoopdb_function_default_revoke.sql is CNPG/selfhost
-#      only: never run it on Supabase, where the owner is postgres. The control
-#      on Supabase is an operator decision (96BullSessions #98). Until it exists,
-#      leave functionBoundaryMode unset; the migrator then refuses with
-#      function_boundary_unproven, and nothing is written. In supabase mode the
-#      migrator leaves the platform superuser (supabase_admin) out of creator
-#      coverage; every other role stays covered.
+#   4. The function boundary, after 2 and 3 and before the first migrate: run
+#      supabase/bootstrap/hoopdb_sessions_function_boundary_supabase.sql as
+#      postgres with -v runtime_role=bulls96_runtime. It installs the
+#      ddl_command_end trigger hoopdb_sessions_function_boundary (ENABLE ALWAYS)
+#      scoped to sessions, with no ALTER DEFAULT PRIVILEGES. If supautils refuses
+#      CREATE EVENT TRIGGER it fails closed (55000) and creates nothing. Then
+#      `migrate.ts --activation-check` with HOOPDB_DB_MODE=supabase and
+#      HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger must report
+#      event_trigger.verified: true. hoopdb_function_default_revoke.sql is
+#      CNPG/selfhost only: never run it on Supabase, where the owner is postgres.
+#      In supabase mode the migrator leaves the platform superuser
+#      (supabase_admin) out of creator coverage; every other role stays covered.
 supabaseActivation:
   hold: true
 hoopdb:
   enabled: false
 worker:
   image:
-    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
@@ -54,15 +63,15 @@ worker:
     runtimeRole: bulls96_runtime
     runtimeRoleLogin: true
     runtimeWorkloadRole: ""
-    # Fail-closed until the Supabase creator-edge change lands (see above).
-    functionBoundaryMode: ""
+    # supabase only; the migrator refuses it elsewhere (see prerequisite 4).
+    functionBoundaryMode: event-trigger
     waitForRole:
       enabled: false
       role: session_directory_search_worker
       functionDefault: false
 alleyoop:
   image:
-    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
   hoopdb:
     existingSecret: 96bulls-hoopdb
     key: HOOPDB_URL
