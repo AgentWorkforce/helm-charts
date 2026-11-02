@@ -14,7 +14,7 @@ registered, every shipped entry must exist in the charts, planned entries must
 not be referenced by any template, and the compatibility matrix must equal
 the pinned digests.
 
-Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 70 entries: 30 requirements (29 shipped, 1 planned), 40 options (38 shipped, 2 planned).
+Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 75 entries: 32 requirements (31 shipped, 1 planned), 43 options (41 shipped, 2 planned).
 
 ## Contents
 
@@ -29,6 +29,10 @@ Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.y
   - [gcp-cloudsql](#profile-gcp-cloudsql)
   - [relaycast](#profile-relaycast)
   - [relayauth](#profile-relayauth)
+  - [relayhistory](#profile-relayhistory)
+  - [relay-cloud-api](#profile-relay-cloud-api)
+  - [relay-dashboard](#profile-relay-dashboard)
+  - [agent-relay](#profile-agent-relay)
   - [relayfile](#profile-relayfile)
   - [relayflows](#profile-relayflows)
 - [All entries](#all-entries)
@@ -50,6 +54,7 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 | relaycast-0.1.0 | shipped | relaycast 0.1.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:5c86c095a335…` |  |  | image 8.0.0; superseded by 0.2.0. ci/relaycast/smoke.sh upgrades from it. |
 | relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
+| agent-relay-gcp-proof-0.1.0 | unreleased | agent-relay 0.1.0<br>relayhistory 0.1.0<br>relay-cloud-api 0.1.0<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.2.0, relayauth 0.1.1, 96bulls 0.5.1, relayhistory 0.1.0, relay-cloud-api 0.1.0, relay-dashboard 0.1.0, relayflows 0.2.3) | relayhistory: `ghcr.io/agentworkforce/relayhistory:0.1.0`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api:0.1.0`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard:0.1.0` |  |  | GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. |
 | relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. |
 | relayflows-0.2.3 | shipped | relayflows 0.2.3 | relayflows: `node:22.23.3-bookworm-slim` |  |  | the stock image installs the pinned relayflows runtime at start; production uses an immutable flow image. |
 
@@ -476,6 +481,55 @@ chart `relayauth` · install: `helm install relayauth agentworkforce/relayauth -
 | shipped | [Public JWKS ingress](#opt-relayauth-jwks-ingress) | `false`, `true` | `false` | values `jwksIngress.*`, `networkPolicy.enabled`, `networkPolicy.ingressFrom`; Secret `<jwksIngress.tls[].secretName>` (kubernetes.io/tls for the JWKS host) |
 | shipped | [CORS allowlist and RelayHistory assertion options](#opt-relayauth-cors-history) | `<any>` | `allowedOrigins=`, `allowPrivateHttpOrigin=false`, `bootstrapApiKeyOrg=org_selfhost` | values `cors.allowedOrigins`, `relayhistory.allowPrivateHttpOrigin`, `relayhistory.bootstrapApiKeyOrg`; env `ALLOWED_ORIGINS`, `RELAYAUTH_ALLOW_PRIVATE_HTTP_HISTORY_ORIGIN`, `RELAYAUTH_BOOTSTRAP_API_KEY_ORG` |
 
+### Profile: relayhistory
+
+**Relay History data plane.** Single-replica GCP proof shape backed by operator-managed PostgreSQL 17; no HA claim.
+
+chart `relayhistory` · values [`ci/default-values.yaml`](../charts/relayhistory/ci/default-values.yaml) · install: `helm install relayhistory agentworkforce/relayhistory -f values.yaml --set image.digest=sha256:<digest>`
+
+**Requirements (provide these)**
+
+| | requirement | provided by | maps to | verify |
+| --- | --- | --- | --- | --- |
+| shipped | [Relay History database and optional provider Secrets](#req-relayhistory-config) | operator | values `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`; env `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`; Secret `<database.existingSecret>` keys `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`; Secret `<optional provider Secret>` keys `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | the migration Job completes, then /readyz returns 200 through the history host |
+
+### Profile: relay-cloud-api
+
+**Self-host control-plane API.** Single-replica self-host API with normal migration Job and existing Secrets only; no HA claim.
+
+chart `relay-cloud-api` · values [`ci/default-values.yaml`](../charts/relay-cloud-api/ci/default-values.yaml) · install: `helm install relay-cloud-api agentworkforce/relay-cloud-api -f values.yaml --set image.digest=sha256:<digest>`
+
+**Requirements (provide these)**
+
+| | requirement | provided by | maps to | verify |
+| --- | --- | --- | --- | --- |
+| shipped | [Self-host control-plane existing Secret and service configuration](#req-relay-cloud-api-config) | operator | values `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `ingress.tls`, `imagePullSecrets`; env `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`; Secret `<existingSecret>` keys `database-url`, `database-migrations-url`, `relayauth-api-key`, `selfhost-bootstrap-token`, `selfhost-encryption-key`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls, normally managed by the GKE ingress certificate path); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url |
+
+### Profile: relay-dashboard
+
+**Self-host dashboard.** Static dashboard whose ingress sends same-origin /cloud/api to relay-cloud-api.
+
+chart `relay-dashboard` · values [`ci/default-values.yaml`](../charts/relay-dashboard/ci/default-values.yaml) · install: `helm install relay-dashboard agentworkforce/relay-dashboard -f values.yaml --set image.digest=sha256:<digest>`
+
+**Options (choose)**
+
+| | option | choices | default here | maps to |
+| --- | --- | --- | --- | --- |
+| shipped | [Dashboard ingress and same-origin API proxy](#opt-relay-dashboard-ingress) | `enabled`, `disabled` | `enabled` | values `runtime.publicUrl`, `runtime.appPath`, `runtime.apiBasePath`, `runtime.loginPath`, `ingress.tls`, `imagePullSecrets`; env `DASHBOARD_PUBLIC_URL`, `DASHBOARD_APP_PATH`, `DASHBOARD_API_BASE_PATH`, `DASHBOARD_LOGIN_PATH`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) |
+
+### Profile: agent-relay
+
+**GCP messaging and Sessions suite.** Relaycast, RelayAuth, 96Bulls, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
+
+chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm install agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml --set relay-cloud-api.image.digest=sha256:<digest>`
+
+**Options (choose)**
+
+| | option | choices | default here | maps to |
+| --- | --- | --- | --- | --- |
+| shipped | [Single GKE ingress for the proof hosts](#opt-agent-relay-gke-ingress) | `enabled`, `disabled` | `disabled` | values `gkeIngress.enabled`, `gkeIngress.staticIpName`, `gkeIngress.managedCertificateName`, `gkeIngress.frontendConfigName`, `gkeIngress.hosts.*`, `gkeIngress.backends.*`, `relayauth.jwksIngress.enabled` |
+| shipped | [Optional Relayflows component in the suite](#opt-agent-relay-relayflows) | `enabled`, `disabled` | `disabled` | values `components.relayflows`, `relayflows.*` |
+
 ### Profile: relayfile
 
 **Relayfile server.** Go server, Postgres-backed in production. Inclusion in the self-host product is unresolved (docs/self-hosted-reference-architecture.md).
@@ -866,6 +920,47 @@ from a Secret, never values. Secret and value names are proposed.
 - Secret: `<model key Secret>`; keys `OPENAI_API_KEY`
 - Verify: not applicable until charted
 - Sources: `sessions-pipeline@475d503:src/session-brief/config.ts:6`
+
+#### req.relay-cloud-api.config
+
+<a id="req-relay-cloud-api-config"></a>
+
+**Self-host control-plane existing Secret and service configuration** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+packages/selfhost-api reads its runtime database, RelayAuth API key,
+bootstrap token and encryption key only from an existing Secret mounted
+as files. The migration owner URL is projected only into the migration
+Job. Internal service origins are explicit chart values; Relaycast and
+RelayHistory public origins must use public multi-label HTTPS DNS.
+
+- Provided by: operator
+- Values: `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `ingress.tls`, `imagePullSecrets`
+- Env: `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`
+- Secret: `<existingSecret>` from `existingSecret`; keys `database-url` from `secretKeys.databaseUrl`; `database-migrations-url` from `secretKeys.databaseMigrationsUrl`; `relayauth-api-key` from `secretKeys.relayauthApiKey`; `selfhost-bootstrap-token` from `secretKeys.bootstrapToken`; `selfhost-encryption-key` from `secretKeys.encryptionKey`
+- Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls, normally managed by the GKE ingress certificate path
+- Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
+- Verify: helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
+
+#### req.relayhistory.config
+
+<a id="req-relayhistory-config"></a>
+
+**Relay History database and optional provider Secrets** · shipped · chart `relayhistory` · profiles relayhistory
+
+Relay History requires runtime and migration-owner PostgreSQL URLs from an
+existing Secret. Optional embeddings, analysis and telemetry credentials
+also reference existing Secrets; no Secret is created by the chart.
+
+- Provided by: operator
+- Values: `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`
+- Env: `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`
+- Secret: `<database.existingSecret>` from `database.existingSecret`; keys `DATABASE_URL` from `database.keys.url`; `DATABASE_MIGRATIONS_URL` from `database.keys.migrationsUrl`
+- Secret: `<optional provider Secret>`; keys `EMBEDDING_API_KEY` from `embeddings.key`; `OPENAI_API_KEY` from `sessionAnalysis.key`; `POSTHOG_API_KEY` from `telemetry.key`
+- Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls
+- Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
+- Verify: the migration Job completes, then /readyz returns 200 through the history host
+- Sources: [`charts/relayhistory/values.yaml`](../charts/relayhistory/values.yaml), [`charts/relayhistory/templates/migrate-job.yaml`](../charts/relayhistory/templates/migrate-job.yaml)
 
 #### req.relaycast.secret
 
@@ -1367,6 +1462,63 @@ key Secret (req.secret.model-api-key). Values names are proposed.
 - Env: `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL`
 - Verify: not applicable until charted
 - Sources: `sessions-pipeline@475d503:src/session-brief/config.ts:4`, `sessions-pipeline@475d503:src/session-brief/main.ts:2`
+
+#### opt.relay-dashboard.ingress
+
+<a id="opt-relay-dashboard-ingress"></a>
+
+**Dashboard ingress and same-origin API proxy** · shipped · chart `relay-dashboard` · profiles relay-dashboard
+
+The dashboard ingress routes /cloud/api to relay-cloud-api and / to the
+dashboard. The GKE proof disables this leaf ingress and supplies the same
+routes through its single umbrella Ingress.
+
+- Default: `enabled`
+- Choices: `enabled`; `disabled`
+- Provided by: operator
+- Values: `runtime.publicUrl`, `runtime.appPath`, `runtime.apiBasePath`, `runtime.loginPath`, `ingress.tls`, `imagePullSecrets`
+- Env: `DASHBOARD_PUBLIC_URL`, `DASHBOARD_APP_PATH`, `DASHBOARD_API_BASE_PATH`, `DASHBOARD_LOGIN_PATH`
+- Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls
+- Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
+- Verify: render contains the configured dashboard runtime environment and routes /cloud/api to relay-cloud-api
+- Sources: [`charts/relay-dashboard/templates/ingress.yaml`](../charts/relay-dashboard/templates/ingress.yaml), [`ci/agent-relay/render.sh`](../ci/agent-relay/render.sh)
+
+#### opt.agent-relay.gke-ingress
+
+<a id="opt-agent-relay-gke-ingress"></a>
+
+**Single GKE ingress for the proof hosts** · shipped · chart `agent-relay` · profiles agent-relay
+
+One GCE Ingress uses the reserved global address, one ManagedCertificate
+for all four hosts and a FrontendConfig HTTPS redirect. Leaf ingresses
+are disabled and all ClusterIP backends use standalone NEGs.
+
+- Default: `disabled`
+- Choices: `enabled`; `disabled`
+- Provided by: chart
+- Values: `gkeIngress.enabled`, `gkeIngress.staticIpName`, `gkeIngress.managedCertificateName`, `gkeIngress.frontendConfigName`, `gkeIngress.hosts.*`, `gkeIngress.backends.*`, `relayauth.jwksIngress.enabled`
+- Verify: render contains exactly one Ingress, the four expected hosts, ManagedCertificate, FrontendConfig and NEG annotations
+- Sources: [`charts/agent-relay/templates/gke-ingress.yaml`](../charts/agent-relay/templates/gke-ingress.yaml), [`charts/agent-relay/values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`ci/agent-relay/render.sh`](../ci/agent-relay/render.sh)
+
+#### opt.agent-relay.relayflows
+
+<a id="opt-agent-relay-relayflows"></a>
+
+**Optional Relayflows component in the suite** · shipped · chart `agent-relay` · profiles agent-relay
+
+components.relayflows adds the relayflows subchart to the agent-relay
+suite; relayflows.* values pass through to it unchanged. Off by default.
+standalone mode runs a flow Job/CronJob entirely in-cluster today.
+cloudWorker mode enrolls against worker.cloudUrl and is blocked until
+the self-host API implements the /api/v1/workers/* enroll, queue and
+assignment endpoints. See docs/self-hosted-relayflows.md.
+
+- Default: `disabled`
+- Choices: `enabled`; `disabled`
+- Provided by: operator
+- Values: `components.relayflows`, `relayflows.*`
+- Verify: the proof render emits no relayflows manifest while disabled; enabling renders only relayflows resources
+- Sources: [`charts/agent-relay/Chart.yaml:41`](../charts/agent-relay/Chart.yaml#L41), [`charts/agent-relay/values.yaml:11`](../charts/agent-relay/values.yaml#L11), [`ci/agent-relay/render.sh:12`](../ci/agent-relay/render.sh#L12), [`docs/self-hosted-relayflows.md`](../docs/self-hosted-relayflows.md)
 
 #### opt.stack.relaycast
 

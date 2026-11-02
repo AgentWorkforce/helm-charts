@@ -1,0 +1,9 @@
+{
+  "relayhistory": {
+    "image": {
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "repository": "registry.example.com/customer/relayhistory",
+      "tag": ""
+    }
+  }
+}

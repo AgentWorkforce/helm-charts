@@ -1,0 +1,660 @@
+{
+  "$id": "https://selfhost.agentrelay.com/schemas/customer-release-evidence-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "operationalReadiness": {
+      "additionalProperties": false,
+      "properties": {
+        "loadTest": {
+          "$ref": "#/$defs/releaseBoundGate"
+        },
+        "observability": {
+          "additionalProperties": false,
+          "properties": {
+            "alerts": {
+              "$ref": "#/$defs/evidenceGate"
+            },
+            "dashboards": {
+              "$ref": "#/$defs/evidenceGate"
+            },
+            "runbooks": {
+              "$ref": "#/$defs/evidenceGate"
+            }
+          },
+          "required": [
+            "alerts",
+            "dashboards",
+            "runbooks"
+          ],
+          "type": "object"
+        },
+        "recovery": {
+          "additionalProperties": false,
+          "properties": {
+            "artifactSha256": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "evidence": {
+              "type": "string"
+            },
+            "result": {
+              "enum": [
+                "pass",
+                "fail",
+                "not-run"
+              ]
+            },
+            "rpoMinutes": {
+              "const": 15
+            },
+            "rtoMinutes": {
+              "const": 240
+            }
+          },
+          "required": [
+            "rpoMinutes",
+            "rtoMinutes",
+            "result",
+            "artifactSha256",
+            "evidence"
+          ],
+          "type": "object"
+        },
+        "serviceLevel": {
+          "additionalProperties": false,
+          "properties": {
+            "availabilityPercent": {
+              "const": 99.9
+            },
+            "errorBudgetPercent": {
+              "const": 0.1
+            },
+            "measurementWindow": {
+              "const": "calendar-month"
+            }
+          },
+          "required": [
+            "availabilityPercent",
+            "errorBudgetPercent",
+            "measurementWindow"
+          ],
+          "type": "object"
+        },
+        "supportedTier": {
+          "additionalProperties": false,
+          "properties": {
+            "concurrentAgents": {
+              "const": 50
+            },
+            "sessionsPerDay": {
+              "const": 10000
+            },
+            "users": {
+              "const": 100
+            }
+          },
+          "required": [
+            "users",
+            "concurrentAgents",
+            "sessionsPerDay"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "serviceLevel",
+        "supportedTier",
+        "recovery",
+        "loadTest",
+        "observability"
+      ],
+      "type": "object"
+    },
+    "versionCompatibility": {
+      "additionalProperties": false,
+      "properties": {
+        "desktopCurrentVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "desktopPreviousVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "matrix": {
+          "additionalProperties": false,
+          "properties": {
+            "serverCurrentDesktopCurrent": {
+              "$ref": "#/$defs/compatibilityGate"
+            },
+            "serverCurrentDesktopPrevious": {
+              "$ref": "#/$defs/compatibilityGate"
+            },
+            "serverPreviousDesktopCurrent": {
+              "$ref": "#/$defs/compatibilityGate"
+            },
+            "serverPreviousDesktopPrevious": {
+              "$ref": "#/$defs/compatibilityGate"
+            }
+          },
+          "required": [
+            "serverCurrentDesktopCurrent",
+            "serverCurrentDesktopPrevious",
+            "serverPreviousDesktopCurrent",
+            "serverPreviousDesktopPrevious"
+          ],
+          "type": "object"
+        },
+        "serverCurrentVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "serverPreviousVersion": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "serverCurrentVersion",
+        "serverPreviousVersion",
+        "desktopCurrentVersion",
+        "desktopPreviousVersion",
+        "matrix"
+      ],
+      "type": "object"
+    },
+    "desktop": {
+      "additionalProperties": false,
+      "properties": {
+        "customerPlatforms": {
+          "items": {
+            "enum": [
+              "darwin/amd64",
+              "darwin/arm64",
+              "linux/amd64",
+              "linux/arm64"
+            ]
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "evidence": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run"
+          ]
+        },
+        "testedPlatforms": {
+          "items": {
+            "enum": [
+              "darwin/amd64",
+              "darwin/arm64",
+              "linux/amd64",
+              "linux/arm64"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "customerPlatforms",
+        "testedPlatforms",
+        "result",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "licenses": {
+      "additionalProperties": false,
+      "properties": {
+        "firstParty": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "enum": [
+                  "approved",
+                  "blocked"
+                ]
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "spdx": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "decision",
+              "spdx",
+              "evidence"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "firstParty"
+      ],
+      "type": "object"
+    },
+    "relayHistoryMigrations": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "type": "string"
+        },
+        "imageCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sourceCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sourceRevision": {
+          "pattern": "^[0-9a-f]{40,64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceRevision",
+        "sourceCount",
+        "imageCount",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "branchControls": {
+          "additionalProperties": false,
+          "properties": {
+            "branch": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "protected": {
+              "type": "boolean"
+            },
+            "requiredApprovals": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "requiredStatusChecks": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "requiresPullRequest": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "branch",
+            "protected",
+            "requiresPullRequest",
+            "requiredApprovals",
+            "requiredStatusChecks"
+          ],
+          "type": "object"
+        },
+        "chartVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "environmentControls": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "preventsSelfReview": {
+              "type": "boolean"
+            },
+            "protected": {
+              "type": "boolean"
+            },
+            "requiredApprovals": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "protected",
+            "requiredApprovals",
+            "preventsSelfReview"
+          ],
+          "type": "object"
+        },
+        "imageManifestSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "valuesFile": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "chartVersion",
+        "valuesFile",
+        "imageManifestSha256",
+        "branchControls",
+        "environmentControls"
+      ],
+      "type": "object"
+    },
+    "releaseDecision": {
+      "enum": [
+        "approved",
+        "blocked"
+      ]
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "upgradeRestore": {
+      "additionalProperties": false,
+      "properties": {
+        "restore": {
+          "$ref": "#/$defs/testEvidence"
+        },
+        "upgrade": {
+          "$ref": "#/$defs/testEvidence"
+        }
+      },
+      "required": [
+        "upgrade",
+        "restore"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "releaseDecision",
+    "release",
+    "licenses",
+    "relayHistoryMigrations",
+    "upgradeRestore",
+    "desktop"
+  ],
+  "title": "Agent Relay customer bundle release evidence",
+  "type": "object",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "releaseDecision": {
+            "const": "approved"
+          }
+        },
+        "required": [
+          "releaseDecision"
+        ]
+      },
+      "then": {
+        "required": [
+          "operationalReadiness",
+          "versionCompatibility"
+        ],
+        "properties": {
+          "operationalReadiness": {
+            "properties": {
+              "loadTest": {
+                "properties": {
+                  "result": {
+                    "const": "pass"
+                  }
+                }
+              },
+              "observability": {
+                "properties": {
+                  "alerts": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  },
+                  "dashboards": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  },
+                  "runbooks": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  }
+                }
+              },
+              "recovery": {
+                "properties": {
+                  "result": {
+                    "const": "pass"
+                  }
+                }
+              }
+            }
+          },
+          "versionCompatibility": {
+            "properties": {
+              "matrix": {
+                "properties": {
+                  "serverCurrentDesktopCurrent": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  },
+                  "serverCurrentDesktopPrevious": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  },
+                  "serverPreviousDesktopCurrent": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  },
+                  "serverPreviousDesktopPrevious": {
+                    "properties": {
+                      "result": {
+                        "const": "pass"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "compatibilityGate": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "desktopVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run"
+          ]
+        },
+        "serverVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "testedPlatforms": {
+          "items": {
+            "enum": [
+              "darwin/amd64",
+              "darwin/arm64",
+              "linux/amd64",
+              "linux/arm64"
+            ]
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "serverVersion",
+        "desktopVersion",
+        "testedPlatforms",
+        "result",
+        "artifactSha256",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "evidenceGate": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run"
+          ]
+        }
+      },
+      "required": [
+        "result",
+        "artifactSha256",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "releaseBoundGate": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "chartVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "imageManifestSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run"
+          ]
+        },
+        "workloadProfile": {
+          "const": "supported-100"
+        }
+      },
+      "required": [
+        "workloadProfile",
+        "result",
+        "chartVersion",
+        "imageManifestSha256",
+        "artifactSha256",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "testEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "chartVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "imageManifestSha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "not-run"
+          ]
+        }
+      },
+      "required": [
+        "result",
+        "chartVersion",
+        "imageManifestSha256",
+        "artifactSha256",
+        "evidence"
+      ],
+      "type": "object"
+    }
+  }
+}

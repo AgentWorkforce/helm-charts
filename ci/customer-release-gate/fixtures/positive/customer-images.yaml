@@ -1,0 +1,52 @@
+{
+  "apiVersion": "selfhost.agentrelay.com/v1alpha1",
+  "blockers": [],
+  "images": [
+    {
+      "active": true,
+      "approval": {
+        "blockingReasons": [],
+        "status": "approved"
+      },
+      "customerAcquisition": {
+        "procedure": "Copy the signed digest into the customer registry by digest.",
+        "status": "promoted-customer-registry"
+      },
+      "current": {
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "repository": "registry.example.com/customer/relayhistory"
+      },
+      "id": "relayhistory",
+      "license": {
+        "evidence": "legal/relayhistory-license-decision.json",
+        "spdx": "LicenseRef-AgentWorkforce-Commercial",
+        "status": "approved"
+      },
+      "platforms": {
+        "expected": [
+          "linux/amd64",
+          "linux/arm64"
+        ],
+        "status": "verified",
+        "verifiedFromRegistry": [
+          "linux/amd64",
+          "linux/arm64"
+        ]
+      },
+      "release": {
+        "buildsCommittedRevision": true,
+        "publishesProvenance": true,
+        "publishesSbom": true,
+        "run": "https://ci.example.com/runs/100",
+        "workflow": "https://ci.example.com/workflows/customer-image"
+      },
+      "source": {
+        "repository": "https://github.com/AgentWorkforce/relayhistory-cloud",
+        "reproducibleReference": true,
+        "revision": "1111111111111111111111111111111111111111"
+      }
+    }
+  ],
+  "kind": "CustomerImageSourceManifest",
+  "status": "ready"
+}

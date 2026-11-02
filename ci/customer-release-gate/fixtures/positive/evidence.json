@@ -1,0 +1,72 @@
+{
+  "desktop": {
+    "customerPlatforms": [
+      "linux/amd64"
+    ],
+    "evidence": "https://ci.example.com/runs/desktop-100",
+    "result": "pass",
+    "testedPlatforms": [
+      "linux/amd64"
+    ]
+  },
+  "licenses": {
+    "firstParty": [
+      {
+        "decision": "approved",
+        "evidence": "legal/helm-charts-license-decision.json",
+        "id": "helm-charts",
+        "spdx": "LicenseRef-AgentWorkforce-Commercial"
+      },
+      {
+        "decision": "approved",
+        "evidence": "legal/relayhistory-license-decision.json",
+        "id": "relayhistory",
+        "spdx": "LicenseRef-AgentWorkforce-Commercial"
+      }
+    ]
+  },
+  "relayHistoryMigrations": {
+    "evidence": "https://ci.example.com/runs/relayhistory-migrations-100",
+    "imageCount": 24,
+    "sourceCount": 24,
+    "sourceRevision": "1111111111111111111111111111111111111111"
+  },
+  "release": {
+    "branchControls": {
+      "branch": "main",
+      "protected": true,
+      "requiredApprovals": 2,
+      "requiredStatusChecks": [
+        "customer-release-gate"
+      ],
+      "requiresPullRequest": true
+    },
+    "chartVersion": "1.0.0",
+    "environmentControls": {
+      "name": "customer-release",
+      "preventsSelfReview": true,
+      "protected": true,
+      "requiredApprovals": 1
+    },
+    "imageManifestSha256": "sha256:126352614add9266bbfce4a47e131a59a117baa1e4425174746cb5f445834e33",
+    "valuesFile": "values.yaml"
+  },
+  "releaseDecision": "approved",
+  "schemaVersion": 1,
+  "upgradeRestore": {
+    "restore": {
+      "artifactSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "chartVersion": "1.0.0",
+      "evidence": "https://ci.example.com/runs/restore-100",
+      "imageManifestSha256": "sha256:126352614add9266bbfce4a47e131a59a117baa1e4425174746cb5f445834e33",
+      "result": "pass"
+    },
+    "upgrade": {
+      "artifactSha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "chartVersion": "1.0.0",
+      "evidence": "https://ci.example.com/runs/upgrade-100",
+      "imageManifestSha256": "sha256:126352614add9266bbfce4a47e131a59a117baa1e4425174746cb5f445834e33",
+      "result": "pass"
+    }
+  }
+}

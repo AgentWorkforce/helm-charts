@@ -305,7 +305,12 @@ checks.shipped = () => {
 checks.planned = () => {
   const c = 'planned';
   for (const e of entries.filter((x) => x.status === 'planned')) {
-    for (const ch of CHARTS) {
+    // A planned env name may already be shipped by an unrelated chart (for
+    // example Relay History can use OPENAI_API_KEY while the 96Bulls model
+    // worker remains planned). Enforce absence only in the entry's chart
+    // family; normalized value paths still catch umbrella/subchart reads.
+    const plannedCharts = [...new Set(entryCharts(e).flatMap(chartFamily))];
+    for (const ch of plannedCharts) {
       for (const n of entryEnv(e)) if (scans[ch].env.has(n) || new RegExp(`\\b${n}\\b`).test(templateText[ch])) err(c, `${e.id} is planned, but charts/${ch}/templates references env ${n}: ship it (status: shipped) or remove the reference`);
       // Paths are normalized (an umbrella .Values.worker.x is 96bulls-worker:x), so
       // a planned path is caught in its own chart's templates and in any chart

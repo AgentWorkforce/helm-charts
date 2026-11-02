@@ -1,0 +1,98 @@
+{
+  "desktop": {
+    "customerPlatforms": [
+      "linux/amd64"
+    ],
+    "evidence": "",
+    "result": "not-run",
+    "testedPlatforms": []
+  },
+  "licenses": {
+    "firstParty": [
+      {
+        "decision": "approved",
+        "evidence": "LICENSE",
+        "id": "helm-charts",
+        "spdx": "Apache-2.0"
+      },
+      {
+        "decision": "approved",
+        "evidence": "self-hosted/customer-images.yaml",
+        "id": "relaycast",
+        "spdx": "Apache-2.0"
+      },
+      {
+        "decision": "approved",
+        "evidence": "self-hosted/customer-images.yaml",
+        "id": "relayauth",
+        "spdx": "Apache-2.0"
+      },
+      {
+        "decision": "blocked",
+        "evidence": "self-hosted/customer-images.yaml",
+        "id": "sessions-services",
+        "spdx": null
+      },
+      {
+        "decision": "blocked",
+        "evidence": "self-hosted/customer-images.yaml",
+        "id": "relayhistory",
+        "spdx": null
+      },
+      {
+        "decision": "blocked",
+        "evidence": "self-hosted/customer-images.yaml",
+        "id": "selfhost-api",
+        "spdx": null
+      },
+      {
+        "decision": "blocked",
+        "evidence": "self-hosted/customer-images.yaml",
+        "id": "relay-dashboard",
+        "spdx": null
+      }
+    ]
+  },
+  "relayHistoryMigrations": {
+    "evidence": "",
+    "imageCount": 0,
+    "sourceCount": 0,
+    "sourceRevision": "4b5839f17c5e0cd481e92712c2a1a340a1604e73"
+  },
+  "release": {
+    "branchControls": {
+      "branch": "main",
+      "protected": false,
+      "requiredApprovals": 0,
+      "requiredStatusChecks": [],
+      "requiresPullRequest": false
+    },
+    "chartVersion": "0.1.0",
+    "environmentControls": {
+      "name": "customer-release",
+      "preventsSelfReview": false,
+      "protected": false,
+      "requiredApprovals": 0
+    },
+    "imageManifestSha256": "sha256:f646c0c9371b623e4bbdc301793e32887f9c32ea04d1206fffab1d1a69f95fff",
+    "valuesFile": "charts/agent-relay/values-gcp.yaml"
+  },
+  "releaseDecision": "blocked",
+  "schemaVersion": 1,
+  "upgradeRestore": {
+    "restore": {
+      "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "chartVersion": "0.1.0",
+      "evidence": "",
+      "imageManifestSha256": "sha256:f646c0c9371b623e4bbdc301793e32887f9c32ea04d1206fffab1d1a69f95fff",
+      "result": "not-run"
+    },
+    "upgrade": {
+      "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "chartVersion": "0.1.0",
+      "evidence": "",
+      "imageManifestSha256": "sha256:f646c0c9371b623e4bbdc301793e32887f9c32ea04d1206fffab1d1a69f95fff",
+      "result": "not-run"
+    }
+  }
+}
