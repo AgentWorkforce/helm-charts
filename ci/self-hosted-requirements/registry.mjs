@@ -12,9 +12,12 @@
 //   coverage  (a) every env var, literal Secret key and Secret-bearing values
 //             path in charts/*/templates is in the registry
 //   shipped   (a) every shipped entry exists in the charts: values paths in
-//             values.yaml, env vars in templates, Secret names/keys equal the
+//             values.yaml, env vars in templates or as real {name, value} env
+//             entries in values.yaml (never a comment), Secret names/keys equal the
 //             resolved values of each profile it lists
-//   planned   (c) no template references a planned entry's env var or values path
+//   planned   (c) no chart's templates (the umbrella included, through
+//             .Values.<subchart>.x or index) reference a planned entry's env var
+//             or values path; {{/* */}} comments are not references
 //   matrix    (d) the compatibility matrix equals the pins: services image
 //             digests (matrix.sh, chart defaults, profiles), the services commit
 //             and migration generation, chart versions and release tags, and the
@@ -93,6 +96,11 @@ const CHARTS = fs.readdirSync(abs('charts')).filter((c) => fs.existsSync(abs(`ch
 const SECRETISH = /secret|credential|token|^keys?$|jwks|^tls$|summaryEncryption|password/i;
 const isSecretPath = (p) => p.split('.').some((s) => SECRETISH.test(s) && s !== 'automountServiceAccountToken');
 
+// Template text with {{/* ... */}} comments (any trim markers) blanked out,
+// newlines kept so line numbers stay right. A comment is never a reference.
+const stripTemplateComments = (t) => t.replace(/\{\{-?\s*\/\*[\s\S]*?\*\/\s*-?\}\}/g, (m) => m.replace(/[^\n]/g, ' '));
+const readTemplate = (f) => stripTemplateComments(fs.readFileSync(f, 'utf8'));
+
 function scanChart(chart) {
   const env = new Map(); // name -> [file:line]
   const keys = new Map(); // literal Secret key -> [file:line]
@@ -100,7 +108,7 @@ function scanChart(chart) {
   const allPaths = new Map();
   const add = (m, k, where) => { if (!m.has(k)) m.set(k, []); m.get(k).push(where); };
   for (const f of walk(abs(`charts/${chart}/templates`))) {
-    const lines = fs.readFileSync(f, 'utf8').split('\n');
+    const lines = readTemplate(f).split('\n');
     const alias = {}; // $var -> values path prefix ('' = .Values)
     const VALUES = String.raw`(?:\$\.Values|\.context\.Values|\$ctx\.Values|\.root\.Values|\$\.root\.Values|\.Values)`;
     lines.forEach((line, i) => {
@@ -113,6 +121,14 @@ function scanChart(chart) {
         add(allPaths, normPath(chart, p), where);
       }
       for (const m of line.matchAll(new RegExp(String.raw`${VALUES}((?:\.[A-Za-z_]\w*)+)`, 'g'))) add(allPaths, normPath(chart, m[1].slice(1)), where);
+      // index <values path> "k" ["k2" ...]: keys a dotted path cannot spell (e.g. "bob-costas").
+      for (const m of line.matchAll(new RegExp(String.raw`\bindex\s+(?:${VALUES}((?:\.[A-Za-z_]\w*)*)|\$(\w+)((?:\.[A-Za-z_]\w*)*))((?:\s+"[^"]+")+)`, 'g'))) {
+        let base;
+        if (m[2] !== undefined) { if (!(m[2] in alias)) continue; base = [alias[m[2]], (m[3] || '').slice(1)].filter(Boolean).join('.'); }
+        else base = (m[1] || '').slice(1);
+        const ks = [...m[4].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+        add(allPaths, normPath(chart, [base, ...ks].filter(Boolean).join('.')), where);
+      }
       for (const m of line.matchAll(/\$(\w+)((?:\.[A-Za-z_]\w*)+)/g)) {
         if (!(m[1] in alias) || m[2].startsWith('.Values')) continue;
         add(allPaths, normPath(chart, [alias[m[1]], m[2].slice(1)].filter(Boolean).join('.')), where);
@@ -236,8 +252,18 @@ checks.coverage = () => {
   }
 };
 
-const templateText = Object.fromEntries(CHARTS.map((c) => [c, walk(abs(`charts/${c}/templates`)).map((f) => fs.readFileSync(f, 'utf8')).join('\n')]));
-const valuesText = Object.fromEntries(CHARTS.map((c) => [c, fs.readFileSync(abs(`charts/${c}/values.yaml`), 'utf8')]));
+const templateText = Object.fromEntries(CHARTS.map((c) => [c, walk(abs(`charts/${c}/templates`)).map(readTemplate).join('\n')]));
+// Env var names a chart's values.yaml really defines: the name of an EnvVar map
+// ({name, value|valueFrom}) anywhere in the parsed values. Comments are gone after parsing.
+function valuesEnvNames(v, out = new Set()) {
+  if (Array.isArray(v)) v.forEach((x) => valuesEnvNames(x, out));
+  else if (isMap(v)) {
+    if (typeof v.name === 'string' && ('value' in v || 'valueFrom' in v)) out.add(v.name);
+    Object.values(v).forEach((x) => valuesEnvNames(x, out));
+  }
+  return out;
+}
+const valuesEnv = Object.fromEntries(CHARTS.map((c) => [c, valuesEnvNames(chartValues[c])]));
 
 checks.shipped = () => {
   const c = 'shipped';
@@ -249,7 +275,7 @@ checks.shipped = () => {
       if (!hasPath(chartValues[ch], qq) && !scans[ch].allPaths.has(`${ch}:${qq}`)) err(c, `${e.id}: values path ${p} is neither in charts/${ch}/values.yaml nor read by its templates`);
     }
     for (const n of entryEnv(e)) {
-      if (!fam.some((ch) => scans[ch].env.has(n) || new RegExp(`\\b${n}\\b`).test(valuesText[ch]))) err(c, `${e.id}: env ${n} is not rendered by ${fam.join('/')} templates`);
+      if (!fam.some((ch) => scans[ch].env.has(n) || valuesEnv[ch].has(n))) err(c, `${e.id}: env ${n} is neither rendered by ${fam.join('/')} templates nor an env entry ({name, value}) in their values.yaml`);
     }
     for (const s of asList(e.secrets)) {
       for (const pid of asList(e.profiles)) {
@@ -281,11 +307,12 @@ checks.planned = () => {
   for (const e of entries.filter((x) => x.status === 'planned')) {
     for (const ch of CHARTS) {
       for (const n of entryEnv(e)) if (scans[ch].env.has(n) || new RegExp(`\\b${n}\\b`).test(templateText[ch])) err(c, `${e.id} is planned, but charts/${ch}/templates references env ${n}: ship it (status: shipped) or remove the reference`);
+      // Paths are normalized (an umbrella .Values.worker.x is 96bulls-worker:x), so
+      // a planned path is caught in its own chart's templates and in any chart
+      // (the umbrella) that reads it through a subchart key.
       for (const p of entryValues(e)) {
-        const [pc, q] = p.split(':');
-        if (pc !== ch) continue;
-        const qq = q.replace(/\.\*$/, '');
-        for (const tp of scans[ch].allPaths.keys()) if (tp === p.replace(/\.\*$/, '') || tp.startsWith(`${ch}:${qq}.`)) err(c, `${e.id} is planned, but charts/${ch}/templates reads .Values.${tp.split(':')[1]} (${scans[ch].allPaths.get(tp)[0]})`);
+        const want = p.replace(/\.\*$/, '');
+        for (const [tp, where] of scans[ch].allPaths) if (tp === want || tp.startsWith(`${want}.`)) err(c, `${e.id} is planned, but charts/${ch}/templates reads ${tp} (${where[0]})`);
       }
     }
   }
