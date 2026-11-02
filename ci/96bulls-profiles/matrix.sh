@@ -58,16 +58,17 @@ for f in "$CHART"/profiles/*.yaml "$CHART"/ci/*-values.yaml; do
 done
 
 # Services image pins. The in-cluster CNPG profiles and the AWS proof values
-# pin the image built from 96BullSessions main b47c1e6 (#99 + #106): GHCR
-# (publish-image run 41333160108) and ECR (publish-image-ecr run 41333164245). The workloads and
+# pin the image built from 96BullSessions main fe5a2da (#124 + #125 + #139,
+# generation eff8b3be...259b): GHCR
+# (publish-image run 41371030320) and ECR (publish-image-ecr run 41371033477). The workloads and
 # the privileged SQL Jobs use the same image, and no Job overrides it. The
 # Every other profile (external-selfhosted, and the external-Supabase one, which
-# stays fail-closed) and the GCP values pin the GHCR image too. The chart
+# stays held) and the GCP values pin the GHCR image too. The chart
 # defaults (worker and alleyoop image.digest) are the same GHCR image, so a path
 # that pins nothing still gets it. The row loop below asserts that every
 # matrix row renders only the final images.
-GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
-ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
+GHCR="ghcr.io/agentworkforce/96bulls-services@sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
+ECR="500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:c2b1798a19b2884a91413909551294da2768abbc01bdfbebce5f9c573b6656f8"
 pins_of() { yq -r '[.worker.image.tag, .worker.image.digest, .alleyoop.image.tag, .alleyoop.image.digest, .privilegedSql.sqlImage.digest, .searchWorkerRole.bootstrapJob.sqlImage.digest, .runtimeRole.bootstrapJob.sqlImage.digest, .functionDefaultRevoke.bootstrapJob.sqlImage.digest] | map(select(. != null and . != "")) | join(",")' "$1"; }
 # Rendered image refs of every services container (workloads, migrate, the SQL Jobs' sql copy).
 services_refs() {
@@ -75,7 +76,7 @@ services_refs() {
 }
 # The chart defaults are the final GHCR image.
 for v in "$ROOT/charts/96bulls-worker/values.yaml" "$ROOT/charts/alleyoop/values.yaml"; do
-  [ "$(yq -r '.image.digest' "$v")" = "${GHCR#*@}" ] || err "${v#"$ROOT"/}: image.digest is not the final b47c1e6 GHCR digest"
+  [ "$(yq -r '.image.digest' "$v")" = "${GHCR#*@}" ] || err "${v#"$ROOT"/}: image.digest is not the final fe5a2da GHCR digest"
 done
 for pair in "profiles/selfhost-postgres.yaml|$GHCR" "profiles/migration.yaml|$GHCR" "profiles/external-supabase.yaml|$GHCR" "profiles/external-selfhosted.yaml|$GHCR" "ci/gcp-cloudsql-values.yaml|$GHCR" "ci/aws-cnpg-values.yaml|$ECR"; do
   rel=${pair%%|*} want=${pair#*|}
@@ -127,7 +128,7 @@ for row in "${MATRIX[@]}"; do
   helm lint --strict "$CHART" "${args[@]}" >/dev/null || { helm lint --strict "$CHART" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
   out=$(render "${args[@]}") || { err "$label: render failed"; continue; }
 
-  # Every services image this row renders is a final b47c1e6 image: GHCR, or
+  # Every services image this row renders is a final fe5a2da image: GHCR, or
   # ECR on the AWS path only. Any other digest or tag (e.g. the old db2663d
   # default) fails.
   imgs=$(yq -r 'select(.kind == "Deployment" or .kind == "Job") | .spec.template.spec | ((.initContainers // []) + .containers)[] | select(.image | test("96bulls-services")) | .image' <<<"$out" | grep -v '^---$' | sort -u)
@@ -156,6 +157,8 @@ for row in "${MATRIX[@]}"; do
     cloudsql)   want=$'HOOPDB_DB_MODE=cloudsql\nHOOPDB_FUNCTION_BOUNDARY_MODE=global-default-revoke\nHOOPDB_ROLE_BOOTSTRAP=false\nHOOPDB_RUNTIME_ROLE=bulls96_runtime\nHOOPDB_RUNTIME_ROLE_LOGIN=true\nHOOPDB_SUPABASE_SHIM=false' ;;
     supabase)   want=$'HOOPDB_DB_MODE=supabase\nHOOPDB_RUNTIME_ROLE=bulls96_runtime\nHOOPDB_RUNTIME_ROLE_LOGIN=true\nHOOPDB_SUPABASE_SHIM=false' ;;
   esac
+  # The external-Supabase profile selects the event-trigger boundary (#125).
+  [ "$rel" = profiles/external-supabase.yaml ] && want=$(printf '%s\nHOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger\n' "$want" | sort)
   got=$(profile_env)
   [ "$got" = "$want" ] || err "$label: migrate profile env is [$(tr '\n' ' ' <<<"$got")], want [$(tr '\n' ' ' <<<"$want")]"
   for n in $PROFILE_ENV HOOPDB_FUNCTION_BOUNDARY_APPROVED; do
@@ -228,11 +231,13 @@ done
 
 # The external-Supabase profile: bulls96_runtime with LOGIN and no workload
 # role (never the drifted legacy relayhistory_runtime), the Worker pinned to
-# session_directory_search_worker, and fail-closed: no function boundary mode,
-# so migrate refuses (function_boundary_unproven) before any write.
+# session_directory_search_worker, and the event-trigger function boundary
+# (96BullSessions #125, supabase only). It stays held (supabaseActivation.hold),
+# and migrate refuses (function_boundary_unproven) before any write until the
+# operator's reviewed trigger is in the catalog.
 SBP="$CHART/profiles/external-supabase.yaml"
-[ "$(yq -r '[.worker.migrations.runtimeRole, .worker.migrations.runtimeRoleLogin, (.worker.migrations.runtimeWorkloadRole // ""), (.worker.migrations.functionBoundaryMode // ""), .worker.migrations.waitForRole.role] | map(tostring) | join("|")' "$SBP")" = "bulls96_runtime|true|||session_directory_search_worker" ] \
-  || err "profiles/external-supabase.yaml: runtime bulls96_runtime LOGIN, no workload role, no boundary mode (fail-closed), Worker session_directory_search_worker"
+[ "$(yq -r '[.worker.migrations.runtimeRole, .worker.migrations.runtimeRoleLogin, (.worker.migrations.runtimeWorkloadRole // ""), (.worker.migrations.functionBoundaryMode // ""), .worker.migrations.waitForRole.role] | map(tostring) | join("|")' "$SBP")" = "bulls96_runtime|true||event-trigger|session_directory_search_worker" ] \
+  || err "profiles/external-supabase.yaml: runtime bulls96_runtime LOGIN, no workload role, event-trigger boundary, Worker session_directory_search_worker"
 grep -q relayhistory_runtime <(yq -r '.. | select(tag == "!!str")' "$SBP") && err "profiles/external-supabase.yaml: uses relayhistory_runtime"
 
 # Mode combinations the chart must refuse (the migrator's refusals at render
@@ -259,9 +264,12 @@ if [ "$mode" = static ]; then
   expect_fail "roleBootstrap must not be true in supabase mode" "${SB[@]}" --set worker.migrations.roleBootstrap=true
   expect_fail "roleBootstrap must be true or false" "${GCP[@]}" --set-string worker.migrations.roleBootstrap=no
   expect_fail "worker.migrations.databaseMode must be selfhosted, not \"cloudsql\"" "${IN[@]}" --set worker.migrations.databaseMode=cloudsql
-  expect_fail "functionBoundaryMode=event-trigger is not implemented" "${GCP[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
-  expect_fail "functionBoundaryMode=event-trigger is not implemented" "${SB[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
-  expect_fail "functionBoundaryMode must be global-default-revoke" "${SB[@]}" --set worker.migrations.functionBoundaryMode=yes
+  expect_fail "functionBoundaryMode=event-trigger is supported only in supabase mode, not cloudsql" "${GCP[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
+  expect_fail "functionBoundaryMode=event-trigger is supported only in supabase mode, not selfhosted" "${IN[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
+  expect_fail "functionBoundaryMode must be global-default-revoke or (supabase only) event-trigger" "${SB[@]}" --set worker.migrations.functionBoundaryMode=yes
+  # Supabase mode accepts event-trigger and renders it into migrate.
+  out=$(render "${SB[@]}" --set worker.migrations.functionBoundaryMode=event-trigger) || err "supabase + event-trigger did not render"
+  profile_env | grep -qxF HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger || err "supabase + event-trigger: migrate lacks HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger"
   expect_fail "functionBoundaryApproved was renamed functionBoundaryMode" "${SB[@]}" --set worker.migrations.functionBoundaryApproved=global-default-revoke
   expect_fail "functionDefaultRevoke.bootstrapJob.enabled must be true with the in-cluster HoopDb" "${IN[@]}" --set functionDefaultRevoke.bootstrapJob.enabled=false
   expect_fail "runtimeRole.bootstrapJob.enabled must be true with the in-cluster HoopDb" "${IN[@]}" --set runtimeRole.bootstrapJob.enabled=false

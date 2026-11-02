@@ -2,8 +2,8 @@
 # in-cluster HoopDb in selfhosted mode with the privileged runtime-role and
 # function-default Jobs, S3 Locker through Pod Identity, otel collector on.
 # Pinned services image: the immutable ECR digest (sessions-dev) built from
-# 96BullSessions main b47c1e6af43140de8395c1aa20178d014c92bbb7 (tag
-# sha-b47c1e6..., publish-image-ecr run 41333164245), generation 1d99ccc8...4718.
+# 96BullSessions main fe5a2da06c11ea75544601cf90806c8bd2610ea7 (tag
+# sha-fe5a2da..., publish-image-ecr run 41371033477), generation eff8b3be...259b.
 global:
   imageRegistry: ""
   tenant:
@@ -13,7 +13,7 @@ global:
 worker:
   image:
     repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
-    digest: "sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
+    digest: "sha256:c2b1798a19b2884a91413909551294da2768abbc01bdfbebce5f9c573b6656f8"
   existingSecret: ""
   summaryEncryption:
     existingSecret: 96bulls-runtime
@@ -41,7 +41,7 @@ worker:
 alleyoop:
   image:
     repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
-    digest: "sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
+    digest: "sha256:c2b1798a19b2884a91413909551294da2768abbc01bdfbebce5f9c573b6656f8"
   existingSecret: ""
   locker:
     endpoint: ""
@@ -67,4 +67,4 @@ functionDefaultRevoke:
 privilegedSql:
   sqlImage:
     repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
-    digest: "sha256:5fb1cc209c9f0398ee0c9cf3cf050335f2388241df1b307538e915ca76f3c698"
+    digest: "sha256:c2b1798a19b2884a91413909551294da2768abbc01bdfbebce5f9c573b6656f8"

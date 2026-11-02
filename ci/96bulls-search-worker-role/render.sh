@@ -121,6 +121,8 @@ o=$(render "${sb[@]}")
 check_profile "supabase (external)" "$o" HOOPDB_DB_MODE=supabase HOOPDB_SUPABASE_SHIM=false HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=true HOOPDB_ROLE_VERIFY=true
 o=$(render "${sb[@]}" --set worker.migrations.functionBoundaryMode=global-default-revoke)
 check_profile "supabase, operator-selected boundary" "$o" HOOPDB_DB_MODE=supabase HOOPDB_SUPABASE_SHIM=false HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=true $FB HOOPDB_ROLE_VERIFY=true
+o=$(render "${sb[@]}" --set worker.migrations.functionBoundaryMode=event-trigger)
+check_profile "supabase, event-trigger boundary" "$o" HOOPDB_DB_MODE=supabase HOOPDB_SUPABASE_SHIM=false HOOPDB_RUNTIME_ROLE=bulls96_runtime HOOPDB_RUNTIME_ROLE_LOGIN=true HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger HOOPDB_ROLE_VERIFY=true
 [ -z "$(yq -r 'select(.metadata.labels."app.kubernetes.io/component" == "hoopdb-runtime-role-bootstrap" or .metadata.labels."app.kubernetes.io/component" == "search-worker-role-bootstrap" or .metadata.labels."app.kubernetes.io/component" == "hoopdb-function-default-revoke") | .kind' <<<"$o" | grep .)" ] || err "external database: an in-cluster bootstrap object rendered"
 # cloudsql mode with HOOPDB_ROLE_BOOTSTRAP=false, and a workload role passed to the runtime-role Job.
 o=$(render "${ext[@]}" --set worker.migrations.databaseMode=cloudsql --set worker.migrations.supabaseShim=false --set worker.migrations.roleBootstrap=false)
@@ -158,7 +160,7 @@ expect_fail "supabaseShim must be set (true or false) in selfhosted mode" "${on[
 expect_fail "supabaseShim must not be true in supabase mode" "${sb[@]}" --set worker.migrations.supabaseShim=true
 expect_fail "waitForRole must be disabled in supabase mode" "${sb[@]}" --set worker.migrations.waitForRole.enabled=true
 expect_fail "functionBoundaryMode must be global-default-revoke" "${on[@]}" --set worker.migrations.functionBoundaryMode=yes
-expect_fail "functionBoundaryMode=event-trigger is not implemented" "${on[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
+expect_fail "functionBoundaryMode=event-trigger is supported only in supabase mode, not selfhosted" "${on[@]}" --set worker.migrations.functionBoundaryMode=event-trigger
 expect_fail "functionBoundaryMode is required in selfhosted mode" "${ext[@]}" --set worker.migrations.functionBoundaryMode=
 expect_fail "functionBoundaryApproved was renamed functionBoundaryMode" "${on[@]}" --set worker.migrations.functionBoundaryApproved=global-default-revoke
 expect_fail "runtimeRole is required" "${on[@]}" --set worker.migrations.runtimeRole=

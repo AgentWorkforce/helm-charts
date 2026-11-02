@@ -11,9 +11,9 @@
 # owner's function default is exact. Needs the CloudNativePG operator
 # (deps/cnpg-operator-values.yaml).
 # Pinned services image (workloads and the privileged SQL Jobs): GHCR, built
-# from 96BullSessions main b47c1e6af43140de8395c1aa20178d014c92bbb7 (#99 and the #106
-# Supabase compatibility change), publish-image run 41333160108, migration
-# generation 1d99ccc8222995c9f8c31334da1c574ca5a687436656d34d9521bc7859494718.
+# from 96BullSessions main fe5a2da06c11ea75544601cf90806c8bd2610ea7 (#124, #125 and
+# #139), publish-image run 41371030320, migration
+# generation eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b.
 hoopdb:
   enabled: true
 locker:
@@ -22,7 +22,7 @@ otel:
   enabled: false
 worker:
   image:
-    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
   migrations:
     databaseMode: selfhosted
     supabaseShim: true
@@ -34,11 +34,11 @@ worker:
       functionDefault: true
 alleyoop:
   image:
-    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
 privilegedSql:
   sqlImage:
     repository: ghcr.io/agentworkforce/96bulls-services
-    digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+    digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
 searchWorkerRole:
   bootstrapJob:
     enabled: false

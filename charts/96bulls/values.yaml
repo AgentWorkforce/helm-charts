@@ -277,7 +277,8 @@ runtimeRole:
 # for the result (worker.migrations.waitForRole.functionDefault).
 # CNPG/selfhost only. It never runs for an external database, and never on
 # Supabase: there the owner is postgres, so the change would reach every schema
-# of the project. That is an operator decision (96BullSessions #98).
+# of the project. Supabase uses the event-trigger boundary instead
+# (96BullSessions #125; profiles/external-supabase.yaml).
 # ---------------------------------------------------------------------------
 functionDefaultRevoke:
   bootstrapJob:
@@ -298,9 +299,10 @@ functionDefaultRevoke:
 
 # ---------------------------------------------------------------------------
 # External-Supabase activation hold. profiles/external-supabase.yaml sets it,
-# so that profile does not render. It stays fail-closed until the
-# 96BullSessions PostgreSQL 16+ Supabase creator-edge compatibility change
-# merges and its exact merge, image and generation are pinned in the profile.
+# so that profile does not render. It stays fail-closed until the profile's
+# pinned image is confirmed as the production-Supabase pin and the live
+# Supabase activation steps (the event-trigger function boundary bootstrap and
+# --activation-check) are approved.
 # ---------------------------------------------------------------------------
 supabaseActivation:
   hold: false

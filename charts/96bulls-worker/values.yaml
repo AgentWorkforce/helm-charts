@@ -15,11 +15,11 @@ image:
   # Defaults to Chart.appVersion when empty.
   tag: ""
   # sha256 digest; when set it wins over tag. Default: the services image
-  # built from 96BullSessions main b47c1e6 (#99 + #106; GHCR publish-image run
-  # 41333160108; migration generation 1d99ccc8...4718). This hosted
+  # built from 96BullSessions main fe5a2da (#124 + #125 + #139; GHCR publish-image run
+  # 41371030320; migration generation eff8b3be...259b). This hosted
   # service package is private: add imagePullSecrets for direct installs.
   # When overriding repository or tag, clear digest or set a matching digest.
-  digest: "sha256:e48d62dacc6dd6c0d0f912656693bb4a937c1f0d14562afa273601ea1ba0463a"
+  digest: "sha256:8efc653b89a1f133b3cd478f5aadd4de2393dbd89b5a82620af1859851e0c062"
   pullPolicy: IfNotPresent
 
 # Optional; passed to every workload and Job.
@@ -122,13 +122,15 @@ migrations:
   # HOOPDB_RUNTIME_WORKLOAD_ROLE (optional): the one role allowed to be a member
   # of the runtime role.
   runtimeWorkloadRole: ""
-  # HOOPDB_FUNCTION_BOUNDARY_MODE: global-default-revoke, the only implemented
-  # mode (event-trigger is refused, as the migrator refuses it). Required in
-  # selfhosted and cloudsql mode: the database is dedicated to HoopDb, and the privileged
-  # supabase/bootstrap/hoopdb_function_default_revoke.sql installs the control.
-  # Optional in supabase mode: the operator decides (96BullSessions #98), and
-  # with it unset the migrator's function-boundary gate fails closed. The old
-  # name, HOOPDB_FUNCTION_BOUNDARY_APPROVED, is refused.
+  # HOOPDB_FUNCTION_BOUNDARY_MODE: global-default-revoke or, in supabase mode
+  # only, event-trigger (96BullSessions #125); the chart refuses event-trigger
+  # elsewhere, as the migrator does. Required in selfhosted and cloudsql mode
+  # (global-default-revoke): the database is dedicated to HoopDb, and the
+  # privileged supabase/bootstrap/hoopdb_function_default_revoke.sql installs
+  # the control. Optional in supabase mode, where the operator installs
+  # supabase/bootstrap/hoopdb_sessions_function_boundary_supabase.sql for
+  # event-trigger; unset, the migrator's function-boundary gate fails closed.
+  # The old name, HOOPDB_FUNCTION_BOUNDARY_APPROVED, is refused.
   functionBoundaryMode: ""
   backoffLimit: 3
   activeDeadlineSeconds: 3600
