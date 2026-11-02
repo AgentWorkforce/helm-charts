@@ -99,11 +99,20 @@ path. No RelayHistory or ClickHouse chart ships in this repository today.
 The intended shape, to be confirmed when a chart and conformance tests exist:
 
 - `search.backend: postgres | clickhouse`, default `postgres`;
-- `search.clickhouse.external.{url, database, existingSecret, secretKeys}` for
-  an operator-supplied ClickHouse, or `search.clickhouse.operator.enabled` for
-  an operator-managed cluster;
-- ClickHouse credentials only through an existing Kubernetes Secret, never
-  inline values.
+- `search.clickhouse.mode: external | operator`: `external` points at a
+  ClickHouse the customer already runs; `operator` expects a cluster managed
+  by the official ClickHouse Kubernetes Operator;
+- connection values: `search.clickhouse.endpoint` (HTTPS URL),
+  `search.clickhouse.database`, `search.clickhouse.table` (the derived
+  candidate index) and `search.clickhouse.user`;
+- `search.clickhouse.existingSecret`, with `search.clickhouse.secretKeys`
+  naming the password key. Credentials come only from an existing Kubernetes
+  Secret, never inline values;
+- Postgres connection and authorization values stay where they are today
+  (HoopDb). The ClickHouse values add no second source of truth.
+
+Selecting `clickhouse` keeps the Postgres path configured, so setting
+`search.backend` back to `postgres` is the single-switch rollback.
 
 The 96Bulls chart notes in the [README](../README.md#transcript-search-profiles)
 point back to this section.
