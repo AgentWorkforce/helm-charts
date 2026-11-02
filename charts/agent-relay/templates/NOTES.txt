@@ -1,0 +1,4 @@
+Agent Relay messaging and sessions suite rendered.
+
+This proof is not HA. Wait for the migration Jobs to complete, then verify the
+API, Relaycast and Relay History health endpoints before onboarding clients.

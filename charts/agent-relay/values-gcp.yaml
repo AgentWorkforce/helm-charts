@@ -1,0 +1,268 @@
+# Customer-neutral GKE deployment template derived from values-gcp-proof.yaml.
+# It contains no credentials. Before deployment, replace every value marked
+# REQUIRED OVERRIDE and create the referenced Secret and GCP resources.
+components:
+  relaycast: true
+  relayauth: true
+  sessionsPipeline: true
+  relayhistory: true
+  cloudApi: true
+  dashboard: true
+  # Optional: run flows in-cluster. Off by default; see the relayflows block
+  # below and docs/self-hosted-relayflows.md before enabling.
+  relayflows: false
+
+global:
+  # REQUIRED OVERRIDE: Artifact Registry hostname for the chosen GCP region.
+  imageRegistry: us-central1-docker.pkg.dev
+  tenant:
+    # REQUIRED OVERRIDE: stable organization ID used to partition session data.
+    orgId: example-org
+
+gkeIngress:
+  enabled: true
+  # REQUIRED OVERRIDE: customer-selected resource names. Reserve the static IP
+  # separately; the chart creates the Ingress, certificate and FrontendConfig.
+  name: example-agent-relay
+  staticIpName: example-agent-relay-ingress
+  managedCertificateName: example-agent-relay
+  frontendConfigName: example-agent-relay
+  hosts:
+    # REQUIRED OVERRIDE: four public DNS names controlled by the customer.
+    root: dashboard.placeholder.company
+    api: api.placeholder.company
+    cast: cast.placeholder.company
+    history: history.placeholder.company
+
+relaycast:
+  fullnameOverride: relaycast
+  image:
+    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
+    repository: us-central1-docker.pkg.dev/example-project/example-images/relaycast
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  # REQUIRED OVERRIDE: must use the same cast host as gkeIngress.hosts.cast.
+  baseUrl: https://cast.placeholder.company
+  # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
+  existingSecret: example-agent-relay-secrets
+  secretKeys:
+    internalSecret: relaycast-internal-secret
+    bootstrapSecret: relaycast-workspace-bootstrap-secret
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    # Same-namespace callers plus Google Front End proxies and health checkers
+    # for the global external Application Load Balancer created below.
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+
+relayauth:
+  fullnameOverride: relayauth
+  image:
+    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
+    repository: us-central1-docker.pkg.dev/example-project/example-images/relayauth
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  baseUrl: http://relayauth:8787
+  issuer: http://relayauth:8787
+  # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
+  existingSecret: example-agent-relay-secrets
+  secretKeys:
+    internalSecret: relayauth-internal-secret
+    signingKey: relayauth-signing-key.pem
+    bootstrapApiKey: relayauth-bootstrap-api-key
+  jwksIngress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+
+96bulls:
+  worker:
+    image:
+      # REQUIRED OVERRIDE: repository path under global.imageRegistry and digest.
+      repository: example-project/example-images/sessions-services
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
+    existingSecret: example-agent-relay-secrets
+    summaryEncryption:
+      existingSecret: example-agent-relay-secrets
+    hoopdb:
+      existingSecret: example-agent-relay-secrets
+      key: HOOPDB_URL
+    locker:
+      endpoint: ""
+      # REQUIRED OVERRIDE: customer-owned GCS bucket and its GCP region.
+      bucket: example-agent-relay-sessions
+      region: us-central1
+      credentials:
+        mode: podIdentity
+    lockerInit:
+      enabled: false
+    migrations:
+      hoopdb:
+        existingSecret: example-agent-relay-secrets
+        key: HOOPDB_MIGRATION_URL
+      databaseMode: cloudsql
+      supabaseShim: false
+      roleBootstrap: false
+      runtimeRole: sessions_runtime
+      runtimeRoleLogin: true
+      functionBoundaryMode: global-default-revoke
+  alleyoop:
+    image:
+      # REQUIRED OVERRIDE: same services image repository and digest as worker.
+      repository: example-project/example-images/sessions-services
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
+    existingSecret: example-agent-relay-secrets
+    hoopdb:
+      existingSecret: example-agent-relay-secrets
+      key: HOOPDB_URL
+    locker:
+      endpoint: ""
+      # REQUIRED OVERRIDE: same GCS bucket and region as worker.locker.
+      bucket: example-agent-relay-sessions
+      region: us-central1
+      credentials:
+        mode: podIdentity
+    auth:
+      jwksUrl: http://relayauth:8787/.well-known/jwks.json
+  hoopdb:
+    enabled: false
+  locker:
+    enabled: false
+
+relayhistory:
+  fullnameOverride: relayhistory
+  image:
+    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
+    repository: us-central1-docker.pkg.dev/example-project/example-images/relayhistory
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  database:
+    # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
+    existingSecret: example-agent-relay-secrets
+  relayauth:
+    # REQUIRED OVERRIDE: historyOrigin must use gkeIngress.hosts.history.
+    historyOrigin: https://history.placeholder.company
+    jwksUrl: http://relayauth:8787/.well-known/jwks.json
+    issuer: http://relayauth:8787
+  agentRelayCloud:
+    apiUrl: http://relay-cloud-api
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+    allowAllEgress: true
+
+relay-cloud-api:
+  fullnameOverride: relay-cloud-api
+  image:
+    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
+    repository: us-central1-docker.pkg.dev/example-project/example-images/control-api
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  database:
+    runtimeRole: control_api_runtime
+  # REQUIRED OVERRIDE: publicUrl must use gkeIngress.hosts.api.
+  publicUrl: https://api.placeholder.company
+  # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
+  existingSecret: example-agent-relay-secrets
+  services:
+    relayauthUrl: http://relayauth:8787
+    relaycastUrl: http://relaycast:8787
+    # REQUIRED OVERRIDE: public service URLs must match the corresponding hosts.
+    relaycastPublicUrl: https://cast.placeholder.company
+    relayhistoryUrl: http://relayhistory:8080
+    relayhistoryPublicUrl: https://history.placeholder.company
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+    allowAllEgress: true
+
+relay-dashboard:
+  fullnameOverride: relay-dashboard
+  image:
+    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
+    repository: us-central1-docker.pkg.dev/example-project/example-images/dashboard
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  runtime:
+    # REQUIRED OVERRIDE: publicUrl must use gkeIngress.hosts.root.
+    publicUrl: https://dashboard.placeholder.company
+    appPath: /
+    apiBasePath: /cloud/api
+    loginPath: /login
+  api:
+    serviceName: relay-cloud-api
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+
+# Optional component (components.relayflows). Two modes:
+#  - standalone (default): a Kubernetes Job/CronJob that runs a flow entirely
+#    in-cluster. Works against this suite today; supply exactly one flow
+#    source and an image containing the flow and every harness CLI.
+#  - cloudWorker: a long-running assignment worker that enrolls with
+#    `agent-relay cloud worker register` against worker.cloudUrl. The
+#    self-hosted control plane does not yet implement the /api/v1/workers/*
+#    enroll, queue and assignment endpoints, so this mode only works pointed
+#    at a control plane that does (for example hosted Agent Relay Cloud).
+#    See docs/self-hosted-relayflows.md.
+#relayflows:
+#  mode: standalone
+#  image:
+#    # REQUIRED OVERRIDE: immutable image containing relayflows, the flow
+#    # source and the harness CLIs the flow uses. The stock node image only
+#    # npm-installs the pinned runtime at pod start.
+#    repository: us-central1-docker.pkg.dev/example-project/example-images/relayflows
+#    tag: "22.23.3-bookworm-slim"
+#    pullPolicy: IfNotPresent
+#  runtimeInstaller:
+#    enabled: false
+#  standalone:
+#    # REQUIRED OVERRIDE: exactly one of flow.path (inside the image),
+#    # flow.content (chart-managed ConfigMap) or flow.existingConfigMap.
+#    flow:
+#      path: /opt/flows/example.flow.ts
+#      content: ""
+#      existingConfigMap: ""
+#  # cloudWorker mode only. REQUIRED OVERRIDE: enrollment token Secret;
+#  # the worker reads AGENT_RELAY_WORKER_ENROLLMENT_TOKEN from
+#  # credentials.existingSecretKey. cloudUrl is the control-plane base URL the
+#  # CLI appends /api/v1/workers/* to: http://relay-cloud-api (or
+#  # http://relay-cloud-api/cloud) in-cluster, https://<gkeIngress.hosts.api>
+#  # from outside — once selfhost-api implements the worker endpoints.
+#  # mode: cloudWorker
+#  # worker:
+#  #   cloudUrl: http://relay-cloud-api
+#  # credentials:
+#  #   existingSecret: example-agent-relay-secrets
+#  #   existingSecretKey: AGENT_RELAY_WORKER_ENROLLMENT_TOKEN
+#  # extraEnvFrom carries model/provider credentials (for example an
+#  # ESO-created Secret with ANTHROPIC_API_KEY).
+#  extraEnvFrom: []

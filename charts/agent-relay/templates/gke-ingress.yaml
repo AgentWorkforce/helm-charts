@@ -1,0 +1,176 @@
+{{- if dig "enabled" false (.Values.gkeIngress | default dict) }}
+{{- $gke := .Values.gkeIngress | default dict -}}
+{{- $components := .Values.components | default dict -}}
+{{- $relaycast := .Values.relaycast | default dict -}}
+{{- $relayhistory := .Values.relayhistory | default dict -}}
+{{- $cloudApi := index .Values "relay-cloud-api" | default dict -}}
+{{- $dashboard := index .Values "relay-dashboard" | default dict -}}
+{{- if not (and $components.relaycast $components.relayhistory $components.cloudApi $components.dashboard) }}{{ fail "gkeIngress requires relaycast, relayhistory, cloudApi, and dashboard components" }}{{ end -}}
+{{- if or (dig "ingress" "enabled" false $relaycast) (dig "ingress" "enabled" false $relayhistory) (dig "ingress" "enabled" false $cloudApi) (dig "ingress" "enabled" false $dashboard) }}{{ fail "gkeIngress requires all leaf ingresses to be disabled" }}{{ end -}}
+{{- if and $components.relayauth (index ((.Values.relayauth | default dict).jwksIngress | default dict) "enabled" | default false) }}{{ fail "gkeIngress requires relayauth.jwksIngress.enabled=false" }}{{ end -}}
+{{- $apiBasePath := dig "runtime" "apiBasePath" "" $dashboard -}}
+{{- if and $apiBasePath (ne $apiBasePath "/cloud/api") }}{{ fail "gkeIngress routes /cloud/api to relay-cloud-api; relay-dashboard.runtime.apiBasePath must be /cloud/api" }}{{ end -}}
+{{- $loginPath := dig "runtime" "loginPath" "" $dashboard -}}
+{{- if and $loginPath (ne $loginPath "/login") }}{{ fail "gkeIngress routes /login to relay-cloud-api; relay-dashboard.runtime.loginPath must be /login" }}{{ end -}}
+{{- range $name, $backendValues := dict "relaycast" $relaycast "relayhistory" $relayhistory "relay-cloud-api" $cloudApi "relay-dashboard" $dashboard }}
+{{- if not (dig "networkPolicy" "enabled" false $backendValues) }}{{ fail (printf "gkeIngress requires %s.networkPolicy.enabled=true" $name) }}{{ end -}}
+{{- $hasSameNamespace := false -}}
+{{- $hasGfePrimary := false -}}
+{{- $hasGfeSecondary := false -}}
+{{- range $peer := dig "networkPolicy" "ingressFrom" (list) $backendValues }}
+{{- if and (eq (len $peer) 1) (hasKey $peer "podSelector") (empty (get $peer "podSelector")) }}{{ $hasSameNamespace = true }}{{ end -}}
+{{- if and (eq (len $peer) 1) (eq (dig "ipBlock" "cidr" "" $peer) "35.191.0.0/16") (empty (dig "ipBlock" "except" (list) $peer)) }}{{ $hasGfePrimary = true }}{{ end -}}
+{{- if and (eq (len $peer) 1) (eq (dig "ipBlock" "cidr" "" $peer) "130.211.0.0/22") (empty (dig "ipBlock" "except" (list) $peer)) }}{{ $hasGfeSecondary = true }}{{ end -}}
+{{- end }}
+{{- if not $hasSameNamespace }}{{ fail (printf "gkeIngress requires %s.networkPolicy.ingressFrom to retain same-namespace pod access" $name) }}{{ end -}}
+{{- if not $hasGfePrimary }}{{ fail (printf "gkeIngress requires %s.networkPolicy.ingressFrom to allow GKE health checker/proxy range 35.191.0.0/16 without exclusions" $name) }}{{ end -}}
+{{- if not $hasGfeSecondary }}{{ fail (printf "gkeIngress requires %s.networkPolicy.ingressFrom to allow GKE health checker/proxy range 130.211.0.0/22 without exclusions" $name) }}{{ end -}}
+{{- end }}
+{{- $gkeName := required "gkeIngress.name is required when gkeIngress.enabled=true" (dig "name" "" $gke) -}}
+{{- $staticIpName := required "gkeIngress.staticIpName is required when gkeIngress.enabled=true" (dig "staticIpName" "" $gke) -}}
+{{- $managedCertificateName := required "gkeIngress.managedCertificateName is required when gkeIngress.enabled=true" (dig "managedCertificateName" "" $gke) -}}
+{{- $frontendConfigName := required "gkeIngress.frontendConfigName is required when gkeIngress.enabled=true" (dig "frontendConfigName" "" $gke) -}}
+{{- $hostRoot := dig "hosts" "root" "" $gke -}}
+{{- $hostApi := dig "hosts" "api" "" $gke -}}
+{{- $hostCast := dig "hosts" "cast" "" $gke -}}
+{{- $hostHistory := dig "hosts" "history" "" $gke -}}
+{{- range $name, $host := dict "root" $hostRoot "api" $hostApi "cast" $hostCast "history" $hostHistory }}
+{{- if not $host }}{{ fail (printf "gkeIngress.hosts.%s is required when gkeIngress.enabled=true" $name) }}{{ end -}}
+{{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
+{{- end }}
+{{- if ne (len (list $hostRoot $hostApi $hostCast $hostHistory | uniq)) 4 }}{{ fail "gkeIngress.hosts.root/api/cast/history must all be distinct" }}{{ end -}}
+{{- range $name := list "dashboard" "api" "cast" "history" }}
+{{- $backend := dig "backends" $name (dict) $gke -}}
+{{- if not (dig "serviceName" "" $backend) }}{{ fail (printf "gkeIngress.backends.%s.serviceName is required" $name) }}{{ end -}}
+{{- if not (dig "servicePort" 0 $backend) }}{{ fail (printf "gkeIngress.backends.%s.servicePort is required" $name) }}{{ end -}}
+{{- end }}
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: {{ $managedCertificateName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  domains:
+    - {{ $hostRoot | quote }}
+    - {{ $hostApi | quote }}
+    - {{ $hostCast | quote }}
+    - {{ $hostHistory | quote }}
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: {{ $frontendConfigName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+# Deliberately has no selector. Sensitive Relaycast paths are routed here so
+# the edge returns an error instead of forwarding them to the public backend.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: edge-deny
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $gke.backends.cast.servicePort }}
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $gkeName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: {{ $staticIpName | quote }}
+    networking.gke.io/managed-certificates: {{ $managedCertificateName | quote }}
+    networking.gke.io/v1beta1.FrontendConfig: {{ $frontendConfigName | quote }}
+spec:
+  rules:
+    - host: {{ $hostRoot | quote }}
+      http:
+        paths:
+          - path: /cloud/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $gke.backends.api.serviceName }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+          - path: /login
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $gke.backends.api.serviceName }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $gke.backends.dashboard.serviceName }}
+                port: { number: {{ $gke.backends.dashboard.servicePort }} }
+    - host: {{ $hostApi | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $gke.backends.api.serviceName }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+    - host: {{ $hostCast | quote }}
+      http:
+        paths:
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /v1/workspaces
+            pathType: Exact
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /v1/workspaces/
+            pathType: Exact
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $gke.backends.cast.serviceName }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+    - host: {{ $hostHistory | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $gke.backends.history.serviceName }}
+                port: { number: {{ $gke.backends.history.servicePort }} }
+{{- end }}
