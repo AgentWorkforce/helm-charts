@@ -32,6 +32,7 @@ TARGET_NAMESPACE="${CONFORMANCE_TARGET_NAMESPACE:-}"
 TARGET_RELEASE="${CONFORMANCE_TARGET_RELEASE:-}"
 CLEANUP=false
 DB_OUTAGE_ACTIVE=false
+FRESH_INSTALL_OK=false
 VALUES_FILES=()
 CREATED_NAMESPACES=()
 STARTED_AT="$(utc_now)"
@@ -50,8 +51,10 @@ Core options:
   --values FILE                   Values file; repeatable
   --release NAME                  Conformance release prefix
   --namespace NAME                Conformance namespace prefix
-  --target-namespace NAME         Existing release namespace for read-only checks
-  --target-release NAME           Existing release name for read-only checks
+  --target-namespace NAME         Existing release namespace for read-only
+                                  audit checks (rejected with --apply)
+  --target-release NAME           Existing release name for read-only audit
+                                  checks (rejected with --apply)
   --adapter FILE                  Executable implementing product assertions
   --base-url HTTPS_URL            Existing or installed service URL
   --dns-name HOST                 DNS hostname to resolve
@@ -111,6 +114,13 @@ if [[ "${APPLY_REQUESTED}" == true ]]; then
   MODE="apply"
 elif [[ -n "${APPROVAL}" ]]; then
   die "approval was supplied without --apply"
+fi
+
+# Apply mode mutates whatever release it points at (outage hooks, rollout
+# restarts, adapter fixtures). It must only ever act on the isolated release it
+# installs itself, so an existing target is accepted for audit mode only.
+if [[ "${MODE}" == "apply" && ( -n "${TARGET_NAMESPACE}" || -n "${TARGET_RELEASE}" ) ]]; then
+  die "--target-namespace/--target-release are read-only audit inputs and cannot be combined with --apply"
 fi
 
 [[ "${RUN_NAMESPACE}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] ||
@@ -213,6 +223,19 @@ release_is_deployed() {
     >/dev/null 2>&1 <<<"${releases_json}"
 }
 
+# Scenarios that mutate the active release (or ask hooks/adapters to) run only
+# against the isolated release this run installed successfully.
+require_isolated_release() {
+  local scenario="$1"
+  if [[ "${FRESH_INSTALL_OK}" != true ||
+    "${ACTIVE_NAMESPACE}" != "${RUN_NAMESPACE}" ||
+    "${ACTIVE_RELEASE}" != "${RELEASE_NAME}" ]]; then
+    emit_evidence "${scenario}" "SKIP" "requires a successful isolated fresh install in this run"
+    return 1
+  fi
+  return 0
+}
+
 scenario_preflight() {
   local failed=false
   run_quiet safe_kubectl version --client && run_quiet safe_helm version ||
@@ -243,6 +266,7 @@ scenario_fresh_install() {
     install_release "${RELEASE_NAME}" "${RUN_NAMESPACE}" "${CURRENT_VERSION}"; then
     ACTIVE_NAMESPACE="${RUN_NAMESPACE}"
     ACTIVE_RELEASE="${RELEASE_NAME}"
+    FRESH_INSTALL_OK=true
     export ACTIVE_NAMESPACE ACTIVE_RELEASE
     emit_evidence "fresh-install" "PASS" "fresh isolated install became ready" \
       "$(json_object --arg namespace "${RUN_NAMESPACE}" --arg release "${RELEASE_NAME}" \
@@ -342,7 +366,7 @@ scenario_product_behaviors() {
   for pair in "${pairs[@]}"; do
     scenario="${pair%%:*}"
     action="${pair#*:}"
-    if require_apply "${scenario}"; then
+    if require_apply "${scenario}" && require_isolated_release "${scenario}"; then
       adapter_scenario "${scenario}" "${action}"
     fi
   done
@@ -351,6 +375,7 @@ scenario_product_behaviors() {
 scenario_db_outage() {
   local scenario="db-outage-readiness"
   require_apply "${scenario}" || return
+  require_isolated_release "${scenario}" || return
   if ! validate_hook "${DB_OUTAGE_HOOK}"; then
     emit_evidence "${scenario}" "SKIP" "executable DB outage hook is not configured"
     return
@@ -389,6 +414,7 @@ scenario_db_outage() {
 scenario_restart_outbox() {
   local scenario="restart-outbox-recovery"
   require_apply "${scenario}" || return
+  require_isolated_release "${scenario}" || return
   if [[ -z "${CONFORMANCE_ADAPTER}" ]]; then
     emit_evidence "${scenario}" "SKIP" "CONFORMANCE_ADAPTER is not configured"
     return
@@ -416,6 +442,10 @@ scenario_networking() {
   local network_policy=false
   local backend_health=false
   local resource_names=""
+
+  if [[ "${MODE}" == "apply" ]]; then
+    require_isolated_release "${scenario}" || return
+  fi
 
   if resource_names="$(safe_kubectl get networkpolicy \
     --namespace "${ACTIVE_NAMESPACE}" --output=name 2>/dev/null)" &&
@@ -473,7 +503,7 @@ scenario_dns_tls() {
 
 scenario_backup_restore() {
   local scenario="backup"
-  if require_apply "${scenario}"; then
+  if require_apply "${scenario}" && require_isolated_release "${scenario}"; then
     if ! validate_hook "${BACKUP_HOOK}"; then
       emit_evidence "${scenario}" "SKIP" "executable backup hook is not configured"
     elif run_hook "${BACKUP_HOOK}" create; then
@@ -484,7 +514,7 @@ scenario_backup_restore() {
   fi
 
   scenario="isolated-restore"
-  if require_apply "${scenario}"; then
+  if require_apply "${scenario}" && require_isolated_release "${scenario}"; then
     if ! validate_hook "${RESTORE_HOOK}"; then
       emit_evidence "${scenario}" "SKIP" "executable restore hook is not configured"
     elif run_hook "${RESTORE_HOOK}" restore && run_hook "${RESTORE_HOOK}" verify; then

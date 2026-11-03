@@ -220,6 +220,41 @@ set -e
 [[ ! -s "${command_log}" ]] || fail "unsafe Helm command reached helm"
 pass "Helm install/upgrade requires Secret redaction"
 
+: >"${command_log}"
+if "${TEST_BASH}" "${HARNESS}" --apply --approval APPLY --chart ./umbrella \
+  --target-namespace production --adapter "${adapter}" \
+  --evidence-dir "${tmp_root}/target-rejected" >/dev/null 2>&1; then
+  fail "apply mode accepted --target-namespace"
+fi
+if CONFORMANCE_TARGET_RELEASE=agentworkforce "${TEST_BASH}" "${HARNESS}" \
+  --apply --approval APPLY --chart ./umbrella \
+  --evidence-dir "${tmp_root}/target-release-rejected" >/dev/null 2>&1; then
+  fail "apply mode accepted CONFORMANCE_TARGET_RELEASE"
+fi
+[[ ! -s "${command_log}" ]] || fail "commands ran before target override was rejected"
+pass "apply mode rejects existing-release targets"
+
+: >"${command_log}"
+no_chart_evidence="${tmp_root}/apply-no-chart"
+"${TEST_BASH}" "${HARNESS}" --apply --approval APPLY \
+  --namespace aw-conformance-nochart --release aw-conformance-nochart \
+  --adapter "${adapter}" --db-outage-hook "${hook}" \
+  --backup-hook "${hook}" --restore-hook "${hook}" \
+  --evidence-dir "${no_chart_evidence}" >/dev/null 2>&1 || true
+assert_not_contains "${command_log}" 'rollout restart'
+assert_not_contains "${command_log}" '^hook '
+assert_not_contains "${command_log}" '^adapter '
+jq -e '
+  [.scenarios[] | select(.scenario == "db-outage-readiness"
+    or .scenario == "restart-outbox-recovery"
+    or .scenario == "two-agent-ping-reply"
+    or .scenario == "backup"
+    or .scenario == "networkpolicy-gke-backend-health") | .status]
+  | length == 5 and all(. == "SKIP")
+' "${no_chart_evidence}/summary.json" >/dev/null ||
+  fail "mutating scenarios ran without an isolated fresh install"
+pass "mutating scenarios require the isolated fresh install"
+
 # expect_wrapper RC MODE COMMAND... runs a wrapper in an isolated subshell
 # under TEST_BASH and asserts both the exit code and that a blocked command
 # never reached the mocked binary.
