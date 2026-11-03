@@ -45,11 +45,11 @@ function must(condition, message) {
 
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
-async function call(method, url, { token, headers = {}, body } = {}) {
+async function call(method, url, { token, headers = {}, body, timeoutMs = 20_000 } = {}) {
   const response = await fetch(url, {
     method,
     redirect: "manual",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       accept: "application/json",
       ...(body === undefined ? {} : { "content-type": "application/json" }),
@@ -155,24 +155,50 @@ async function deviceLogin(bootstrap, userId, workspaceId, clientName) {
   return tokens.json;
 }
 
-async function createTenant(label, org) {
+// Relaycast workspaces are created in-cluster through POST /internal/workspaces
+// (the public edge denies /internal and /v1/workspaces). The SQLite server
+// and the durable-actors gateway share that contract; the gateway's create
+// spawns a workspace actor and can take ~100s, so the timeout comes from the
+// caller (--relaycast-create-timeout, default 180s).
+async function checkRelaycastInternal() {
+  const capabilities = await call("GET", `${RELAYCAST}/internal/capabilities`, { token: secrets.relaycastInternalSecret });
+  must(capabilities.status === 200, `relaycast /internal/capabilities status=${capabilities.status} error=${errorCode(capabilities)} (mode=${state.relaycast?.mode})`);
+  const admin = rcData(capabilities)?.workspace_admin;
+  must(!admin || admin.create !== false, "relaycast reports workspace_admin.create=false");
+  return admin ? `create=${admin.create} delete=${admin.delete}` : "workspace_admin=unreported";
+}
+
+async function createRelaycastWorkspace(label) {
+  const timeoutMs = state.relaycast?.createTimeoutMs ?? 180_000;
+  const started = Date.now();
+  let rc;
+  try {
+    rc = await call("POST", `${RELAYCAST}/internal/workspaces`, {
+      token: secrets.relaycastInternalSecret,
+      body: { name: `e2e-${state.marker}-${label}` },
+      timeoutMs,
+    });
+  } catch (error) {
+    throw new CheckError(`relaycast internal create (${label}) failed after ${Date.now() - started}ms: ${error?.name === "TimeoutError" ? `timeout ${timeoutMs}ms` : error?.message}`);
+  }
+  const ms = Date.now() - started;
+  must(rc.status === 201, `relaycast internal create (${label}) status=${rc.status} error=${errorCode(rc)} after ${ms}ms`);
+  const workspace = rcData(rc);
+  must(typeof workspace?.workspace_id === "string" && workspace.workspace_id.length > 0, `relaycast create (${label}) returned no workspace id`);
+  must(typeof workspace.api_key === "string" && workspace.api_key.length >= 16, `relaycast create (${label}) returned no workspace key`);
+  return { workspaceId: workspace.workspace_id, apiKey: workspace.api_key, ms };
+}
+
+async function createTenant(label, org, rcWorkspace) {
   const bootstrap = bootstrapToken();
   const marker = state.marker;
-
-  const rc = await call("POST", `${RELAYCAST}/internal/workspaces`, {
-    token: secrets.relaycastInternalSecret,
-    body: { name: `e2e-${marker}-${label}` },
-  });
-  must(rc.status === 201, `relaycast internal create status=${rc.status} error=${errorCode(rc)}`);
-  const rcWorkspace = rcData(rc);
-  const rcKey = rcWorkspace.api_key;
-  must(typeof rcKey === "string" && rcKey.startsWith("rk_live_"), "relaycast returned no workspace key");
+  const rcKey = rcWorkspace.apiKey;
 
   const ws = await call("POST", `${API}/api/v1/organizations/${org.organizationId}/workspaces`, {
     token: bootstrap,
     body: {
       name: `e2e-${marker}-${label}`,
-      relaycastWorkspaceId: rcWorkspace.workspace_id,
+      relaycastWorkspaceId: rcWorkspace.workspaceId,
       relaycastApiKey: rcKey,
     },
   });
@@ -181,7 +207,9 @@ async function createTenant(label, org) {
 
   const tokens = await deviceLogin(bootstrap, org.ownerUserId, ws.json.id, `e2e-${marker}-${label}`);
   return {
-    relaycastWorkspaceId: rcWorkspace.workspace_id,
+    relaycastWorkspaceId: rcWorkspace.workspaceId,
+    relaycastCreateMs: rcWorkspace.ms,
+    relaycastKey: rcKey,
     organizationId: org.organizationId,
     ownerUserId: org.ownerUserId,
     workspaceId: ws.json.id,
@@ -219,8 +247,19 @@ async function phaseBootstrap() {
   state.capabilities = detected.capabilities;
   pass("bootstrap.capabilities", `openapi=${detected.openapi} ${Object.entries(detected.capabilities).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 
-  for (const label of ["a", "b"]) {
-    const tenant = await createTenant(label, org);
+  const rcMode = await checkRelaycastInternal();
+  // Both Relaycast workspaces are created concurrently; each is recorded for
+  // cleanup as soon as it exists, even if the other create fails.
+  const created = await Promise.allSettled(["a", "b"].map(async (label) => {
+    const workspace = await createRelaycastWorkspace(label);
+    state[label] = { relaycastWorkspaceId: workspace.workspaceId };
+    return workspace;
+  }));
+  const failed = created.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
+  pass("bootstrap.relaycast_workspaces", `mode=${state.relaycast?.mode} ${rcMode} create_ms=${created.map((result) => result.value.ms).join(",")}`);
+  for (const [index, label] of ["a", "b"].entries()) {
+    const tenant = await createTenant(label, org, created[index].value);
     state[label] = tenant;
     pass(
       `bootstrap.tenant_${label}`,
@@ -238,8 +277,7 @@ async function phaseBootstrap() {
     must(resolved.status === 200, `resolve status=${resolved.status}`);
     must(
       resolved.json.relaycastWorkspaceId === tenant.relaycastWorkspaceId &&
-        typeof resolved.json.relaycastApiKey === "string" &&
-        resolved.json.relaycastApiKey.startsWith("rk_live_"),
+        resolved.json.relaycastApiKey === tenant.relaycastKey,
       "resolve returned a different Relaycast workspace or no key",
     );
     // The key Desktop actually uses is the one the control plane returns.
@@ -1541,8 +1579,9 @@ async function phaseCleanup() {
     if (!tenant?.relaycastWorkspaceId || state.cleaned[`relaycast_${label}`]) continue;
     const response = await call("DELETE", `${RELAYCAST}/internal/workspaces/${tenant.relaycastWorkspaceId}`, {
       token: secrets.relaycastInternalSecret,
+      timeoutMs: state.relaycast?.createTimeoutMs ?? 180_000,
     });
-    must(response.status === 204, `delete relaycast workspace ${label} status=${response.status}`);
+    must(response.status === 204 || response.status === 200, `delete relaycast workspace ${label} status=${response.status} (mode=${state.relaycast?.mode})`);
     state.cleaned[`relaycast_${label}`] = true;
     pass(`cleanup.relaycast_${label}`, `deleted=${tenant.relaycastWorkspaceId}`);
   }

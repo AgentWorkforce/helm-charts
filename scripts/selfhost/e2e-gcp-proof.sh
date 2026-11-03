@@ -48,6 +48,9 @@ REQUIRE_PUBLIC=false
 CERT_WAIT=0
 PIPELINE_TIMEOUT=300
 CLEANUP=true
+RELAYCAST_SECRET_KEY=""
+RELAYCAST_MODE=unknown
+RELAYCAST_CREATE_TIMEOUT=180
 ALLOWED_GAPS=()
 KNOWN_GAPS=(relayhistory-turns-erasure)
 SKIP_FLOWS=false
@@ -70,7 +73,7 @@ Required:
 Options:
   -n, --namespace NAME        agent-relay namespace (default: agent-relay)
       --bulls-namespace NAME  96bulls namespace (default: 96bulls)
-      --secret NAME           release Secret holding relaycast-internal-secret
+      --secret NAME           release Secret holding the Relaycast internal secret
                               (default: agent-relay-gcp-proof)
       --base-domain DOMAIN    public base domain (default: derived from the
                               relay-cloud-api SELFHOST_PUBLIC_URL)
@@ -90,6 +93,13 @@ Options:
       --allow-known-gap NAME  report a documented product gap as SKIP instead of
                               FAIL (repeatable). Known: relayhistory-turns-erasure
                               (session erasure leaves conversation turns readable)
+      --relaycast-secret-key K  key in --secret for Relaycast's /internal API
+                              (default: detected; relaycast-actors-internal-secret
+                              for the durable-actors gateway, relaycast-internal-secret
+                              for the SQLite server)
+      --relaycast-create-timeout SECONDS
+                              per-workspace Relaycast create timeout (default 180;
+                              the actor-mode create can take ~100s)
       --no-cleanup            keep the Relaycast workspaces and device tokens
                               (case 15 SKIP); --cleanup is the default
   -h, --help                  show this help
@@ -113,7 +123,7 @@ need_value() {
 
 while (($#)); do
   case "$1" in
-    --context|-n|--namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap)
+    --context|-n|--namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap|--relaycast-secret-key|--relaycast-create-timeout)
       need_value "$1" "$#" ;;
   esac
   case "$1" in
@@ -130,6 +140,8 @@ while (($#)); do
     --pipeline-timeout) PIPELINE_TIMEOUT="$2"; shift 2 ;;
     --cleanup) CLEANUP=true; shift ;;
     --no-cleanup) CLEANUP=false; shift ;;
+    --relaycast-secret-key) RELAYCAST_SECRET_KEY="$2"; shift 2 ;;
+    --relaycast-create-timeout) RELAYCAST_CREATE_TIMEOUT="$2"; shift 2 ;;
     --allow-known-gap)
       [[ " ${KNOWN_GAPS[*]} " == *" $2 "* ]] || die_usage "unknown gap: $2 (known: ${KNOWN_GAPS[*]})"
       ALLOWED_GAPS+=("$2"); shift 2 ;;
@@ -147,6 +159,8 @@ done
 [[ -n "$NAMESPACE" && -n "$BULLS_NAMESPACE" && -n "$SECRET_NAME" ]] || die_usage "namespace and secret options must not be empty"
 [[ "$CERT_WAIT" =~ ^[0-9]+$ ]] || die_usage "--cert-wait must be a non-negative integer"
 [[ "$PIPELINE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die_usage "--pipeline-timeout must be a positive integer"
+[[ "$RELAYCAST_CREATE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die_usage "--relaycast-create-timeout must be a positive integer"
+[[ -z "$RELAYCAST_SECRET_KEY" || "$RELAYCAST_SECRET_KEY" =~ ^[A-Za-z0-9._-]+$ ]] || die_usage "--relaycast-secret-key is not a valid Secret key"
 [[ "$EDGE_WAIT" =~ ^[0-9]+$ ]] || die_usage "--edge-wait must be a non-negative integer"
 [[ "$WORKER_WAIT" =~ ^[1-9][0-9]*$ ]] || die_usage "--worker-wait must be a positive integer"
 [[ "$AGENT_RELAY_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die_usage "--agent-relay-version must be an exact x.y.z version"
@@ -186,7 +200,7 @@ remove_worker() {
 CLEANUP_RAN=false
 cleanup_exit() {
   remove_worker
-  if $CLEANUP && ! $CLEANUP_RAN && [[ -s "$STATE" && -n "$(state_get a.workspaceId 2>/dev/null)" ]]; then
+  if $CLEANUP && ! $CLEANUP_RAN && [[ -s "$STATE" && -n "$(state_get a.relaycastWorkspaceId 2>/dev/null)" ]]; then
     CLEANUP_RAN=true
     printf '\n== interrupted: cleanup (%s)\n' "$(date -u +%FT%TZ)"
     run_phase cleanup
@@ -248,7 +262,7 @@ install_driver() {
 
 # phase_input: the state plus the secrets the driver may need, on stdout.
 phase_input() {
-  python3 - "$STATE" "$RCS" "$WORK/enrollment-token" <<'PY'
+  python3 - "$STATE" "$RCS" "$WORK/enrollment-token" "$RELAYCAST_MODE" "$RELAYCAST_CREATE_TIMEOUT" <<'PY'
 import json, sys
 text = open(sys.argv[1]).read().strip()
 state = json.loads(text) if text else {}
@@ -258,6 +272,7 @@ def read(path):
     except FileNotFoundError:
         return ""
 state["secrets"] = {"relaycastInternalSecret": read(sys.argv[2]), "enrollmentToken": read(sys.argv[3])}
+state["relaycast"] = {"mode": sys.argv[4], "createTimeoutMs": int(sys.argv[5]) * 1000}
 sys.stdout.write(json.dumps(state))
 PY
 }
@@ -389,9 +404,47 @@ if [[ -z "$BASE_DOMAIN" ]]; then
   BASE_DOMAIN="${host#api.}"
 fi
 printf 'E2E_BASE_DOMAIN=%s\n' "$BASE_DOMAIN"
-"${KN[@]}" get secret "$SECRET_NAME" -o jsonpath='{.data.relaycast-internal-secret}' 2>/dev/null |
-  python3 -c 'import base64, sys; sys.stdout.write(base64.b64decode(sys.stdin.read() or b"").decode())' >"$RCS"
-[[ -s "$RCS" ]] || { printf 'E2E_RESULT=FAIL\nreason: relaycast-internal-secret not readable from %s\n' "$SECRET_NAME"; exit 1; }
+# Relaycast runs either as the SQLite server or as the durable-actors gateway
+# (same Service, same /internal/workspaces contract, different secret, and an
+# actor-mode create that can take ~100s). The mode is read from the relaycast
+# Deployment; the secret key is the one that Deployment mounts as its
+# internal secret, falling back to the mode's default.
+relaycast_json="$("${KN[@]}" get deploy relaycast -o json 2>/dev/null)"
+read -r RELAYCAST_MODE mounted_key < <(python3 -c '
+import json, sys
+try:
+    spec = json.loads(sys.stdin.read())["spec"]["template"]["spec"]
+except Exception:
+    print("unknown -"); raise SystemExit(0)
+container = spec["containers"][0]
+env = {e["name"]: e for e in container.get("env", [])}
+mode = "actors" if "DURABLE_ACTORS_CONTROL_PLANE_URL" in env else "sqlite"
+key = "-"
+ref = env.get("RELAYCAST_INTERNAL_SECRET", {}).get("valueFrom", {}).get("secretKeyRef")
+if ref:
+    key = ref["key"]
+else:
+    target = env.get("RELAYCAST_INTERNAL_SECRET_FILE", {}).get("value", "")
+    for volume in spec.get("volumes", []):
+        for item in (volume.get("secret") or {}).get("items", []):
+            for mount in container.get("volumeMounts", []):
+                if mount["name"] == volume["name"] and target == mount["mountPath"].rstrip("/") + "/" + item["path"]:
+                    key = item["key"]
+print(mode, key)
+' <<<"$relaycast_json")
+if [[ -z "$RELAYCAST_SECRET_KEY" ]]; then
+  if [[ "$mounted_key" != "-" ]]; then
+    RELAYCAST_SECRET_KEY="$mounted_key"
+  elif [[ "$RELAYCAST_MODE" == actors ]]; then
+    RELAYCAST_SECRET_KEY=relaycast-actors-internal-secret
+  else
+    RELAYCAST_SECRET_KEY=relaycast-internal-secret
+  fi
+fi
+printf 'E2E_RELAYCAST_MODE=%s\nE2E_RELAYCAST_SECRET_KEY=%s\n' "$RELAYCAST_MODE" "$RELAYCAST_SECRET_KEY"
+"${KN[@]}" get secret "$SECRET_NAME" -o json 2>/dev/null |
+  python3 -c 'import base64, json, sys; data = json.load(sys.stdin).get("data", {}); sys.stdout.write(base64.b64decode(data.get(sys.argv[1], "")).decode())' "$RELAYCAST_SECRET_KEY" >"$RCS" 2>/dev/null
+[[ -s "$RCS" ]] || { printf 'E2E_RESULT=FAIL\nreason: %s not readable from Secret %s\n' "$RELAYCAST_SECRET_KEY" "$SECRET_NAME"; exit 1; }
 
 # ---------------------------------------------------------------- public edge readiness
 
