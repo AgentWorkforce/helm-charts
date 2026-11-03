@@ -2,7 +2,23 @@
 {{- if and (dig "relaycast" true (.Values.components | default dict)) (eq (dig "credentials" "authority" "" (.Values.relaycast | default dict)) "relayauth") (not (dig "relayauth" true (.Values.components | default dict))) }}
 {{- fail "relaycast.credentials.authority=relayauth requires components.relayauth=true: RelayAuth is the ar_ credential authority that pushes ar_ws_ keys into Relaycast" }}
 {{- end }}
+{{- include "agent-relay.validateHistoryOrigin" . }}
 {{- include "agent-relay.validateDurableActors" . }}
+{{- end }}
+
+{{/*
+Session ingest (alleyoop) verifies courier History assertions against the same
+audience RelayHistory issues them for, so the two origins must be byte-equal.
+*/}}
+{{- define "agent-relay.validateHistoryOrigin" -}}
+{{- $components := .Values.components | default dict -}}
+{{- if and (dig "sessionsPipeline" true $components) (dig "relayhistory" true $components) }}
+{{- $ingest := dig "alleyoop" "auth" "historyOrigin" "" (index .Values "sessions-pipeline" | default dict) -}}
+{{- $history := dig "relayauth" "historyOrigin" "" (.Values.relayhistory | default dict) -}}
+{{- if and $ingest $history (ne $ingest $history) }}
+{{- fail (printf "sessions-pipeline.alleyoop.auth.historyOrigin (%s) must equal relayhistory.relayauth.historyOrigin (%s): session ingest verifies courier History assertions against that audience" $ingest $history) }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*

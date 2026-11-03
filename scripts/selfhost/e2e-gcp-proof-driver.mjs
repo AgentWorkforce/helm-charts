@@ -245,7 +245,7 @@ async function phaseBootstrap() {
     token: bootstrap,
     body: {
       name: `e2e-${state.marker}-second-org`,
-      ownerEmail: `e2e-${state.marker}-second@gcp-proof.agentrelay.com`,
+      ownerEmail: `e2e-${state.marker}-second@${state.emailDomain}`,
       ownerName: "E2E Second",
     },
   });
@@ -326,7 +326,7 @@ async function checkMembershipGate(bootstrap, org) {
   must(ghost.status === 403 && errorCode(ghost) === "not_member", `unknown user approve status=${ghost.status} error=${errorCode(ghost)}`);
 
   // 2. A real user whose membership was removed: add, remove, then approve.
-  const email = `e2e-${state.marker}-outsider@gcp-proof.agentrelay.com`;
+  const email = `e2e-${state.marker}-outsider@${state.emailDomain}`;
   const added = await call("POST", `${API}/api/v1/organizations/${org.organizationId}/memberships`, {
     token: bootstrap,
     body: { email, name: `E2E Outsider ${state.marker}`, role: "member" },

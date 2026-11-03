@@ -47,9 +47,12 @@ INCLUDE_TREES = (
     "docs/diagrams",
     "docs/handoff",
     "docs/licenses",
+    "docs/operations",
+    "docs/support",
     "scripts/conformance",
     "scripts/release",
     "scripts/selfhost",
+    "scripts/support",
     "self-hosted",
 )
 INCLUDE_FILES = (
@@ -71,6 +74,14 @@ EXCLUDED_PREFIXES = (
 EXCLUDED_NAME_FRAGMENTS = (
     "proof",
 )
+# The end-to-end harness is customer-runnable against any install's public
+# origins (it holds no proof-environment values), so it ships despite its name.
+# Proof values files stay excluded.
+INCLUDED_DESPITE_NAME = frozenset((
+    "scripts/selfhost/e2e-gcp-proof.sh",
+    "scripts/selfhost/e2e-gcp-proof-driver.mjs",
+    "scripts/selfhost/e2e-gcp-proof-sessions-pipeline.ts",
+))
 
 # A complete handoff must contain these exact tracked inputs. The development
 # override can exercise packaging against an older revision, but the resulting
@@ -222,6 +233,8 @@ def selected_path(path: str, charts: tuple[str, ...]) -> bool:
     if any(path.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
         return False
     lowered_parts = tuple(part.lower() for part in pure.parts)
+    if path in INCLUDED_DESPITE_NAME:
+        return True
     if any(
         fragment in part
         for part in lowered_parts

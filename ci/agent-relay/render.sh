@@ -135,6 +135,13 @@ if acme_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f 
 fi
 grep -Fq 'relay-cloud-api.service.backendConfig=acme-relay-api' <<<"$acme_fail" \
   || { echo "values-gcp.yaml: stale backendConfig failed without naming the expected value" >&2; echo "$acme_fail" >&2; exit 1; }
+# Session ingest's History audience must equal RelayHistory's origin.
+if origin_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
+  --set relayhistory.relayauth.historyOrigin=https://history.acme.example 2>&1); then
+  echo "values-gcp.yaml: mismatched sessions-pipeline.alleyoop.auth.historyOrigin rendered" >&2; exit 1
+fi
+grep -Fq 'sessions-pipeline.alleyoop.auth.historyOrigin (https://history.placeholder.company) must equal relayhistory.relayauth.historyOrigin (https://history.acme.example)' <<<"$origin_fail" \
+  || { echo "values-gcp.yaml: historyOrigin mismatch failed without the expected error" >&2; echo "$origin_fail" >&2; exit 1; }
 # RelayHistory write-hold step 1 through the umbrella: History drains to zero
 # replicas while its migrate Job takes the write hold.
 wh_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \

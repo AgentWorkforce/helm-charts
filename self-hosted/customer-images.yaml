@@ -7,19 +7,24 @@ kind: CustomerImageSourceManifest
 status: blocked
 metadata:
   name: agent-relay-gcp
-  auditedAt: "2026-11-02"
+  auditedAt: "2026-11-03"
   chart:
     name: agent-relay
-    version: 0.1.0
+    version: 0.3.1
     values:
-      - charts/agent-relay/values-gcp-proof.yaml
+      - charts/agent-relay/values-gcp.yaml
 
 scope:
   description: >-
-    Unique images rendered by the full-customer GCP profile with all six
-    product components enabled. Known proof digests were supplied only to make
-    the fail-closed chart render for inventory; that does not approve them for
-    customer use.
+    Unique images rendered by the full-customer GCP profile
+    (charts/agent-relay/values-gcp.yaml) with all six product components
+    enabled. Durable actors, Relayfile and Relayflows are optional preview
+    components, off in this profile, and are not part of this matrix.
+    RelayHistory and Sessions services still carry their last audited proof or
+    private digests here (see each row's current.note); values-gcp.yaml
+    renders zero-digest REQUIRED OVERRIDE images for both until their release
+    images are published, so this matrix does not match what the profile
+    renders for those two rows, and the release gate reports that.
   activeUniqueImages: 7
   excludedConditionalImages:
     - image: cgr.dev/chainguard/minio
@@ -141,6 +146,12 @@ images:
       repository: ghcr.io/agentworkforce/96bulls-services
       digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
       chartStatus: shipped-private
+      note: >-
+        Last audited private digest, recorded as evidence. values-gcp.yaml does
+        not render it: worker.image and alleyoop.image are REQUIRED OVERRIDE
+        (ghcr.io/agentworkforce/96bulls-services@sha256:000...0) until an
+        attested release image is published, and the gate reports this row as
+        not rendered.
     source:
       repository: https://github.com/AgentWorkforce/sessions-pipeline
       revision: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
@@ -187,32 +198,56 @@ images:
       chartStatus: pinned-third-party
     source:
       repository: https://github.com/cloudnative-pg/postgres-containers
-      revision: null
+      revision: 4c2710a78328becdadf708ca6d9cb3fb61f3f5ee
       path: Dockerfile
-      reproducibleReference: false
-      note: The image has no OCI source/revision labels and the exact source commit for this digest is not recorded.
+      reproducibleReference: true
+      note: >-
+        PostgreSQL 17.11 "standard" (debian trixie-slim). The image's
+        org.opencontainers.image.revision label and its SLSA provenance both
+        name 4c2710a; the provenance records the Dockerfile and every bake
+        build argument (PG_VERSION 17.11, BARMAN_VERSION 3.20.1, the pinned
+        debian base digest).
     license:
       status: approved-upstream
       spdx: Apache-2.0
-      evidence: Public upstream repository license
+      evidence: >-
+        https://github.com/cloudnative-pg/postgres-containers/blob/4c2710a78328becdadf708ca6d9cb3fb61f3f5ee/LICENSE
+        and the image's org.opencontainers.image.licenses=Apache-2.0 label;
+        PostgreSQL itself is under the PostgreSQL License.
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
       status: verified
     release:
-      workflow: https://github.com/cloudnative-pg/postgres-containers/blob/main/.github/workflows/bake.yml
-      run: null
-      trigger: upstream-managed
-      buildsCommittedRevision: false
-      publishesSbom: false
-      publishesProvenance: false
-      note: Upstream-managed; the build run, SBOM and provenance for this digest are not recorded.
+      workflow: https://github.com/cloudnative-pg/postgres-containers/blob/4c2710a78328becdadf708ca6d9cb3fb61f3f5ee/.github/workflows/bake_targets.yml
+      run: https://github.com/cloudnative-pg/postgres-containers/actions/runs/40291448784
+      trigger: upstream-schedule
+      buildsCommittedRevision: true
+      publishesSbom: true
+      publishesProvenance: true
+      provenanceMode: buildx-slsa-v1-max-plus-cosign
+      note: >-
+        Run 40291448784 (Bake Images, schedule on main, headSha 4c2710a,
+        started 2026-10-26T08:19:22Z; the image's created label is
+        08:19:54Z). The index carries BuildKit SPDX SBOM and SLSA v1
+        provenance attestation manifests for amd64 and arm64, and a keyless
+        cosign signature verified on 2026-11-03 with cosign v2.6.1:
+        `cosign verify --new-bundle-format <ref>@<digest>
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com
+        --certificate-identity-regexp
+        '^https://github.com/cloudnative-pg/postgres-containers/.github/workflows/bake_targets.yml@refs/heads/main$'
+        --certificate-github-workflow-sha 4c2710a78328becdadf708ca6d9cb3fb61f3f5ee`
+        (exit 0).
     customerAcquisition:
-      status: available-public-review-required
-      procedure: Mirror the public upstream digest into the customer registry after third-party approval.
+      status: available-public
+      procedure: Mirror the public upstream digest into the customer registry by digest and record the destination digest.
     approval:
-      status: provenance-review-required
-      blockingReasons: [IMG-REVIEW-001]
+      status: approved
+      basis: >-
+        Public multi-arch upstream digest tied to a recorded upstream commit
+        and release run, with SBOM, SLSA provenance and a verified keyless
+        signature; Apache-2.0 image packaging.
+      blockingReasons: []
 
   - id: relayhistory
     active: true
@@ -225,6 +260,12 @@ images:
       repository: <private-proof-registry-not-for-customer-use>/relayhistory
       digest: sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba
       chartStatus: experimental-proof-only
+      note: >-
+        Last audited proof image, recorded as evidence; never a customer
+        image. values-gcp.yaml does not render it: relayhistory.image is
+        REQUIRED OVERRIDE (ghcr.io/agentworkforce/relayhistory@sha256:000...0)
+        until a release image is published, and the gate reports this row as
+        not rendered.
     source:
       repository: https://github.com/AgentWorkforce/relayhistory-cloud
       revision: 4b5839f17c5e0cd481e92712c2a1a340a1604e73
@@ -269,32 +310,35 @@ images:
       - Job/relay-cloud-api-migrate-*:migrate
     current:
       repository: ghcr.io/agentworkforce/selfhost-api
-      digest: sha256:48ba1877d97e47b523e859a0e532bc7f5c4a3920b999f0fbea86f3bbb04fee84
+      digest: sha256:535e6718fa239ce87dead3d22e7c53324bed44bfcef94018918e8804d24af478
       chartStatus: published-awaiting-visibility
     source:
       repository: https://github.com/AgentWorkforce/relaycontrol
-      revision: 10c069bb8adf15cae39f8d4e61a0a3b33fcb116c
-      baseRevision: 10c069bb8adf15cae39f8d4e61a0a3b33fcb116c
-      path: .
+      revision: 8e989a1b1842179f775906091777ce50a9f78ecd
+      path: Dockerfile
       reproducibleReference: true
       note: >-
-        Extracted from AgentWorkforce/cloud packages/selfhost-api into the
-        dedicated relaycontrol repository; the published image builds exactly
-        this committed revision (tags 0.1.0 and sha-10c069b...).
+        relaycontrol main after #1-#5 (orgs/workspaces, admin, sessions,
+        telemetry, desktop auth). Built by the reviewed workflow from this
+        exact main commit (published tags 0.2.0 and sha-8e989a1...).
     license:
       status: approved
       spdx: Apache-2.0
-      evidence: https://github.com/AgentWorkforce/relaycontrol/blob/10c069bb8adf15cae39f8d4e61a0a3b33fcb116c/LICENSE
+      evidence: https://github.com/AgentWorkforce/relaycontrol/blob/8e989a1b1842179f775906091777ce50a9f78ecd/LICENSE
     platforms:
       expected: [linux/amd64, linux/arm64]
-      verifiedFromRegistry: [linux/amd64, linux/arm64]
-      status: verified
+      verifiedFromRegistry: []
+      status: unverified
+      note: >-
+        The run built and pushed linux/amd64 and linux/arm64. The package is
+        still private, so the registry check (anonymous imagetools inspect)
+        waits until it is made public.
     release:
-      workflow: release-selfhost-api-image.yml
-      run: https://github.com/AgentWorkforce/relaycontrol/actions/runs/41556195969
+      workflow: https://github.com/AgentWorkforce/relaycontrol/blob/8e989a1b1842179f775906091777ce50a9f78ecd/.github/workflows/release-selfhost-api-image.yml
+      run: https://github.com/AgentWorkforce/relaycontrol/actions/runs/41684552871
       trigger: workflow_dispatch
       buildsCommittedRevision: true
-      publishedTags: ["0.1.0", sha-10c069b]
+      publishedTags: ["0.2.0", sha-8e989a1b1842179f775906091777ce50a9f78ecd]
       publishesSbom: true
       publishesProvenance: true
       provenanceMode: max
@@ -302,9 +346,9 @@ images:
       status: blocked
       procedure: copy-by-digest
       requiredAction: >-
-        The GHCR package is currently private (anonymous pull returns 401);
-        flip the package to public or copy the verified digest to the
-        customer's authorized registry, then pin it in the chart values.
+        Make the GHCR package public
+        (https://github.com/orgs/AgentWorkforce/packages/container/selfhost-api/settings),
+        then verify both platforms anonymously.
     approval:
       status: blocked
       blockingReasons: [IMG-BLOCK-003]
@@ -317,46 +361,48 @@ images:
       - Deployment/relay-dashboard:copy-dashboard
       - Deployment/relay-dashboard:dashboard
     current:
-      repository: <private-proof-registry-not-for-customer-use>/relay-dashboard
-      digest: sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe
-      chartStatus: proof-only
+      repository: ghcr.io/agentworkforce/relay-dashboard
+      digest: sha256:bbeca872c7e204a02a17050db6ac6309c6d36a07bcd00e1da3a739923f990282
+      chartStatus: shipped
     source:
       repository: https://github.com/AgentWorkforce/relay-dashboard
-      revision: null
-      baseRevision: f71af3ee19683891e4774affa4cf9185c7cc7dba
-      path: .
-      reproducibleReference: false
+      revision: b2134062c28c9526032b23a731aac4d681fe8689
+      path: Dockerfile
+      reproducibleReference: true
       note: >-
-        The proof image was built from a working tree with modified and
-        untracked dashboard, replay, packaging, Docker, and workflow files.
-        The base revision does not reproduce the image.
+        relay-dashboard main after #78-#82. Static SPA built with
+        DASHBOARD_BASE_PATH=/ and DASHBOARD_RUNTIME_CONFIG_URL=/runtime-config.js,
+        served by unprivileged nginx on :8080. It talks only to the same-origin
+        /cloud/api prefix (runtime.apiBasePath must stay /cloud/api).
     license:
-      status: review-required
+      status: approved
       spdx: Apache-2.0
-      evidence: Public repository license; exact proof source snapshot is not committed.
-      note: Source license approved; binary distribution review blocked.
+      evidence: https://github.com/AgentWorkforce/relay-dashboard/blob/b2134062c28c9526032b23a731aac4d681fe8689/LICENSE
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
       status: verified
-      verificationAccess: operator-credentials
+      verificationAccess: anonymous
     release:
-      workflow: null
-      run: null
-      trigger: manual-local-buildx
-      buildsCommittedRevision: false
+      workflow: https://github.com/AgentWorkforce/relay-dashboard/blob/b2134062c28c9526032b23a731aac4d681fe8689/.github/workflows/container.yml
+      run: https://github.com/AgentWorkforce/relay-dashboard/actions/runs/41697933750
+      trigger: workflow_dispatch
+      buildsCommittedRevision: true
+      publishedTags: [sha-b2134062c28c9526032b23a731aac4d681fe8689]
       publishesSbom: true
       publishesProvenance: true
-      note: The only committed workflow at the base revision is CI; the container workflow was untracked.
+      provenanceMode: max-plus-github-attestation
+      verifiesAnonymousPull: true
     customerAcquisition:
-      status: blocked
-      procedure: null
-      requiredAction: >-
-        Commit and review the exact source and container workflow, build from
-        that commit, and publish through an approved customer channel.
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
     approval:
-      status: blocked
-      blockingReasons: [IMG-BLOCK-004]
+      status: approved
+      basis: >-
+        Public digest from the reviewed container workflow at the recorded
+        main revision, with an SPDX SBOM, max-mode provenance, a GitHub
+        build-provenance attestation, and amd64+arm64 verified anonymously.
+      blockingReasons: []
 
 promotionProcedure:
   - order: 1
@@ -400,24 +446,12 @@ blockers:
     severity: hard
     images: [selfhost-api]
     summary: >-
-      Source and release are now canonical (relaycontrol 10c069b, amd64+arm64,
-      SBOM+provenance, run 41556195969); the GHCR package is still private, so
-      a customer pull path and promotion evidence remain open.
+      Source and release are canonical (relaycontrol main 8e989a1, run
+      41684552871, amd64+arm64, SBOM + max provenance). The GHCR package is
+      still private, so customers have no pull path yet.
     closeWhen:
-      - complete source is committed and reviewed
-      - release workflow publishes amd64 and arm64 from that commit
-      - approved customer channel and promotion evidence exist
-    status: >-
-      partially resolved — first two closeWhen items done; blocked on GHCR
-      package visibility (org admin) or digest copy to a customer registry.
-  - id: IMG-BLOCK-004
-    severity: hard
-    images: [relay-dashboard]
-    summary: The Dashboard digest was built from uncommitted source and has no approved container release or customer channel.
-    closeWhen:
-      - exact proof source and workflow are committed and reviewed
-      - a new image is built from that commit
-      - approved customer channel and promotion evidence exist
+      - the package is public (Khaliq, GitHub UI)
+      - both platforms are verified anonymously from the registry
   - id: IMG-BLOCK-005
     severity: hard
     images: [relaycast, sessions-services]
@@ -427,9 +461,3 @@ blockers:
     closeWhen:
       - the release workflow publishes an SBOM and signed provenance for the recorded revision
       - a new digest built that way is recorded here
-  - id: IMG-REVIEW-001
-    severity: review
-    images: [sessions-migration-postgresql]
-    summary: The public third-party digest is multi-arch and Apache-2.0, but its exact upstream source revision and release run are not recorded.
-    closeWhen:
-      - upstream digest-to-source revision and release evidence are recorded
