@@ -1,0 +1,387 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": {
+      "type": "object"
+    },
+    "publicUrl": {
+      "type": "string",
+      "pattern": "^https://[^/?#@]+/?$"
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zone": {
+          "type": "string",
+          "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+        }
+      },
+      "required": [
+        "zone"
+      ]
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bucket": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9][a-z0-9._-]+[a-z0-9]$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "rapid"
+          ]
+        },
+        "rapid": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "buckets": {
+              "type": "array",
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "bucket": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9][a-z0-9._-]+[a-z0-9]$"
+                  },
+                  "zone": {
+                    "type": "string",
+                    "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "zone"
+                ]
+              }
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "all",
+                "nearest"
+              ]
+            }
+          },
+          "required": [
+            "buckets"
+          ]
+        }
+      },
+      "required": [
+        "bucket",
+        "mode",
+        "rapid"
+      ]
+    },
+    "credentialsSecret": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invokeApiKeySecretKey": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^$|^[-._a-zA-Z0-9]+$"
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "googleServiceAccount": {
+          "type": "string",
+          "pattern": "^[^@]+@[^@]+[.]iam[.]gserviceaccount[.]com$"
+        }
+      },
+      "required": [
+        "googleServiceAccount"
+      ]
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "tlsSecret": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "className",
+        "tlsSecret",
+        "annotations"
+      ]
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "actors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hostIdleTimeoutMs": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "warm": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 256
+        },
+        "maxStarting": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "refillIntervalMs": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 60000
+        },
+        "retireConcurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "podReapIntervalMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000
+        },
+        "reapConcurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "registryReapIntervalMs": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 600000
+        },
+        "cpuMillis": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cpuLimitMillis": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "memoryMiB": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "memoryLimitMiB": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minCpuMillis": {"type": ["integer", "null"], "minimum": 0},
+            "maxCpuMillis": {"type": ["integer", "null"], "minimum": 0},
+            "minMemoryMiB": {"type": ["integer", "null"], "minimum": 0},
+            "maxMemoryMiB": {"type": ["integer", "null"], "minimum": 0}
+          }
+        }
+      },
+      "required": [
+        "warm",
+        "cpuMillis",
+        "memoryMiB"
+      ]
+    },
+    "organizationLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxActiveActors": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "actorStartsPerSecond": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "actorStartBurst": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      },
+      "required": ["enabled", "maxActiveActors", "actorStartsPerSecond", "actorStartBurst"]
+    },
+    "alarms": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pollIntervalMs": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "pollIntervalMs"
+      ]
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "topic": {
+          "type": "string",
+          "pattern": "^$|^projects/[^/\\s]+/topics/[^/\\s]+$"
+        }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxConnections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "maxConnections"
+      ]
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "urlSecretKey": {
+          "type": "string"
+        },
+        "caSecretKey": {
+          "type": "string"
+        }
+      }
+    },
+    "resources": {
+      "type": "object"
+    },
+    "sandboxNamespace": {
+      "type": "string",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "maxLength": 63
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dnsCidrs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$|^[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$"
+          }
+        }
+      },
+      "required": [
+        "dnsCidrs"
+      ]
+    },
+    "analytics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backend": {"enum": ["postgres", "clickhouse"]},
+        "clickhouse": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": {"type": "string"},
+            "database": {"type": "string"},
+            "user": {"type": "string"},
+            "passwordSecretKey": {"type": "string"}
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "controlPlane": {
+          "$ref": "#/definitions/image"
+        },
+        "typescript": {
+          "$ref": "#/definitions/image"
+        },
+        "python": {
+          "$ref": "#/definitions/image"
+        }
+      },
+      "required": [
+        "controlPlane",
+        "typescript",
+        "python"
+      ]
+    }
+  },
+  "required": [
+    "publicUrl",
+    "placement",
+    "storage",
+    "credentialsSecret",
+    "serviceAccount",
+    "ingress",
+    "replicaCount",
+    "actors",
+    "alarms",
+    "organizationLimits",
+    "postgres",
+    "resources",
+    "images",
+    "sandboxNamespace",
+    "nodeSelector",
+    "networkPolicy"
+  ],
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "repository",
+        "digest"
+      ]
+    }
+  }
+}

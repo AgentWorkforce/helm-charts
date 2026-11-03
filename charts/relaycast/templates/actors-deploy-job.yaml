@@ -1,0 +1,82 @@
+{{- include "relaycast.validate" . }}
+{{- $da := .Values.runtime.durableActors }}
+{{- if and (include "relaycast.actors.enabled" .) (not (include "relaycast.actors.dev" .)) $da.deployer.enabled }}
+{{- $name := include "relaycast.actors.deployerName" . }}
+{{- $podTemplate := include "relaycast.actors.deployPodTemplate" . }}
+{{- $identity := $podTemplate | sha256sum | trunc 8 }}
+# Compiles and registers the Workspace actor bundle (artifact bucket + PUT
+# /v1/projects/<project>/deployment with secretRefs). A plain Job, not a Helm
+# hook (installs run `helm template --no-hooks`); the name hashes the pod
+# template, so new inputs run it once more. The deployer is idempotent.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    app.kubernetes.io/component: actors-deploy
+  {{- with $da.deployer.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "relaycast.actors.deployJobName" (dict "root" . "hash" $identity) }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    app.kubernetes.io/component: actors-deploy
+spec:
+  backoffLimit: {{ $da.deployer.backoffLimit }}
+  activeDeadlineSeconds: {{ $da.deployer.activeDeadlineSeconds | int64 }}
+  template:
+    {{- $podTemplate | nindent 4 }}
+{{- end }}
+
+{{- define "relaycast.actors.deployPodTemplate" -}}
+{{- $da := .Values.runtime.durableActors -}}
+metadata:
+  labels:
+    # Not the app selector labels: the Service must never route to this pod.
+    app.kubernetes.io/name: relaycast-actors-deploy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: actors-deploy
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "relaycast.actors.deployerName" . }}
+  automountServiceAccountToken: false
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  securityContext:
+    {{- toYaml .Values.podSecurityContext | nindent 4 }}
+  containers:
+    - name: deploy
+      image: {{ include "relaycast.actors.imageRef" (dict "image" $da.deployer.image "path" "runtime.durableActors.deployer.image") | quote }}
+      imagePullPolicy: {{ $da.deployer.image.pullPolicy }}
+      securityContext:
+        {{- toYaml .Values.containerSecurityContext | nindent 8 }}
+      env:
+        {{- include "relaycast.actors.deployerEnv" . | nindent 8 }}
+      resources:
+        {{- toYaml $da.deployer.resources | nindent 8 }}
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

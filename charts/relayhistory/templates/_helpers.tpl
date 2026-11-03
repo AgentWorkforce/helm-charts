@@ -32,7 +32,16 @@ app.kubernetes.io/component: history
 {{- end -}}
 {{- define "relayhistory.validate" -}}
 {{- $image := include "relayhistory.image" . -}}
-{{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the GCP proof runs one History replica and the chart makes no HA claim" }}{{ end -}}
+{{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the GCP proof runs one History replica and the chart makes no HA claim (to drain it for a write-hold migration, set migrations.drainForWriteHold=true instead)" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold (not .Values.migrations.allowWriteHold) }}{{ fail "migrations.drainForWriteHold requires migrations.allowWriteHold=true: draining History only serves a write-hold migration" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold (not .Values.migrations.enabled) }}{{ fail "migrations.drainForWriteHold requires migrations.enabled=true" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.migrations.drainWaitApiServerEgress) }}{{ fail "migrations.drainForWriteHold with restricted egress requires migrations.drainWaitApiServerEgress (the Kubernetes API server address): the migrate Job polls the API until History has drained" }}{{ end -}}
+{{- $drainWait := .Values.migrations.drainWaitSeconds -}}
+{{- if not (and (or (kindIs "int" $drainWait) (kindIs "int64" $drainWait) (kindIs "float64" $drainWait)) (ge (float64 $drainWait) 1.0) (eq (float64 $drainWait) (float64 (int64 $drainWait)))) }}{{ fail "migrations.drainWaitSeconds must be a positive integer" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold (ge (int64 $drainWait) (int64 .Values.migrations.activeDeadlineSeconds)) }}{{ fail "migrations.drainWaitSeconds must be below migrations.activeDeadlineSeconds: the Job deadline covers the drain wait and the migration" }}{{ end -}}
+{{- $apiPort := .Values.migrations.drainWaitApiServerPort -}}
+{{- if not (and (or (kindIs "int" $apiPort) (kindIs "int64" $apiPort) (kindIs "float64" $apiPort)) (ge (float64 $apiPort) 1.0) (le (float64 $apiPort) 65535.0) (eq (float64 $apiPort) (float64 (int64 $apiPort)))) }}{{ fail "migrations.drainWaitApiServerPort must be a port number" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold (not .Values.serviceAccount.create) (not .Values.serviceAccount.name) }}{{ fail "migrations.drainForWriteHold with serviceAccount.create=false requires serviceAccount.name: the drain-wait Role must not be bound to the namespace default ServiceAccount" }}{{ end -}}
 {{- if not .Values.database.existingSecret }}{{ fail "database.existingSecret is required; the chart never creates database credentials" }}{{ end -}}
 {{- range $name, $key := .Values.database.keys }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString $key)) }}{{ fail (printf "database.keys.%s must be a Kubernetes Secret data key" $name) }}{{ end }}{{ end -}}
 {{- if and .Values.database.runtimeRole (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name" }}{{ end -}}
@@ -96,6 +105,57 @@ spec:
   {{- with .Values.imagePullSecrets }}
   imagePullSecrets: {{ toYaml . | nindent 4 }}
   {{- end }}
+  {{- if .Values.migrations.drainForWriteHold }}
+  # drainForWriteHold: scaling History to 0 is asynchronous, so the migration
+  # starts only once no History pod of this release exists (terminating pods
+  # included). Only this init container gets an API token (pods list in this
+  # namespace, templates/drain-wait-rbac.yaml); the migrate container has none.
+  initContainers:
+    - name: wait-for-history-drain
+      image: {{ include "relayhistory.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      args:
+        - -e
+        - |
+            const fs = require('fs'), https = require('https');
+            const d = '/var/run/drain-wait/';
+            const ns = fs.readFileSync(d + 'namespace', 'utf8').trim();
+            const deadline = Date.now() + Number(process.env.DRAIN_WAIT_SECONDS) * 1000;
+            const path = '/api/v1/namespaces/' + ns + '/pods?labelSelector=' + encodeURIComponent(process.env.HISTORY_SELECTOR);
+            // Each request is bounded by the remaining budget (at most 10 s), so
+            // an API server that stops answering cannot outlast DRAIN_WAIT_SECONDS.
+            const count = () => new Promise((resolve, reject) => {
+              const timeout = Math.max(1000, Math.min(10000, deadline - Date.now()));
+              const req = https.get({ host: process.env.KUBERNETES_SERVICE_HOST, port: process.env.KUBERNETES_SERVICE_PORT, path, ca: fs.readFileSync(d + 'ca.crt'), timeout,
+                headers: { Authorization: 'Bearer ' + fs.readFileSync(d + 'token', 'utf8').trim() } }, (res) => {
+                let body = '';
+                res.on('data', (c) => { body += c; });
+                res.on('end', () => res.statusCode === 200 ? resolve(JSON.parse(body).items.length) : reject(new Error('HTTP ' + res.statusCode)));
+                res.on('error', reject);
+              });
+              req.on('timeout', () => req.destroy(new Error('request timed out after ' + timeout + 'ms')));
+              req.on('error', reject);
+            });
+            (async () => {
+              for (;;) {
+                let n = -1;
+                try { n = await count(); } catch (e) { console.error('listing History pods failed: ' + e.message); }
+                if (n === 0) { console.log('no History pods remain; starting the write-hold migration'); return; }
+                if (Date.now() >= deadline) { console.error('History pods still exist after ' + process.env.DRAIN_WAIT_SECONDS + 's; not migrating'); process.exit(1); }
+                if (n > 0) console.log(n + ' History pod(s) still exist (including terminating); waiting');
+                await new Promise((r) => setTimeout(r, 2000));
+              }
+            })();
+      securityContext: {{ toYaml .Values.containerSecurityContext | nindent 8 }}
+      env:
+        - name: HISTORY_SELECTOR
+          value: {{ printf "app.kubernetes.io/name=%s,app.kubernetes.io/instance=%s,app.kubernetes.io/component=history" (include "relayhistory.name" .) .Release.Name | quote }}
+        - name: DRAIN_WAIT_SECONDS
+          value: {{ .Values.migrations.drainWaitSeconds | int64 | toString | quote }}
+      resources: {{ toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+        - { name: drain-wait-token, mountPath: /var/run/drain-wait, readOnly: true }
+  {{- end }}
   containers:
     - name: migrate
       image: {{ include "relayhistory.image" . | quote }}
@@ -124,4 +184,12 @@ spec:
   volumes:
     - name: tmp
       emptyDir: { sizeLimit: 64Mi }
+    {{- if .Values.migrations.drainForWriteHold }}
+    - name: drain-wait-token
+      projected:
+        sources:
+          - serviceAccountToken: { path: token, expirationSeconds: 3607 }
+          - configMap: { name: kube-root-ca.crt, items: [{ key: ca.crt, path: ca.crt }] }
+          - downwardAPI: { items: [{ path: namespace, fieldRef: { fieldPath: metadata.namespace } }] }
+    {{- end }}
 {{- end -}}

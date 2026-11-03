@@ -53,7 +53,26 @@ migrations:
   # Job instead of patching the immutable spec.template. Change identitySalt
   # only to force a re-run with an otherwise identical template.
   identitySalt: ""
+  # Lets the migrate Job take a write hold. It refuses while any runtime-role
+  # session is connected, so it cannot succeed while the History Deployment
+  # runs; pair it with drainForWriteHold for the two-step upgrade in README.md.
   allowWriteHold: false
+  # Step 1 of a write-hold upgrade: renders the History Deployment with
+  # replicas 0 so the migrate Job finds no runtime sessions. Requires
+  # allowWriteHold. Step 2 is the same upgrade with both set back to false,
+  # which restores replicaCount. History is unavailable between the steps.
+  drainForWriteHold: false
+  # With drainForWriteHold the migrate Job's init container polls the
+  # Kubernetes API (a Role allowing pods list in this namespace) until no
+  # History pod of this release exists, and fails after this many seconds.
+  drainWaitSeconds: 600
+  # NetworkPolicy peers for the API server (TCP 443), added to the migration
+  # policy while draining. Required with networkPolicy.enabled and
+  # allowAllEgress=false, e.g. [{ ipBlock: { cidr: <control-plane IP>/32 } }].
+  drainWaitApiServerEgress: []
+  # Port of that API server endpoint (443 on GKE; often 6443 on kubeadm,
+  # kind or k3s).
+  drainWaitApiServerPort: 443
   rolloutBudgetSeconds: 600
   backoffLimit: 1
   activeDeadlineSeconds: 3600

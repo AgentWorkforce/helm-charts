@@ -49,8 +49,12 @@ jobs:
       # agent-relay-X.Y.Z tag, with build provenance. chart-releaser has no
       # exclude option and skips changed chart directories that do not exist,
       # so drop it from this job's working tree.
-      - name: Exclude the tag-published agent-relay umbrella
-        run: rm -rf charts/agent-relay
+      # charts/durable-actors is a verbatim vendored copy of the upstream
+      # TerseAI release chart (charts/durable-actors/UPSTREAM.md). Upstream
+      # publishes it; this repo only consumes it as an umbrella dependency and
+      # must never republish it under its own name.
+      - name: Exclude the tag-published agent-relay umbrella and vendored upstream charts
+        run: rm -rf charts/agent-relay charts/durable-actors
 
       - name: Run chart-releaser
         id: cr
@@ -86,6 +90,8 @@ jobs:
             chart=$(basename "$dir")
             # Published (and attested) only by release-agent-relay.yml.
             [ "$chart" = agent-relay ] && continue
+            # Vendored upstream chart (UPSTREAM.md); upstream publishes it.
+            [ "$chart" = durable-actors ] && continue
             version=$(sed -n 's/^version: *//p' "$dir/Chart.yaml" | tr -d '"')
             # Only versions chart-releaser has published to the Pages repo.
             git ls-remote --exit-code --tags origin "refs/tags/$chart-$version" >/dev/null || continue

@@ -100,6 +100,16 @@ expect_umbrella_failure() { # expected-error helm-args...
     || { echo "agent-relay: failed without expected error: $expected" >&2; echo "$output" >&2; exit 1; }
 }
 expect_umbrella_failure "gkeIngress.backends.api.timeoutSec must be at least 60" --set gkeIngress.backends.api.timeoutSec=30
+expect_umbrella_failure "gkeIngress.backends.cast.timeoutSec must be at least 60" --set gkeIngress.backends.cast.timeoutSec=30
+expect_umbrella_failure "relaycast.service.backendConfig=agent-relay-gcp-proof-cast" --set relaycast.service.backendConfig=null
+expect_umbrella_failure "relaycast.service.backendConfig=agent-relay-gcp-proof-cast" --set relaycast.service.backendConfig=other-cast
+# The relaycast Service carries the cast BackendConfig (WebSocket timeout).
+cast_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml)
+test "$(yq 'select(.kind == "BackendConfig" and .metadata.name == "agent-relay-gcp-proof-cast") | .spec.timeoutSec' <<<"$cast_out")" = 3600 \
+  || { echo "cast BackendConfig missing or timeout not 3600" >&2; exit 1; }
+test "$(yq 'select(.kind == "Service" and .metadata.name == "relaycast") | .metadata.annotations["cloud.google.com/backend-config"]' <<<"$cast_out")" = '{"default":"agent-relay-gcp-proof-cast"}' \
+  || { echo "relaycast Service is not bound to the cast BackendConfig" >&2; exit 1; }
 expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api" \
   --set relay-cloud-api.service.backendConfig=null
 expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api" \
@@ -107,14 +117,17 @@ expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-p
 # Long names keep the -api suffix: truncate to 59, then append.
 long_name=$(printf 'n%.0s' $(seq 70))
 long_bc="$(printf 'n%.0s' $(seq 59))-api"
+long_cast="$(printf 'n%.0s' $(seq 58))-cast"
 long_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
   -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml \
-  --set "gkeIngress.name=$long_name" --set "relay-cloud-api.service.backendConfig=$long_bc")
-test "$(yq 'select(.kind == "BackendConfig") | .metadata.name' <<<"$long_out")" = "$long_bc" \
+  --set "gkeIngress.name=$long_name" --set "relay-cloud-api.service.backendConfig=$long_bc" \
+  --set "relaycast.service.backendConfig=$long_cast")
+test "$(yq 'select(.kind == "BackendConfig" and (.metadata.name | test("-api$"))) | .metadata.name' <<<"$long_out")" = "$long_bc" \
   || { echo "long gkeIngress.name lost the -api BackendConfig suffix" >&2; exit 1; }
 # A customer name in the GCP profile renders once service.backendConfig follows it.
 helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
-  --set gkeIngress.name=acme-relay --set relay-cloud-api.service.backendConfig=acme-relay-api >/dev/null \
+  --set gkeIngress.name=acme-relay --set relay-cloud-api.service.backendConfig=acme-relay-api \
+  --set relaycast.service.backendConfig=acme-relay-cast >/dev/null \
   || { echo "values-gcp.yaml: customer gkeIngress.name with matching backendConfig failed to render" >&2; exit 1; }
 if acme_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
   --set gkeIngress.name=acme-relay 2>&1); then
@@ -122,6 +135,15 @@ if acme_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f 
 fi
 grep -Fq 'relay-cloud-api.service.backendConfig=acme-relay-api' <<<"$acme_fail" \
   || { echo "values-gcp.yaml: stale backendConfig failed without naming the expected value" >&2; echo "$acme_fail" >&2; exit 1; }
+# RelayHistory write-hold step 1 through the umbrella: History drains to zero
+# replicas while its migrate Job takes the write hold.
+wh_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml \
+  --set relayhistory.migrations.allowWriteHold=true --set relayhistory.migrations.drainForWriteHold=true)
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relayhistory") | .spec.replicas' <<<"$wh_out")" = 0 \
+  || { echo "relayhistory.migrations.drainForWriteHold did not drain History" >&2; exit 1; }
+test "$(yq 'select(.kind == "Job" and .metadata.labels["app.kubernetes.io/component"] == "migration" and (.metadata.name | test("^relayhistory-migrate-"))) | .spec.template.spec.containers[0].env[] | select(.name == "ALLOW_WRITE_HOLD") | .value' <<<"$wh_out")" = yes \
+  || { echo "relayhistory write-hold Job does not take the hold" >&2; exit 1; }
 expect_leaf_failure_early() { # expected helm-args...
   local expected=$1 output; shift
   if output=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml "$@" 2>&1); then
@@ -255,11 +277,32 @@ expect_leaf_failure relay-cloud-api "flows.gcsBucket is required" --set flows.st
 expect_leaf_failure relay-cloud-api "flows.storage must be postgres or gcs" --set flows.storage=s3
 expect_leaf_failure relay-cloud-api "flows.queuePingMs must be an integer from 1000 to 120000" --set flows.queuePingMs=500
 expect_leaf_failure relay-cloud-api "telemetry.level must be off, errors, or full" --set telemetry.level=verbose
-expect_leaf_failure relay-cloud-api "telemetry.installId is required" --set telemetry.level=errors
-expect_leaf_failure relay-cloud-api "secretKeys.telemetryInstallKey is required" \
-  --set telemetry.level=errors --set telemetry.installId=inst_abcdefgh12
+# The standalone Ingress denies /internal when the internal token is set; the
+# deny Service name fits 63 characters and carries one component label.
+deny_host=$(yq '.publicUrl' charts/relay-cloud-api/ci/default-values.yaml | sed 's#https://##;s#/.*##')
+deny_out=$(helm template agent-relay-with-a-very-long-release-name-for-ci-test charts/relay-cloud-api -n ci --no-hooks \
+  -f charts/relay-cloud-api/ci/default-values.yaml --set ingress.enabled=true --set-json "ingress.hosts=[\"$deny_host\"]" \
+  --set-json 'ingress.tls=[{"hosts":["x"],"secretName":"t"}]' --set secretKeys.internalToken=selfhost-internal-token)
+deny_name=$(yq 'select(.kind == "Service" and .metadata.labels["app.kubernetes.io/component"] == "internal-deny") | .metadata.name' <<<"$deny_out" | grep .)
+test "${#deny_name}" -le 63 || { echo "relay-cloud-api: internal-deny Service name over 63 characters" >&2; exit 1; }
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[0].http.paths[] | select(.path == "/internal") | .backend.service.name' <<<"$deny_out" | grep .)" = "$deny_name" \
+  || { echo "relay-cloud-api: /internal is not routed to the deny Service" >&2; exit 1; }
+# Default level errors arms only once the install is registered: the default
+# render works and sends nothing; a partial registration fails closed.
+tele_default=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "SELFHOST_TELEMETRY_LEVEL") | .value')
+test "$tele_default" = off || { echo "relay-cloud-api: unregistered default telemetry must render off (got $tele_default)" >&2; exit 1; }
+test "$(yq '.telemetry.level' charts/relay-cloud-api/values.yaml)" = errors || { echo "relay-cloud-api: telemetry.level default must be errors" >&2; exit 1; }
+expect_leaf_failure relay-cloud-api "secretKeys.telemetryInstallKey is required" --set telemetry.installId=inst_abcdefgh12
+expect_leaf_failure relay-cloud-api "telemetry.installId is required" --set secretKeys.telemetryInstallKey=telemetry-install-key
+expect_leaf_failure relay-cloud-api "telemetry.installId is required" --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry
 expect_leaf_failure relay-cloud-api "telemetry.endpoint is required" \
-  --set telemetry.level=errors --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key
+  --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key
+tele_reg=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
+  --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key \
+  --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "SELFHOST_TELEMETRY_LEVEL") | .value')
+test "$tele_reg" = errors || { echo "relay-cloud-api: a registered install must default to errors (got $tele_reg)" >&2; exit 1; }
 expect_leaf_failure relay-cloud-api "telemetry.endpoint must be an https URL" --set telemetry.endpoint=http://ingest.example.org/
 rotation_items=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
   --set encryption.previousKeyId=ci-0 --set secretKeys.previousEncryptionKey=old-key |
@@ -293,8 +336,20 @@ expect_rules() { # expected message helm-args...
   test "$count" = "$expected" || { echo "relay-cloud-api: $message (got $count)" >&2; exit 1; }
 }
 telemetry_on=(--set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key
-  --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry)
-expect_rules 0 "telemetry egress rendered with level off"
+  --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry
+  --set-json 'telemetry.egressTo=[{"ipBlock":{"cidr":"203.0.113.10/32"}}]')
+# The default egressTo is empty: restricted egress with https telemetry must
+# fail closed instead of opening TCP 443 to every public address.
+if egress_out=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
+  --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" \
+  --set telemetry.level=errors --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key \
+  --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry 2>&1); then
+  echo "relay-cloud-api: empty default telemetry.egressTo rendered under restricted egress" >&2; exit 1
+fi
+grep -Fq "telemetry.egressTo must not be empty" <<<"$egress_out" \
+  || { echo "relay-cloud-api: empty telemetry.egressTo failed without the expected error" >&2; exit 1; }
+expect_rules 0 "telemetry egress rendered for an unregistered install"
+expect_rules 0 "telemetry egress rendered with level off" --set telemetry.level=off "${telemetry_on[@]}"
 expect_rules 0 "telemetry egress rendered for transport=file" \
   --set telemetry.level=errors --set telemetry.transport=file "${telemetry_on[@]}"
 expect_rules 1 "no telemetry egress rule with level errors over https" --set telemetry.level=errors "${telemetry_on[@]}"
@@ -418,5 +473,179 @@ if rauth_fail=$(helm template ci charts/relayauth -n ci --no-hooks -f charts/rel
 fi
 grep -q 'relaycast.url is required' <<<"$rauth_fail" \
   || { echo "relayauth model B failed without the relaycast.url error" >&2; exit 1; }
+
+# --- durable-actors: the GKE proof overlay (control plane + Relaycast and
+# Relayfile in runtime.backend=durable-actors) and the kind proof shape.
+da_digest() { printf 'sha256:%s' "$(printf "$1%.0s" $(seq 64))"; }
+da_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/values-gcp-proof-live.yaml
+  -f charts/agent-relay/values-gcp-proof-durable-actors.yaml -f charts/agent-relay/values-gcp-proof-relayfile.yaml
+  --set "relaycast.runtime.durableActors.gateway.image.digest=$(da_digest a)"
+  --set "relaycast.runtime.durableActors.deployer.image.digest=$(da_digest b)"
+  --set "relayfile.runtime.durableActors.image.digest=$(da_digest c)"
+  --set "relayfile.runtime.durableActors.workspaceImage.digest=$(da_digest d)")
+da_out=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}")
+da_fail() { echo "durable-actors overlay: $*" >&2; exit 1; }
+# Capture yq output before grep -q: with pipefail an early grep exit is a SIGPIPE failure.
+da_kind() { local got; got=$(yq "select(.kind == \"$1\" and .metadata.name == \"$2\") | .metadata.name" <<<"$da_out"); grep -qx "$2" <<<"$got"; }
+for obj in Deployment/agent-relay-durable-actors Deployment/agent-relay-durable-actors-pool-manager \
+  Service/agent-relay-durable-actors Namespace/agent-relay-agent-relay \
+  NetworkPolicy/agent-relay-durable-actors NetworkPolicy/agent-relay-durable-actors-control-plane \
+  Deployment/relaycast Deployment/relayfile-server Deployment/relayfile-session-broker \
+  NetworkPolicy/relayfile-session-broker Service/agent-relay-gcp-proof-actors-edge \
+  BackendConfig/agent-relay-gcp-proof-actors-edge; do
+  da_kind "${obj%%/*}" "${obj#*/}" || da_fail "missing ${obj}"
+done
+test "$(yq 'select(.kind == "Job") | .metadata.name' <<<"$da_out" | grep -Ec '^(relaycast|relayfile)-actors-deploy-[0-9a-f]{8}$')" = 2 \
+  || da_fail "expected the relaycast and relayfile deploy Jobs"
+da_secrets=$(yq 'select(.kind == "Secret") | .metadata.name' <<<"$da_out")
+if grep -q . <<<"$da_secrets"; then da_fail "renders a Secret"; fi
+if grep -Eq 'helm\.sh/hook:' <<<"$da_out"; then da_fail "renders a Helm hook"; fi
+# Custody: only the deploy Jobs and the relayfile session broker read the
+# durable-actors admin api-key; internet-facing gateways never do.
+admin_readers=$(yq 'select(.kind == "Deployment" or .kind == "Job") | select(.. | select(has("secretKeyRef")) | .secretKeyRef.name == "actors-credentials") | .kind + "/" + .metadata.name' <<<"$da_out" | grep -v '^---$' | sort -u)
+for reader in $admin_readers; do
+  case $reader in
+    Deployment/agent-relay-durable-actors|Deployment/agent-relay-durable-actors-pool-manager) ;;
+    Deployment/relayfile-session-broker|Job/relaycast-actors-deploy-*|Job/relayfile-actors-deploy-*) ;;
+    *) da_fail "$reader can read the durable-actors admin api-key" ;;
+  esac
+done
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relaycast") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SECRET") | .valueFrom.secretKeyRef.name' <<<"$da_out")" = relaycast-durable-actors-invoke \
+  || da_fail "the relaycast gateway must use its own invocation Secret"
+for consumer in relaycast relayfile-server; do
+  test "$(yq "select(.kind == \"Deployment\" and .metadata.name == \"$consumer\") | .spec.template.spec.containers[0].env[] | select(.name == \"DURABLE_ACTORS_CONTROL_PLANE_URL\") | .value" <<<"$da_out")" = http://agent-relay-durable-actors.agent-relay.svc.cluster.local:7100 \
+    || da_fail "$consumer does not target the umbrella control plane"
+done
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "agent-relay-durable-actors") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_PUBLIC_URL") | .value' <<<"$da_out")" = https://actors.gcp-proof.agentrelay.com \
+  || da_fail "durable-actors publicUrl is not the actors host"
+for host in actors.gcp-proof.agentrelay.com files.gcp-proof.agentrelay.com; do
+  domains=$(yq 'select(.kind == "ManagedCertificate") | .spec.domains[]' <<<"$da_out")
+  grep -qx "$host" <<<"$domains" || da_fail "ManagedCertificate lacks $host"
+done
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | select(.host == "actors.gcp-proof.agentrelay.com") | .http.paths[0].backend.service.name' <<<"$da_out")" = agent-relay-gcp-proof-actors-edge \
+  || da_fail "actors host is not routed to the actors edge Service"
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | select(.host == "files.gcp-proof.agentrelay.com") | .http.paths[0].backend.service.name' <<<"$da_out")" = relayfile-server \
+  || da_fail "files host is not routed to the relayfile gateway"
+test "$(yq 'select(.kind == "Service" and .metadata.name == "agent-relay-gcp-proof-actors-edge") | .spec.selector["app.kubernetes.io/name"]' <<<"$da_out")" = agent-relay-durable-actors \
+  || da_fail "the actors edge Service does not select the control plane"
+# The cast edge-deny rules are unchanged in actor mode.
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | select(.host == "cast.gcp-proof.agentrelay.com") | .http.paths[] | select(.path == "/internal") | .backend.service.name' <<<"$da_out")" = agent-relay-gcp-proof-cast-edge-deny \
+  || da_fail "cast /internal is not edge-denied in actor mode"
+if command -v kubeconform >/dev/null; then
+  kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version "${KUBE_VERSION:-1.33.0}" <<<"$da_out" >/dev/null \
+    || da_fail "kubeconform failed"
+fi
+
+# Fail closed on miswiring between the umbrella, the control plane and its consumers.
+expect_da_umbrella_failure() { # expected-error helm-args...
+  local expected=$1 output; shift
+  if output=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" "$@" 2>&1); then
+    da_fail "rendered despite expected failure: $expected"
+  fi
+  grep -Fq "$expected" <<<"$output" || { echo "$output" >&2; da_fail "failed without expected error: $expected"; }
+}
+expect_da_umbrella_failure "requires components.durableActors=true" --set components.durableActors=false --set gkeIngress.hosts.actors=
+expect_da_umbrella_failure "components.durableActors=true has no consumer" \
+  --set relaycast.runtime.backend=sqlite --set relayfile.runtime.backend=go --set gkeIngress.hosts.files= \
+  --set relaycast.credentials.format=legacy --set relaycast.credentials.authority= --set relayfile.secrets.existingSecret=relayfile
+expect_da_umbrella_failure "durable-actors.publicUrl must be https://actors.gcp-proof.agentrelay.com" --set durable-actors.publicUrl=https://other.example.com
+expect_da_umbrella_failure "must be durable-actors.credentialsSecret" --set relayfile.runtime.durableActors.adminKeySecret.name=other-admin
+expect_da_umbrella_failure "must be durable-actors.storage.bucket" --set relaycast.runtime.durableActors.deployer.artifactBucket=other-bucket
+expect_da_umbrella_failure "gkeIngress.hosts.files requires relayfile.service.annotations" --set 'relayfile.service.annotations=null'
+expect_da_umbrella_failure "gkeIngress.hosts must all be distinct" --set gkeIngress.hosts.files=actors.gcp-proof.agentrelay.com
+expect_da_umbrella_failure "/images/controlPlane/digest" --set durable-actors.images.controlPlane.digest=
+
+expect_da_umbrella_failure "adminKeySecret.key (other-key) must be api-key" --set relaycast.runtime.durableActors.adminKeySecret.key=other-key
+expect_da_umbrella_failure "gkeIngress.actorsBackendTimeoutSec must be an integer from 60 to 86400" --set gkeIngress.actorsBackendTimeoutSec=30
+expect_da_umbrella_failure "gkeIngress.actorsBackendTimeoutSec must be an integer from 60 to 86400" --set gkeIngress.actorsBackendTimeoutSec=90.5
+expect_da_umbrella_failure "gkeIngress.hosts.files requires relayfile.networkPolicy.allowExternalTraffic=false" \
+  --set relayfile.networkPolicy.allowExternalTraffic=true --set 'relayfile.networkPolicy.ingressFrom=null'
+expect_da_umbrella_failure "gkeIngress requires relayfile.networkPolicy.ingressFrom to allow GKE health checker/proxy range 35.191.0.0/16" \
+  --set-json 'relayfile.networkPolicy.ingressFrom=[{"podSelector":{}}]'
+expect_da_umbrella_failure "is set by the durable-actors gateway and must not appear in extraEnv" \
+  --set-json 'relaycast.extraEnv=[{"name":"DURABLE_ACTORS_CONTROL_PLANE_URL","value":"http://evil"}]'
+expect_da_umbrella_failure "is set by the durable-actors gateway and must not appear in extraEnv" \
+  --set-json 'relayfile.extraEnv=[{"name":"RELAYFILE_BLOB_BUCKET","value":"other"}]'
+expect_da_umbrella_failure "runtime.durableActors.gateway.replicaCount must be a positive integer" --set relaycast.runtime.durableActors.gateway.replicaCount=1.5
+expect_da_umbrella_failure "runtime.durableActors.maxUploadBytes must be a positive integer" --set relaycast.runtime.durableActors.maxUploadBytes=1048576.5
+expect_da_umbrella_failure "runtime.durableActors.shutdownGraceMs must be a non-negative integer" --set relaycast.runtime.durableActors.shutdownGraceMs=0.5
+expect_da_umbrella_failure "runtime.durableActors.image.digest is required" --set relayfile.runtime.durableActors.image.digest= --set relayfile.runtime.durableActors.image.tag=kind
+# An external controlPlaneUrl consumer does not use the in-umbrella control plane.
+expect_da_umbrella_failure "components.durableActors=true has no consumer" \
+  --set relaycast.runtime.durableActors.controlPlaneUrl=https://actors.example.com \
+  --set relayfile.runtime.durableActors.controlPlaneUrl=https://actors.example.com
+# Both control-plane workloads are behind the control-plane NetworkPolicy.
+test "$(yq 'select(.kind == "NetworkPolicy" and .metadata.name == "agent-relay-durable-actors-control-plane") | .spec.podSelector.matchExpressions[0].values | join(",")' <<<"$da_out" | grep .)" = agent-relay-durable-actors,agent-relay-durable-actors-pool-manager \
+  || da_fail "the control-plane NetworkPolicy must select the control plane and the pool manager"
+# The relayfile gateway is internet-facing and never gets an API token; the
+# GKE-only policy shape admits same-namespace pods and the GKE ranges only.
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relayfile-server") | .spec.template.spec.automountServiceAccountToken' <<<"$da_out")" = false \
+  || da_fail "the relayfile gateway must not mount a ServiceAccount token"
+test "$(yq 'select(.kind == "NetworkPolicy" and .metadata.name == "relayfile-server") | .spec.ingress[0].from | map(.ipBlock.cidr // "pods") | join(",")' <<<"$da_out" | grep .)" = pods,35.191.0.0/16,130.211.0.0/22 \
+  || da_fail "the relayfile gateway NetworkPolicy is not the GKE-only shape"
+# JWKS-only relayfile: the HS256 key is optional, so the Secret may omit it.
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relayfile-server") | .spec.template.spec.containers[0].env[] | select(.name == "RELAYFILE_JWT_SECRET") | .valueFrom.secretKeyRef.optional' <<<"$da_out")" = true \
+  || da_fail "with auth.jwksUrl, RELAYFILE_JWT_SECRET must be optional"
+# The relaycast actor gateway reads exactly these keys of the proof Secret
+# (documented in charts/agent-relay/README.md).
+proof_keys=$(yq 'select(.kind == "Deployment" and .metadata.name == "relaycast") | ((.. | select(has("secretKeyRef")) | .secretKeyRef | select(.name == "agent-relay-gcp-proof") | .key), (.. | select(has("secret")) | .secret | select(.secretName == "agent-relay-gcp-proof") | .items[].key))' <<<"$da_out" | grep -v '^---$' | grep . | sort -u | paste -sd, -)
+test "$proof_keys" = relaycast-actors-internal-secret,relaycast-credential-keyring,relaycast-file-signing-secret \
+  || da_fail "relaycast actor gateway reads unexpected agent-relay-gcp-proof keys: $proof_keys"
+for consumer in relaycast relayfile-server; do
+  grep -qx "$consumer" <<<"$(yq 'select(.kind == "Deployment") | .metadata.name' <<<"$da_out")" || da_fail "missing $consumer"
+done
+# NEG and legacy BackendConfig annotations are compared after normalization.
+helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" \
+  --set-json 'relayfile.service.annotations={"cloud.google.com/neg":"{\"ingress\":true}"}' >/dev/null \
+  || da_fail "an equivalent NEG annotation without spaces was refused"
+helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" --set relaycast.service.backendConfig= \
+  --set-json 'relaycast.service.annotations={"cloud.google.com/backend-config":"{\"default\":\"agent-relay-gcp-proof-cast\"}"}' >/dev/null \
+  || da_fail "a matching hand-written relaycast backend-config annotation was refused"
+# Explicit zero bounds reach the control plane (non-null, not truthy).
+zero_bound=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" --set durable-actors.actors.bounds.minCpuMillis=0 |
+  yq 'select(.kind == "Deployment" and .metadata.name == "agent-relay-durable-actors") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SANDBOX_MIN_CPU_MILLIS") | .value')
+test "$zero_bound" = 0 || da_fail "actors.bounds.minCpuMillis=0 was dropped"
+expect_da_umbrella_failure "gkeIngress.hosts.files requires components.relayfile=true" --set components.relayfile=false
+expect_da_umbrella_failure "dnsCidrs/0" --set-json 'durable-actors.networkPolicy.dnsCidrs=["169.254.20.10"]'
+expect_da_umbrella_failure "invokeApiKeySecretKey" --set durable-actors.invokeApiKeySecretKey=bad/key
+
+# Long release names (Helm allows 53 characters): every name and label stays
+# within 63 characters, deploy Job names keep their hash suffix, and the
+# consumers' default control-plane URL is the durable-actors Service name.
+long_release=agent-relay-with-a-very-long-release-name-for-ci-test
+test "${#long_release}" = 53
+long_out=$(helm template "$long_release" charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" \
+  --set relaycast.fullnameOverride= --set relayfile.fullnameOverride= --set relayfile.nameOverride=relayfile-with-a-long-name-override-for-label-tests \
+  --set relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api --set relaycast.service.backendConfig=agent-relay-gcp-proof-cast \
+  --set gkeIngress.backends.files.serviceName=) \
+  || da_fail "long release name failed to render"
+too_long=$(yq '(select(.kind == "Service" or .kind == "Job" or .kind == "Namespace" or .kind == "Deployment") | .metadata.name | select(length > 63)),
+  (.metadata.labels // {} | .[] | select(length > 63)),
+  (.spec.template.metadata.labels // {} | .[] | select(length > 63))' <<<"$long_out" | grep -v '^---$' || true)
+[ -z "$too_long" ] || da_fail "long release name renders names or labels over 63 characters: $too_long"
+long_service=$(yq 'select(.kind == "Service" and .spec.ports[0].port == 7100 and .metadata.labels["app.kubernetes.io/component"] != "actors-edge") | .metadata.name' <<<"$long_out" | grep .)
+test "$long_service" = "$(printf '%s-durable-actors' "$long_release" | cut -c1-63)" || da_fail "unexpected durable-actors Service name $long_service"
+test "${#long_service}" -le 63 || da_fail "durable-actors Service name too long"
+for consumer in $(yq 'select(.kind == "Deployment" or .kind == "Job") | select(.spec.template.spec.containers[0].env[]?.name == "DURABLE_ACTORS_CONTROL_PLANE_URL") | .metadata.name' <<<"$long_out" | grep -v '^---$' | sort -u); do
+  url=$(yq "select(.metadata.name == \"$consumer\" and (.kind == \"Deployment\" or .kind == \"Job\")) | .spec.template.spec.containers[0].env[] | select(.name == \"DURABLE_ACTORS_CONTROL_PLANE_URL\") | .value" <<<"$long_out" | head -1)
+  test "$url" = "http://$long_service.agent-relay.svc.cluster.local:7100" || da_fail "$consumer targets $url, not the Service $long_service"
+done
+test "$(yq 'select(.kind == "Job" and .metadata.labels["app.kubernetes.io/component"] == "actors-deploy") | .metadata.name' <<<"$long_out" | grep -Ec -- '-[0-9a-f]{8}$')" = 2 \
+  || da_fail "long release name lost a deploy Job or its hash suffix"
+long_pool=$(yq 'select(.kind == "Deployment" and (.metadata.name | test("pool-manager$"))) | .metadata.name' <<<"$long_out" | grep .)
+long_np_values=$(yq 'select(.kind == "NetworkPolicy" and .metadata.labels["app.kubernetes.io/component"] == "durable-actors") | .spec.podSelector.matchExpressions[0].values[]' <<<"$long_out")
+grep -qx "$long_pool" <<<"$long_np_values" \
+  || da_fail "long release name: the control-plane NetworkPolicy misses the pool manager"
+
+# The kind proof shape (durable-actors dev sidecars, MinIO) renders without
+# the GKE-only control plane.
+kind_out=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks -f ci/agent-relay/kind-durable-actors-values.yaml)
+if grep -q 'agent-relay-durable-actors' <<<"$kind_out"; then
+  echo "kind proof shape renders the GKE durable-actors control plane" >&2; exit 1
+fi
+for d in relaycast relayfile-server; do
+  test "$(yq "select(.kind == \"Deployment\" and .metadata.name == \"$d\") | .spec.template.spec.containers[1].name" <<<"$kind_out")" = durable-actors-dev \
+    || { echo "kind proof shape: $d lacks the durable-actors dev sidecar" >&2; exit 1; }
+done
 
 echo "agent-relay GCP proof render contract: ok"

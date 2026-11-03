@@ -1,0 +1,25 @@
+# CI: runtime.backend=durable-actors, GKE shape (session broker, deploy Job,
+# GCS blobs through Workload Identity). Placeholder identities only.
+runtime:
+  backend: durable-actors
+  durableActors:
+    image:
+      digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    workspaceImage:
+      digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    existingSecret: relayfile-actors
+    deployer:
+      artifactBucket: example-actor-state
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: relayfile-deployer@example-project.iam.gserviceaccount.com
+    blobStore:
+      driver: gcs
+      bucket: example-relayfile-blobs
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: relayfile@example-project.iam.gserviceaccount.com
+auth:
+  jwksUrl: http://relayauth:8787/.well-known/jwks.json
+networkPolicy:
+  enabled: true

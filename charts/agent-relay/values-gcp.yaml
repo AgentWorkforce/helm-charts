@@ -66,6 +66,9 @@ relaycast:
   service:
     annotations:
       cloud.google.com/neg: '{"ingress": true}'
+    # Binds the gkeIngress cast BackendConfig (WebSocket timeout).
+    # REQUIRED OVERRIDE: <gkeIngress.name>-cast.
+    backendConfig: example-agent-relay-cast
   ingress:
     enabled: false
   networkPolicy:

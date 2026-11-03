@@ -2,12 +2,14 @@ apiVersion: v2
 name: agent-relay
 description: Self-hosted Agent Relay messaging and sessions suite
 type: application
-version: 0.1.1
+version: 0.2.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.28.0-0"
 annotations:
   artifacthub.io/license: Apache-2.0
   agentworkforce.dev/license-scope: "First-party chart code only; dependencies and images retain their own licenses."
+  # Templates use {{ continue }} (Helm 3.10+).
+  agentworkforce.dev/min-helm-version: "3.10.0"
 home: https://github.com/AgentWorkforce/helm-charts
 keywords: [agent-relay, messaging, sessions, self-hosted]
 maintainers:
@@ -15,7 +17,7 @@ maintainers:
     url: https://github.com/AgentWorkforce
 dependencies:
   - name: relaycast
-    version: 0.2.1
+    version: 0.3.0
     repository: file://../relaycast
     condition: components.relaycast
   - name: relayauth
@@ -27,11 +29,11 @@ dependencies:
     repository: file://../96bulls
     condition: components.sessionsPipeline
   - name: relayhistory
-    version: 0.1.0
+    version: 0.1.1
     repository: file://../relayhistory
     condition: components.relayhistory
   - name: relay-cloud-api
-    version: 0.2.0
+    version: 0.2.1
     repository: file://../relay-cloud-api
     condition: components.cloudApi
   - name: relay-dashboard
@@ -42,3 +44,13 @@ dependencies:
     version: 0.2.4
     repository: file://../relayflows
     condition: components.relayflows
+  # Vendored upstream TerseAI chart (charts/durable-actors/UPSTREAM.md); its
+  # values key is `durable-actors` and its Service is <release>-durable-actors.
+  - name: durable-actors
+    version: 0.14.6
+    repository: file://../durable-actors
+    condition: components.durableActors
+  - name: relayfile
+    version: 0.2.0
+    repository: file://../relayfile
+    condition: components.relayfile

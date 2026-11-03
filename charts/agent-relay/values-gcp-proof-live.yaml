@@ -19,7 +19,8 @@ components:
 
 relayhistory:
   image:
-    digest: sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba
+    # Erasure-fix proof build of relayhistory-cloud 74a6e526 (experimental).
+    digest: sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf
   resources:
     requests: { cpu: 25m, memory: 128Mi }
     limits: { memory: 512Mi }
@@ -48,6 +49,9 @@ relay-cloud-api:
   # delivery). The api host denies /internal at the edge.
   secretKeys:
     internalToken: selfhost-internal-token
+  # The proof has no telemetry install key: keep telemetry off explicitly.
+  telemetry:
+    level: "off"
   # The proof cluster's shared Cloud SQL database grants runtime access to the
   # role the Sessions stack created; control_api_runtime does not exist there.
   database:

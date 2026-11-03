@@ -1,0 +1,59 @@
+# Relayfile in runtime.backend=durable-actors for the GKE proof. Apply on top
+# of values-gcp-proof-durable-actors.yaml:
+#
+#   ... -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml
+#
+# Both images are pinned below: relayfile ffac02a9.
+# Images from the relayfile repo (branch selfhost/terse-actors, PR #557):
+# docker/actors.Dockerfile -> relayfile-actors, docker/actors-workspace.Dockerfile
+# -> relayfile-actors-workspace. GCP resources: docs/self-hosted-durable-actors.md.
+components:
+  relayfile: true
+
+gkeIngress:
+  hosts:
+    files: files.gcp-proof.agentrelay.com
+
+relayfile:
+  fullnameOverride: relayfile
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: relayfile@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  auth:
+    jwksUrl: http://relayauth.relayauth.svc:8787/.well-known/jwks.json
+  networkPolicy:
+    enabled: true
+    # Same-namespace pods plus the GKE load balancer health-check/proxy
+    # ranges (gkeIngress.hosts.files requires exactly this shape).
+    allowExternalTraffic: false
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+  runtime:
+    backend: durable-actors
+    durableActors:
+      image:
+        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors
+        digest: sha256:c83d36ea34c3832d441b943a926076e3d197677aea0d7d0e108be89ff873c5de
+      workspaceImage:
+        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors-workspace
+        digest: sha256:67c492d218d219001190a4108bca19540b9932c62d239632e970dc5f02a7260c
+      existingSecret: relayfile-actors
+      adminKeySecret:
+        name: actors-credentials
+        key: api-key
+      gateway:
+        replicaCount: 2
+      deployer:
+        artifactBucket: agentrelay-96bulls-soc2-2610-actors
+        backoffLimit: 10
+        serviceAccount:
+          annotations:
+            iam.gke.io/gcp-service-account: actors-deployer@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+      blobStore:
+        driver: gcs
+        bucket: agentrelay-96bulls-soc2-2610-relayfile

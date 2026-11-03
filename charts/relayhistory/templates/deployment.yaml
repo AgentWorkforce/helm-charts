@@ -6,7 +6,8 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
   labels: {{ include "relayhistory.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- /* drainForWriteHold: step 1 of a write-hold migration (README.md). */}}
+  replicas: {{ ternary 0 .Values.replicaCount .Values.migrations.drainForWriteHold }}
   selector:
     matchLabels: {{ include "relayhistory.selectorLabels" . | nindent 6 }}
   strategy:

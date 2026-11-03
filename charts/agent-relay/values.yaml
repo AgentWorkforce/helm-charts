@@ -9,6 +9,13 @@ components:
   cloudApi: true
   dashboard: true
   relayflows: false
+  # TerseAI durable-actors control plane (vendored charts/durable-actors).
+  # Only useful with an actor-mode consumer: relaycast.runtime.backend or
+  # relayfile.runtime.backend set to durable-actors. GKE Sandbox + GCS only.
+  durableActors: false
+  # Relayfile (charts/relayfile). Off in the suite until its inclusion is
+  # decided; runtime.backend durable-actors needs components.durableActors.
+  relayfile: false
 
 gkeIngress:
   enabled: false
@@ -21,6 +28,12 @@ gkeIngress:
     api: ""
     cast: ""
     history: ""
+    # Optional. The durable-actors publicUrl host (https://<actors>): SDK
+    # follow-up invocations and actor WebSocket URLs use it. Requires
+    # components.durableActors and durable-actors.publicUrl=https://<actors>.
+    actors: ""
+    # Optional. Relayfile's public host; requires components.relayfile.
+    files: ""
   # serviceName is derived from each child chart's fullname (fullnameOverride,
   # else <release>-<chart>); an explicit value must match it. servicePort must
   # match the child's service.port.
@@ -31,8 +44,16 @@ gkeIngress:
     # long-lived SSE stream. Set relay-cloud-api.service.backendConfig to
     # <name>-api; the chart renders the backend-config annotation from it.
     api: { serviceName: "", servicePort: 80, timeoutSec: 3600 }
-    cast: { serviceName: "", servicePort: 8787 }
+    # timeoutSec (60-86400) goes into the cast BackendConfig <name>-cast (name
+    # truncated to 58 characters first): relaycast WebSockets (/v1/ws,
+    # /v1/node/ws) outlive GCE's 30 s default. Set
+    # relaycast.service.backendConfig to <name>-cast.
+    cast: { serviceName: "", servicePort: 8787, timeoutSec: 3600 }
     history: { serviceName: "", servicePort: 8080 }
+    files: { serviceName: "", servicePort: 8080 }
+  # Seconds the GCE backend keeps a request (and an upgraded WebSocket) open
+  # for the actors host; durable-actors sockets are long-lived.
+  actorsBackendTimeoutSec: 3600
 
 # Child values are intentionally not populated with credentials or image
 # placeholders here. Every leaf chart fails closed until its existingSecret,
@@ -48,7 +69,8 @@ relayhistory: {}
 # relay-cloud-api: see charts/relay-cloud-api/values.yaml. encryption.keyId is
 # required; optional: encryption.previousKeyId, secretKeys.previousEncryptionKey,
 # secretKeys.internalToken, secretKeys.telemetryInstallKey, dashboardUrl,
-# flows.*, telemetry.* (telemetry.level defaults to off, pending decision).
+# flows.*, telemetry.* (telemetry.level defaults to errors, effective once the
+# install is registered with installId, install key and endpoint).
 relay-cloud-api: {}
 relay-dashboard: {}
 # Opt-in only: enabling components.relayflows without configuring this block
@@ -57,3 +79,15 @@ relay-dashboard: {}
 # (standalone.flow.*) or worker credentials (credentials.existingSecret,
 # worker.cloudUrl), and an immutable image for production.
 relayflows: {}
+# Passed through to the vendored durable-actors chart when
+# components.durableActors=true; see charts/durable-actors/values.yaml and
+# docs/self-hosted-durable-actors.md. Its schema requires publicUrl,
+# placement.zone, storage.bucket and serviceAccount.googleServiceAccount.
+durable-actors: {}
+relayfile: {}
+# Umbrella NetworkPolicy for the durable-actors control plane (port 7100):
+# release-namespace pods, the actor sandbox namespace and, with
+# gkeIngress.hosts.actors, the GKE load balancer ranges.
+durableActorsNetworkPolicy:
+  enabled: true
+  extraIngressFrom: []

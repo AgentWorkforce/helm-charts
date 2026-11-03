@@ -81,9 +81,21 @@ Optional keys are left out while empty. */ -}}
 {{- end }}
 {{- end -}}
 {{- /* YAML 1.1 reads a bare off as false; treat it as "off". */ -}}
-{{- define "relay-cloud-api.telemetryLevel" -}}
+{{- /* telemetry.level as configured (validated against off|errors|full). */ -}}
+{{- define "relay-cloud-api.telemetryConfiguredLevel" -}}
 {{- $level := .Values.telemetry.level -}}
 {{- if kindIs "bool" $level }}{{ ternary "on" "off" $level }}{{ else }}{{ $level | default "off" | toString | lower }}{{ end -}}
+{{- end -}}
+{{- /* True (non-empty) once the install is registered: any of installId,
+secretKeys.telemetryInstallKey or endpoint is set. */ -}}
+{{- define "relay-cloud-api.telemetryRegistered" -}}
+{{- if or .Values.telemetry.installId .Values.secretKeys.telemetryInstallKey .Values.telemetry.endpoint }}true{{ end -}}
+{{- end -}}
+{{- /* Effective level: the configured level once the install is registered,
+otherwise off. The default (errors) therefore takes effect only after the
+operator supplies the registration; a partial registration fails the render. */ -}}
+{{- define "relay-cloud-api.telemetryLevel" -}}
+{{- if include "relay-cloud-api.telemetryRegistered" . }}{{ include "relay-cloud-api.telemetryConfiguredLevel" . }}{{ else }}off{{ end -}}
 {{- end -}}
 {{- /* True (non-empty) when the API sends telemetry over the network. */ -}}
 {{- define "relay-cloud-api.telemetryEgress" -}}
@@ -163,17 +175,17 @@ at startup is refused at render time instead of crash-looping. */ -}}
 {{- if not (regexMatch "^[0-9]+$" (toString .Values.flows.queuePingMs)) }}{{ fail "flows.queuePingMs must be an integer from 1000 to 120000" }}{{ end -}}
 {{- if or (lt (int64 .Values.flows.queuePingMs) 1000) (gt (int64 .Values.flows.queuePingMs) 120000) }}{{ fail "flows.queuePingMs must be an integer from 1000 to 120000" }}{{ end -}}
 {{- end }}{{ end -}}
+{{- if not (has (include "relay-cloud-api.telemetryConfiguredLevel" .) (list "off" "errors" "full")) }}{{ fail "telemetry.level must be off, errors, or full" }}{{ end -}}
 {{- $level := include "relay-cloud-api.telemetryLevel" . -}}
-{{- if not (has $level (list "off" "errors" "full")) }}{{ fail "telemetry.level must be off, errors, or full" }}{{ end -}}
 {{- $transport := .Values.telemetry.transport | default "https" -}}
 {{- if not (has $transport (list "https" "file")) }}{{ fail "telemetry.transport must be https or file" }}{{ end -}}
 {{- with .Values.telemetry.endpoint }}{{ if not (regexMatch "^https://[^/?#@\\s]+(/[^?#\\s]*)?$" .) }}{{ fail "telemetry.endpoint must be an https URL without credentials, query or fragment" }}{{ end }}{{ end -}}
 {{- with .Values.telemetry.installId }}{{ if not (regexMatch "^inst_[A-Za-z0-9]{8,64}$" .) }}{{ fail "telemetry.installId must look like inst_<8-64 alphanumerics>" }}{{ end }}{{ end -}}
 {{- if ne $level "off" }}
-{{- if not .Values.telemetry.installId }}{{ fail "telemetry.installId is required unless telemetry.level is off" }}{{ end -}}
-{{- if not .Values.secretKeys.telemetryInstallKey }}{{ fail "secretKeys.telemetryInstallKey is required unless telemetry.level is off" }}{{ end -}}
-{{- if and (eq $transport "https") (not .Values.telemetry.endpoint) }}{{ fail "telemetry.endpoint is required for telemetry.transport=https unless telemetry.level is off" }}{{ end -}}
-{{- if and (eq $transport "https") .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.telemetry.egressTo) }}{{ fail "telemetry.egressTo must not be empty: restricted egress would block the telemetry endpoint" }}{{ end -}}
+{{- if not .Values.telemetry.installId }}{{ fail "telemetry.installId is required once telemetry is registered (secretKeys.telemetryInstallKey or endpoint set) unless telemetry.level is off" }}{{ end -}}
+{{- if not .Values.secretKeys.telemetryInstallKey }}{{ fail "secretKeys.telemetryInstallKey is required once telemetry is registered (installId or endpoint set) unless telemetry.level is off" }}{{ end -}}
+{{- if and (eq $transport "https") (not .Values.telemetry.endpoint) }}{{ fail "telemetry.endpoint is required for telemetry.transport=https once telemetry is registered, unless telemetry.level is off" }}{{ end -}}
+{{- if and (eq $transport "https") .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.telemetry.egressTo) }}{{ fail "telemetry.egressTo must not be empty: restricted egress would block the telemetry endpoint (list the ingest endpoint's addresses)" }}{{ end -}}
 {{- end -}}
 {{- $probeNames := list -}}
 {{- range .Values.telemetry.probes }}

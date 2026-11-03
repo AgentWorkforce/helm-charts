@@ -1,0 +1,140 @@
+{{- include "relaycast.validate" . }}
+{{- if include "relaycast.actors.enabled" . }}
+{{- $da := .Values.runtime.durableActors }}
+{{- $dev := include "relaycast.actors.dev" . }}
+{{- $local := eq (toString $da.fileStore.driver) "local" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Same name and selector as the SQLite Deployment: the Service, the
+  # edge-deny Service, the Ingress and the NetworkPolicy are unchanged.
+  name: {{ include "relaycast.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relaycast.labels" . | nindent 4 }}
+    agentworkforce.dev/relaycast-backend: durable-actors
+    agentworkforce.dev/durable-actors-invocation-scope: {{ ternary "dev" (toString $da.invocationSecret.scope) (eq $dev "true") | quote }}
+spec:
+  replicas: {{ ternary 1 ($da.gateway.replicaCount | int) (or (eq $dev "true") $local) }}
+  {{- if or $dev $local }}
+  # A dev runtime or a local file store is single-writer state.
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "relaycast.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "relaycast.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "relaycast.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: gateway
+          image: {{ include "relaycast.actors.imageRef" (dict "image" $da.gateway.image "path" "runtime.durableActors.gateway.image") | quote }}
+          imagePullPolicy: {{ $da.gateway.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+              protocol: TCP
+          env:
+            {{- include "relaycast.actors.gatewayEnv" . | nindent 12 }}
+          livenessProbe:
+            {{- toYaml $da.gateway.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $da.gateway.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml $da.gateway.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: secrets
+              mountPath: {{ include "relaycast.secretMountPath" . }}
+              readOnly: true
+            {{- if $local }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+        {{- if $dev }}
+        # kind/CI only: `durable-actors dev` binds 127.0.0.1 and hands out
+        # loopback routes and socket URLs, so it shares this pod's network.
+        - name: durable-actors-dev
+          image: {{ include "relaycast.actors.imageRef" (dict "image" $da.devRuntime.image "path" "runtime.durableActors.devRuntime.image") | quote }}
+          imagePullPolicy: {{ $da.devRuntime.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10000
+            capabilities:
+              drop: [ALL]
+          env:
+            {{- include "relaycast.actors.devEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml $da.devRuntime.resources | nindent 12 }}
+          volumeMounts:
+            - name: dev-data
+              mountPath: /data
+            - name: dev-tmp
+              mountPath: /tmp
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: secrets
+          secret:
+            secretName: {{ .Values.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.secretKeys.internalSecret | quote }}
+                path: internal-secret
+              - key: {{ .Values.secretKeys.credentialKeyring | quote }}
+                path: credential-keyring
+        {{- if $local }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "relaycast.claimName" . }}
+        {{- end }}
+        {{- if $dev }}
+        - name: dev-data
+          emptyDir: {}
+        - name: dev-tmp
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

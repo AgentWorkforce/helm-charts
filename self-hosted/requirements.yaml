@@ -148,6 +148,30 @@ profiles:
     install: helm install relayflows agentworkforce/relayflows --set image.repository=<flow image> --set standalone.flow.path=<flow>
     summary: Off by default in the product. standalone runs a flow in a Kubernetes Job with no Agent Relay Cloud contact; cloudWorker enrolls a Cloud worker.
 
+  - id: durable-actors
+    title: TerseAI durable-actors control plane (vendored upstream chart)
+    chart: durable-actors
+    values_file: ci/gcp-values.yaml
+    install: enabled through the agent-relay umbrella (components.durableActors); upstream publishes the chart itself
+    summary: GKE Sandbox (gVisor) actor hosts, one Standard GCS bucket (Rapid optional), PostgreSQL; more than one controller needs Redis. Only GKE Sandbox and Modal providers exist upstream.
+  - id: relaycast-durable-actors
+    title: Relaycast on durable-actors (runtime.backend=durable-actors)
+    chart: relaycast
+    values_file: ci/durable-actors-values.yaml
+    install: helm install relaycast agentworkforce/relaycast -f values.yaml (runtime.backend=durable-actors, a durable-actors control plane, ar_ credentials)
+    summary: Stateless gateway (relaycast-actors-gateway) in front of one Workspace actor per workspace; deployer Job registers the actor bundle; files in GCS or S3. Fresh-install backend; SQLite workspaces are not migrated.
+  - id: relayfile-durable-actors
+    title: Relayfile on durable-actors (runtime.backend=durable-actors)
+    chart: relayfile
+    values_file: ci/durable-actors-values.yaml
+    install: helm install relayfile agentworkforce/relayfile -f values.yaml (runtime.backend=durable-actors, a durable-actors control plane)
+    summary: Stateless gateway, internal session broker (the only long-running holder of the admin api-key), deploy Job; file bytes in GCS or S3.
+  - id: agent-relay-durable-actors
+    title: GCP proof suite with the durable-actors control plane, Relaycast and Relayfile in actor mode
+    chart: agent-relay
+    values_file: [values-gcp-proof.yaml, values-gcp-proof-live.yaml, values-gcp-proof-durable-actors.yaml, values-gcp-proof-relayfile.yaml, ci/gcp-proof-values.yaml]
+    install: helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml
+    summary: components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer. All proof image digests are pinned in the overlays (no --set).
 # charts/96bulls/ci/*-values.yaml rendered by ci/96bulls-profiles/matrix.sh that are
 # test variants of a profile above, not install shapes of their own.
 ci_only_values:
@@ -245,21 +269,22 @@ compatibility:
       images_note: not built for the charts yet
       notes: 'Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/96bulls-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped.'
       db_combos: []
-    - id: relaycast-0.2.1
+    - id: relaycast-0.3.0
       status: unreleased
       current: true
-      charts: { relaycast: 0.2.1 }
+      charts: { relaycast: 0.3.0 }
       app_versions: { relaycast: 12.2.1-selfhost.1 }
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762 }
-      notes: License-annotation patch bump of 0.2.0.
+      notes: 'License-annotation bump of 0.2.0 (unreleased 0.2.1) plus runtime.backend=durable-actors (env contract v1): relaycast-actors-gateway and relaycast-actors-deployer images, digests supplied by the operator; the SQLite image above is unchanged and remains the default.'
+
     - id: relaycast-0.2.0
       status: shipped
       charts: { relaycast: 0.2.0 }
       app_versions: { relaycast: 12.2.1-selfhost.1 }
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762 }
-      notes: engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md. Superseded by 0.2.1.
+      notes: engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md. Superseded by 0.3.0.
     - id: relaycast-0.1.0
       status: shipped
       charts: { relaycast: 0.1.0 }
@@ -289,33 +314,40 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.1.1
+    - id: agent-relay-0.2.0
       status: unreleased
       current: true
-      charts: { agent-relay: 0.1.1, relayhistory: 0.1.0, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0 }
+      charts: { agent-relay: 0.2.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.2.1, relayauth: 0.1.2, 96bulls: 0.5.4, relayhistory: 0.1.0, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0, relayflows: 0.2.4 }
+        agent-relay: { relaycast: 0.3.0, relayauth: 0.1.2, 96bulls: 0.5.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: 'relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim.'
-    - id: relayfile-0.1.2
+      notes: 'relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf (relayhistory-cloud 74a6e526, erasure fix). The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe and RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.level defaults to errors (scrubbed error metadata and health only; it takes effect once the install is registered with installId, install key and endpoint, so a default render stays off and a partial registration fails), telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required.'
+    - id: relayfile-0.2.0
       status: unreleased
       current: true
-      charts: { relayfile: 0.1.2 }
+      charts: { relayfile: 0.2.0 }
       app_versions: { relayfile: 0.1.0 }
       images:
         relayfile: { repository: ghcr.io/agentworkforce/relayfile }
-      notes: License-annotation patch bump of 0.1.1; image by tag (Chart.appVersion), not digest.
+      notes: 'License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker: ghcr.io/agentworkforce/relayfile-actors by digest; deploy Job and dev sidecar: relayfile-actors-workspace by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged.'
+    - id: durable-actors-0.14.6
+      status: unreleased
+      current: true
+      charts: { durable-actors: 0.14.6 }
+      app_versions: { durable-actors: 0.14.6 }
+      notes: 'Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee) with the local patches listed in charts/durable-actors/UPSTREAM.md (root global, invoke-only key, host idle timeout, pool-manager name length, zero-valued bounds, lowercase ingress host, schema patterns, README links). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md).'
+
     - id: relayfile-0.1.1
       status: shipped
       charts: { relayfile: 0.1.1 }
       app_versions: { relayfile: 0.1.0 }
       images:
         relayfile: { repository: ghcr.io/agentworkforce/relayfile }
-      notes: image by tag (Chart.appVersion), not digest. Superseded by 0.1.2.
+      notes: image by tag (Chart.appVersion), not digest. Superseded by 0.2.0.
     - id: relayflows-0.2.4
       status: unreleased
       current: true
@@ -1555,11 +1587,14 @@ entries:
     kind: option
     title: Self-host telemetry level and transport
     description: |
-      telemetry.level (SELFHOST_TELEMETRY_LEVEL) is off, errors or full. The
-      chart default is off, the same as the API default; the product default
-      is a pending decision. Any level other than off needs telemetry.installId
-      and secretKeys.telemetryInstallKey (issued by Agent Relay), and with
-      transport https also telemetry.endpoint. transport file never sends
+      telemetry.level (SELFHOST_TELEMETRY_LEVEL) is errors (the chart default:
+      scrubbed error metadata and health only, never content), full (adds
+      usage counts) or off (disabled). The level takes effect once the install
+      is registered: until telemetry.installId and
+      secretKeys.telemetryInstallKey (issued by Agent Relay) and, with
+      transport https, telemetry.endpoint are set, the chart renders off, so a
+      default install renders and sends nothing; setting only some of them
+      fails the render. transport file never sends
       (air-gapped signed export). telemetry.probes and telemetry.deployment add
       health probes and flat deployment-shape keys (scalar values only; the
       chart-rendered keys cannot be overridden). A TCP 443 egress rule to
@@ -1571,17 +1606,17 @@ entries:
     profiles: [relay-cloud-api]
     status: shipped
     provided_by: operator
-    default: "off"
+    default: errors
     choices:
-      - { value: "off" }
-      - { value: errors }
-      - { value: full }
+      - { value: errors, note: "default; scrubbed error metadata and health only, effective once the install is registered" }
+      - { value: full, note: "adds usage counts" }
+      - { value: "off", note: "disabled" }
     secrets:
       - name: "<existingSecret>"
         name_paths: [existingSecret]
         keys:
-          - { key: "<operator-chosen, no default>", key_path: secretKeys.telemetryInstallKey, optional: "required unless telemetry.level is off" }
-    verify: helm template fails for a level other than off without installId, install key, or (https) endpoint; ci/agent-relay/render.sh checks the egress rule renders only when telemetry is sent over https
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.telemetryInstallKey, optional: "required once the install is registered unless telemetry.level is off" }
+    verify: the default render sets SELFHOST_TELEMETRY_LEVEL=off until installId, install key and (https) endpoint are set; helm template fails when only some of them are set; ci/agent-relay/render.sh checks both and that the egress rule renders only when telemetry is sent over https
     sources:
       - "charts/relay-cloud-api/values.yaml"
       - "charts/relay-cloud-api/templates/_helpers.tpl"
@@ -1616,6 +1651,8 @@ entries:
       - POSTHOG_API_KEY
       - ALLOW_WRITE_HOLD
       - ROLLOUT_BUDGET_SECONDS
+      - HISTORY_SELECTOR
+      - DRAIN_WAIT_SECONDS
       - MAX_BODY_BYTES
       - MAX_INFLIGHT_BODY_BYTES
       - SHUTDOWN_GRACE_MS
@@ -1691,7 +1728,10 @@ entries:
       BackendConfig is named <gkeIngress.name>-api (the name truncated to 59
       characters first); relay-cloud-api renders the annotation from
       relay-cloud-api.service.backendConfig, which must equal that name (the
-      render fails with the expected name otherwise).
+      render fails with the expected name otherwise). The relaycast Service is
+      bound the same way to <gkeIngress.name>-cast (the name truncated to 58
+      characters; gkeIngress.backends.cast.timeoutSec, default 3600) through
+      relaycast.service.backendConfig, so Relaycast WebSockets stay open.
     chart: agent-relay
     values:
       - gkeIngress.enabled
@@ -1758,6 +1798,31 @@ entries:
     sources:
       - "docs/self-hosted-reference-architecture.md:11"
       - "README.md:55"
+
+  - id: opt.relaycast.service-backend-config
+    kind: option
+    title: GKE BackendConfig binding for the Relaycast Service
+    description: |
+      service.backendConfig renders the Service annotation
+      cloud.google.com/backend-config ({"default": "<name>"}); empty renders
+      none. The name must be a DNS-1123 subdomain (at most 253 characters) and
+      cannot be combined with a hand-written annotation. Behind the agent-relay
+      GKE ingress it must equal <gkeIngress.name>-cast, the BackendConfig whose
+      timeoutSec (gkeIngress.backends.cast.timeoutSec, default 3600) keeps
+      Relaycast WebSockets open (opt.agent-relay.gke-ingress).
+    chart: relaycast
+    values: [service.backendConfig]
+    profiles: [relaycast]
+    status: shipped
+    provided_by: operator
+    default: empty
+    choices:
+      - { value: empty, note: "no backend-config annotation" }
+      - { value: "<gkeIngress.name>-cast", note: "required behind the agent-relay GKE ingress" }
+    verify: kubectl get svc <relaycast Service> -o jsonpath='{.metadata.annotations.cloud\.google\.com/backend-config}'
+    sources:
+      - "charts/relaycast/templates/service.yaml:10"
+      - "charts/agent-relay/templates/gke-ingress.yaml:144"
 
   - id: opt.stack.relayauth
     kind: option
@@ -2434,3 +2499,283 @@ entries:
     verify: kubectl get pvc Bound; the StorageClass supports ReadWriteOncePod (CSI, Kubernetes 1.29+)
     sources:
       - "charts/relayflows/values.yaml:96"
+
+  # ---------------------------------------------------------------------------
+  # durable-actors control plane (vendored charts/durable-actors) and the
+  # actor-mode backends of Relaycast and Relayfile.
+  # ---------------------------------------------------------------------------
+  - id: req.durable-actors.gke-sandbox
+    kind: requirement
+    title: GKE Standard with GKE Sandbox (gVisor), Workload Identity and enforced NetworkPolicy
+    description: |
+      Actor hosts are Pods the control plane creates with runtimeClassName gvisor,
+      nodeSelector sandbox.gke.io/runtime=gvisor and a zone affinity from
+      placement.zone, so a GKE Sandbox node pool must have nodes in that zone.
+      Controllers avoid gVisor nodes. There is no kind/MinIO/S3 provider upstream;
+      local proofs use the durable-actors dev runtime instead.
+    chart: durable-actors
+    values: [placement.zone, sandboxNamespace, nodeSelector, networkPolicy.dnsCidrs, actors.*, organizationLimits.*, alarms.*, resources.*, replicaCount, analytics.backend, usage.topic, postgres.maxConnections]
+    env: [DURABLE_ACTORS_PROCESS_ROLE, DURABLE_ACTORS_CONTROL_PLANE_BIND, DURABLE_ACTORS_ALARM_POLL_INTERVAL_MS, DURABLE_ACTORS_POSTGRES_MAX_CONNECTIONS, DURABLE_ACTORS_ANALYTICS_BACKEND, DURABLE_ACTORS_USAGE_TOPIC, DURABLE_ACTORS_ORGANIZATION_LIMITS_ENABLED, DURABLE_ACTORS_ORGANIZATION_MAX_ACTIVE_ACTORS, DURABLE_ACTORS_ORGANIZATION_ACTOR_STARTS_PER_SECOND, DURABLE_ACTORS_ORGANIZATION_ACTOR_START_BURST, DURABLE_ACTORS_TYPESCRIPT_IMAGE, DURABLE_ACTORS_PYTHON_IMAGE, DURABLE_ACTORS_GKE_NAMESPACE, DURABLE_ACTORS_GKE_ZONE, DURABLE_ACTORS_SPARE_IDLE, DURABLE_ACTORS_HOST_IDLE_TIMEOUT_MS, DURABLE_ACTORS_SPARE_MAX_STARTING, DURABLE_ACTORS_SPARE_REFILL_INTERVAL_MS, DURABLE_ACTORS_SPARE_RETIRE_CONCURRENCY, DURABLE_ACTORS_SPARE_REAP_INTERVAL_MS, DURABLE_ACTORS_SPARE_POD_REAP_INTERVAL_MS, DURABLE_ACTORS_GKE_REAP_CONCURRENCY, DURABLE_ACTORS_HOST_CPU_MILLIS, DURABLE_ACTORS_HOST_CPU_LIMIT_MILLIS, DURABLE_ACTORS_HOST_MEMORY_MIB, DURABLE_ACTORS_HOST_MEMORY_LIMIT_MIB, DURABLE_ACTORS_SANDBOX_MIN_CPU_MILLIS, DURABLE_ACTORS_SANDBOX_MAX_CPU_MILLIS, DURABLE_ACTORS_SANDBOX_MIN_MEMORY_MIB, DURABLE_ACTORS_SANDBOX_MAX_MEMORY_MIB]
+    profiles: [durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    verify: kubectl get runtimeclass gvisor; kubectl get nodes -l sandbox.gke.io/runtime=gvisor -L topology.kubernetes.io/zone shows placement.zone
+    sources:
+      - "charts/durable-actors/templates/control-plane.yaml:101"
+      - "charts/durable-actors/UPSTREAM.md:59"
+
+  - id: req.durable-actors.bucket
+    kind: requirement
+    title: One Standard GCS bucket for actor state and compiled code (Rapid optional)
+    description: |
+      storage.bucket holds ownership records, immutable compiled actor code
+      (durable-actors/v3/artifacts/<uuid>/) and state snapshots. No lifecycle deletion.
+      Optional Rapid mode adds one or two RAPID buckets (hierarchical namespace) in
+      distinct zones. The controller GSA needs roles/storage.objectUser on each
+      (plus roles/storage.legacyBucketReader for Rapid).
+    chart: durable-actors
+    values: [storage.bucket, storage.mode, storage.rapid.*]
+    env: [DURABLE_ACTORS_PERSISTENCE, DURABLE_ACTORS_BUCKET, DURABLE_ACTORS_ARTIFACT_BUCKET, DURABLE_ACTORS_ARCHIVE_BUCKET, DURABLE_ACTORS_RAPID_BUCKETS, DURABLE_ACTORS_RAPID_PLACEMENT]
+    profiles: [durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    verify: gcloud storage buckets describe gs://<storage.bucket> --format='value(default_storage_class)' is STANDARD
+    sources:
+      - "charts/durable-actors/templates/control-plane.yaml:103"
+
+  - id: req.durable-actors.workload-identity
+    kind: requirement
+    title: A GSA bound to the control-plane KSA through Workload Identity
+    description: |
+      serviceAccount.googleServiceAccount annotates the <release>-durable-actors
+      KSA; bind roles/iam.workloadIdentityUser for
+      serviceAccount:<project>.svc.id.goog[<namespace>/<release>-durable-actors]. Actor
+      pods get credentials scoped to their own state from the control plane.
+    chart: durable-actors
+    values: [serviceAccount.googleServiceAccount]
+    profiles: [durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    verify: gcloud iam service-accounts get-iam-policy <gsa> lists the workloadIdentityUser member
+    sources:
+      - "charts/durable-actors/templates/control-plane.yaml:7"
+
+  - id: req.durable-actors.credentials
+    kind: requirement
+    title: durable-actors credentials Secret (postgres-url, jwt-signing-key, api-key)
+    description: |
+      credentialsSecret in the release namespace. postgres-url: PostgreSQL the
+      controller can migrate (Cloud SQL through a proxy or private IP, TLS for remote).
+      jwt-signing-key: base64 Ed25519 PKCS#8 DER, stable across upgrades. api-key:
+      the administrative secret (registers deployments, issues sessions); only the
+      deploy Jobs and the Relayfile session broker may read it. Auth is off when it is
+      unset, so it is mandatory. redis-url (and redis-ca) when replicaCount > 1.
+      invoke-api-key (local chart patch invokeApiKeySecretKey): an invoke-only key
+      for a control-plane image with the scoped-credentials patch; gateways use it
+      instead of api-key.
+    chart: durable-actors
+    values: [credentialsSecret, invokeApiKeySecretKey, redis.urlSecretKey, redis.caSecretKey, analytics.clickhouse.*]
+    env: [DURABLE_ACTORS_POSTGRES_URL, DURABLE_ACTORS_JWT_SIGNING_KEY, DURABLE_ACTORS_SECRET, DURABLE_ACTORS_INVOKE_API_KEY, DURABLE_ACTORS_REDIS_URL, DURABLE_ACTORS_REDIS_CA_CERT, DURABLE_ACTORS_CLICKHOUSE_URL, DURABLE_ACTORS_CLICKHOUSE_DATABASE, DURABLE_ACTORS_CLICKHOUSE_USER, DURABLE_ACTORS_CLICKHOUSE_PASSWORD]
+    profiles: [durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    secrets:
+      - name: actors-credentials
+        name_paths: [credentialsSecret, "durable-actors.credentialsSecret"]
+        keys:
+          - { key: postgres-url }
+          - { key: jwt-signing-key }
+          - { key: api-key }
+          - { key: "<operator-chosen, no default>", key_path: invokeApiKeySecretKey, optional: "patched control plane only (invoke-only key)" }
+          - { key: "<operator-chosen, no default>", key_path: redis.urlSecretKey, optional: "required when replicaCount > 1 (socket bus)" }
+          - { key: "<operator-chosen, no default>", key_path: redis.caSecretKey, optional: "private Redis CA, e.g. Memorystore" }
+    verify: kubectl get secret actors-credentials -o jsonpath='{.data}' has postgres-url, jwt-signing-key and api-key; the controller starts and runs migrations
+    sources:
+      - "charts/durable-actors/templates/control-plane.yaml:139"
+      - "charts/durable-actors/templates/control-plane.yaml:145"
+
+  - id: req.durable-actors.public-url
+    kind: requirement
+    title: The durable-actors public HTTPS origin (publicUrl) with WebSocket support
+    description: |
+      SDK follow-up invocations and actor WebSocket URLs use publicUrl, so it must
+      resolve and terminate TLS: through the umbrella load balancer
+      (gkeIngress.hosts.actors, which routes an edge Service with a NEG and a
+      BackendConfig timeout for sockets) or the chart's own ingress
+      (ingress.className + ingress.tlsSecret).
+    chart: [durable-actors, agent-relay]
+    values: [publicUrl, ingress.enabled, ingress.className, ingress.tlsSecret, ingress.annotations, "agent-relay:gkeIngress.hosts.actors", "agent-relay:gkeIngress.actorsBackendTimeoutSec"]
+    env: [DURABLE_ACTORS_PUBLIC_URL, DURABLE_ACTORS_CONTROL_PLANE_URL]
+    profiles: [durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    secrets:
+      - name: "<ingress.tlsSecret>"
+        note: kubernetes.io/tls, only with the chart's own ingress
+    verify: curl -fsS <publicUrl>/healthz
+    sources:
+      - "charts/durable-actors/templates/control-plane.yaml:97"
+      - "charts/agent-relay/templates/gke-ingress.yaml:50"
+
+  - id: opt.agent-relay.durable-actors
+    kind: option
+    title: Run the durable-actors control plane and Relayfile in the suite
+    description: |
+      components.durableActors enables the vendored control plane (needs an
+      actor-mode consumer); components.relayfile adds Relayfile. Consumers' admin
+      Secret and artifact bucket must equal durable-actors.credentialsSecret and
+      storage.bucket. durableActorsNetworkPolicy limits control-plane ingress to the
+      release namespace, the sandbox namespace and the GKE LB ranges.
+    chart: agent-relay
+    values: [components.durableActors, components.relayfile, durableActorsNetworkPolicy.*, gkeIngress.hosts.files, gkeIngress.backends.files.*]
+    profiles: [agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    default: false
+    choices:
+      - { value: false }
+      - { value: true, note: "GKE Sandbox + GCS + PostgreSQL" }
+    verify: helm template fails with "components.durableActors=true has no consumer" or "requires components.durableActors=true" on miswiring (ci/agent-relay/render.sh)
+    sources:
+      - "charts/agent-relay/values.yaml:15"
+      - "charts/agent-relay/templates/_helpers.tpl:42"
+
+  - id: opt.relaycast.durable-actors
+    kind: option
+    title: Relaycast runtime backend (sqlite or durable-actors)
+    description: |
+      durable-actors (env contract v1) replaces the SQLite Deployment with the
+      relaycast-actors-gateway (same Service, ingress and edge-deny rules; PORT 8787,
+      /healthz and /readyz). Requires ar_ credentials with a keyring, an HTTPS public
+      baseUrl (sandbox egress blocks private ranges), and a durable-actors control
+      plane. More than one gateway replica needs fileStore gcs or s3. A fresh-install
+      backend: SQLite workspaces are not migrated.
+    chart: relaycast
+    values: [runtime.backend, runtime.durableActors.projectId, runtime.durableActors.organizationId, runtime.durableActors.controlPlaneUrl, runtime.durableActors.homeRegion, runtime.durableActors.gateway.*, runtime.durableActors.maxUploadBytes, runtime.durableActors.shutdownGraceMs, runtime.durableActors.logFormat, runtime.durableActors.fileStore.*, runtime.durableActors.devRuntime.*]
+    env: [DURABLE_ACTORS_CONTROL_PLANE_URL, DURABLE_ACTORS_PROJECT_ID, DURABLE_ACTORS_HOME_REGION, RELAYCAST_FILE_STORE, RELAYCAST_FILE_DIR, RELAYCAST_GCS_BUCKET, RELAYCAST_GCS_PREFIX, RELAYCAST_S3_BUCKET, RELAYCAST_S3_REGION, RELAYCAST_S3_ENDPOINT, RELAYCAST_S3_PREFIX, RELAYCAST_S3_FORCE_PATH_STYLE, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, RELAYCAST_MAX_UPLOAD_BYTES, RELAYCAST_SHUTDOWN_GRACE_MS, RELAYCAST_LOG_FORMAT, DURABLE_ACTORS_PORT, DURABLE_ACTORS_DATA_DIR, RELAYCAST_PUBLIC_URL, RELAYCAST_INTERNAL_SECRET]
+    profiles: [relaycast-durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    default: sqlite
+    choices:
+      - { value: sqlite }
+      - { value: durable-actors, note: "env contract v1; images relaycast-actors-gateway and relaycast-actors-deployer by digest" }
+    secrets:
+      - name: "<runtime.durableActors.fileStore.s3.existingSecret>"
+        keys:
+          - { key: AWS_ACCESS_KEY_ID }
+          - { key: AWS_SECRET_ACCESS_KEY }
+        note: s3 file store only; empty uses the pod's ambient identity
+    verify: kubectl get deploy relaycast -o jsonpath='{.metadata.labels.agentworkforce\.dev/relaycast-backend}' is durable-actors; curl <baseUrl>/readyz
+    sources:
+      - "charts/relaycast/values.yaml:29"
+      - "charts/relaycast/templates/_actors.tpl:98"
+
+  - id: req.relaycast.durable-actors-secrets
+    kind: requirement
+    title: Relaycast actor-mode Secrets (gateway invocation key, file signing, actor env, admin key)
+    description: |
+      existingSecret gains the file-signing secret (RELAYCAST_FILE_SIGNING_SECRET)
+      and must carry the credential keyring and internal secret. The gateway's
+      DURABLE_ACTORS_SECRET comes from its own invocationSecret (scope admin = a copy
+      of the durable-actors api-key until upstream ships an invoke-only key; never the
+      admin key Secret itself). The deployer alone reads adminKeySecret. Actor env
+      Secrets (RELAYCAST_PUBLIC_URL = baseUrl, RELAYCAST_FILE_SIGNING_SECRET,
+      RELAYCAST_INTERNAL_SECRET, optional engine settings) live in the durable-actors
+      SANDBOX namespace, labelled terse.ai/customer-secret=true, and are passed as
+      DURABLE_ACTORS_SECRET_REFS. devRuntime.secretKey is the dev sidecar's key.
+    chart: relaycast
+    values: [runtime.durableActors.fileSigningSecretKey, runtime.durableActors.invocationSecret.*, runtime.durableActors.adminKeySecret.*, runtime.durableActors.actorEnvSecrets, runtime.durableActors.devRuntime.secretKey, runtime.durableActors.deployer.*]
+    env: [DURABLE_ACTORS_SECRET, RELAYCAST_FILE_SIGNING_SECRET, DURABLE_ACTORS_ARTIFACT_BUCKET, DURABLE_ACTORS_SECRET_REFS, DURABLE_ACTORS_ORGANIZATION_ID]
+    profiles: [relaycast-durable-actors]
+    status: shipped
+    provided_by: operator
+    secrets:
+      - name: "<existingSecret>"
+        name_paths: [existingSecret, relaycast.existingSecret]
+        keys:
+          - { key: file-signing-secret, key_path: runtime.durableActors.fileSigningSecretKey }
+          - { key: credential-keyring, key_path: secretKeys.credentialKeyring }
+      - name: "<runtime.durableActors.invocationSecret.name>"
+        keys:
+          - { key: durable-actors-invoke-key, key_path: runtime.durableActors.invocationSecret.key }
+      - name: actors-credentials
+        name_paths: [runtime.durableActors.adminKeySecret.name]
+        keys:
+          - { key: api-key, key_path: runtime.durableActors.adminKeySecret.key }
+      - name: "<runtime.durableActors.actorEnvSecrets[], e.g. relaycast-actor-env, in the sandbox namespace>"
+        keys:
+          - { key: RELAYCAST_PUBLIC_URL }
+          - { key: RELAYCAST_FILE_SIGNING_SECRET }
+          - { key: RELAYCAST_INTERNAL_SECRET }
+        note: label terse.ai/customer-secret=true; keys become actor env
+      - name: "<existingSecret, devRuntime only>"
+        keys:
+          - { key: durable-actors-dev-secret, key_path: runtime.durableActors.devRuntime.secretKey }
+    verify: helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes
+    sources:
+      - "charts/relaycast/templates/_actors.tpl:78"
+      - "charts/relaycast/templates/_actors.tpl:206"
+
+  - id: opt.relayfile.durable-actors
+    kind: option
+    title: Relayfile runtime backend (go or durable-actors)
+    description: |
+      durable-actors replaces the Go server with the relayfile-actors gateway (same
+      Service/Ingress/HPA/NetworkPolicy), adds the session broker and the deploy Job,
+      and stores file bytes in GCS (Workload Identity via serviceAccount.annotations)
+      or S3. devRuntime runs `durable-actors dev` as a sidecar for kind/CI only.
+    chart: relayfile
+    values: [runtime.backend, runtime.durableActors.image.*, runtime.durableActors.projectId, runtime.durableActors.organizationId, runtime.durableActors.controlPlaneUrl, runtime.durableActors.gateway.*, runtime.durableActors.broker.*, runtime.durableActors.deployer.*, runtime.durableActors.blobStore.*, runtime.durableActors.devRuntime.*]
+    env: [DURABLE_ACTORS_CONTROL_PLANE_URL, DURABLE_ACTORS_PROJECT_ID, DURABLE_ACTORS_ORGANIZATION_ID, DURABLE_ACTORS_ARTIFACT_BUCKET, RELAYFILE_ACTORS_BROKER_URL, RELAYFILE_ACTORS_ALLOW_ADMIN_KEY, RELAYFILE_BLOB_STORE, RELAYFILE_BLOB_BUCKET, RELAYFILE_BLOB_PREFIX, RELAYFILE_BLOB_INLINE_MAX_BYTES, RELAYFILE_S3_ENDPOINT, RELAYFILE_S3_REGION, RELAYFILE_S3_FORCE_PATH_STYLE, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, DURABLE_ACTORS_PORT, DURABLE_ACTORS_DATA_DIR]
+    profiles: [relayfile-durable-actors, agent-relay-durable-actors]
+    status: shipped
+    provided_by: operator
+    default: go
+    choices:
+      - { value: go }
+      - { value: durable-actors, note: "images ghcr.io/agentworkforce/relayfile-actors (gateway, session broker) and relayfile-actors-workspace (deploy Job, dev sidecar) by digest" }
+    secrets:
+      - name: "<runtime.durableActors.blobStore.s3.existingSecret>"
+        keys:
+          - { key: AWS_ACCESS_KEY_ID }
+          - { key: AWS_SECRET_ACCESS_KEY }
+        note: s3 blob store only; empty uses the pod's ambient identity
+    verify: kubectl get deploy <fullname>-server -o jsonpath='{.metadata.labels.agentworkforce\.dev/relayfile-backend}' is durable-actors; curl <url>/health
+    sources:
+      - "charts/relayfile/values.yaml:14"
+      - "charts/relayfile/templates/actors/_helpers.tpl:90"
+
+  - id: req.relayfile.durable-actors-secrets
+    kind: requirement
+    title: Relayfile actor-mode Secrets (gateway Secret, durable-actors admin key)
+    description: |
+      runtime.durableActors.existingSecret (gateway): RELAYFILE_JWT_SECRET (unless
+      auth.jwksUrl), RELAYFILE_ACTORS_BROKER_TOKEN, optional
+      RELAYFILE_INTERNAL_HMAC_SECRET, and for devRuntime DURABLE_ACTORS_SECRET.
+      adminKeySecret (the durable-actors credentialsSecret api-key) must be a
+      different Secret; only the session broker and the deploy Job mount it.
+    chart: relayfile
+    values: [runtime.durableActors.existingSecret, runtime.durableActors.secretKeys.*, runtime.durableActors.adminKeySecret.*, runtime.durableActors.devRuntime.secretKey]
+    env: [RELAYFILE_ACTORS_BROKER_TOKEN, RELAYFILE_JWT_SECRET, RELAYFILE_INTERNAL_HMAC_SECRET, DURABLE_ACTORS_SECRET]
+    profiles: [relayfile-durable-actors]
+    status: shipped
+    provided_by: operator
+    secrets:
+      - name: relayfile-actors
+        name_paths: [runtime.durableActors.existingSecret, relayfile.runtime.durableActors.existingSecret]
+        keys:
+          - { key: RELAYFILE_JWT_SECRET, key_path: runtime.durableActors.secretKeys.jwtSecret }
+          - { key: RELAYFILE_ACTORS_BROKER_TOKEN, key_path: runtime.durableActors.secretKeys.brokerToken }
+          - { key: "<operator-chosen, no default>", key_path: runtime.durableActors.secretKeys.internalHmacSecret, optional: "enables /v1/internal/webhook-envelopes" }
+      - name: actors-credentials
+        name_paths: [runtime.durableActors.adminKeySecret.name, relayfile.runtime.durableActors.adminKeySecret.name]
+        keys:
+          - { key: api-key, key_path: runtime.durableActors.adminKeySecret.key }
+      - name: "<runtime.durableActors.existingSecret, devRuntime only>"
+        keys:
+          - { key: DURABLE_ACTORS_SECRET, key_path: runtime.durableActors.devRuntime.secretKey }
+    verify: helm template fails with "adminKeySecret must be a different Secret" when they match; the broker's /health is ready
+    sources:
+      - "charts/relayfile/templates/actors/_helpers.tpl:71"
+      - "charts/relayfile/templates/actors/session-broker.yaml:64"

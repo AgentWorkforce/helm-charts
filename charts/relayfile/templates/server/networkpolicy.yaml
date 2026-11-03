@@ -1,4 +1,8 @@
 {{- if .Values.networkPolicy.enabled -}}
+{{- $ingressFrom := .Values.networkPolicy.ingressFrom | default list -}}
+{{- if and $ingressFrom .Values.networkPolicy.allowExternalTraffic }}
+{{- fail "networkPolicy.ingressFrom requires networkPolicy.allowExternalTraffic=false (allowExternalTraffic admits every source)" }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -16,7 +20,10 @@ spec:
     - ports:
         - port: http
           protocol: TCP
-      {{- if not .Values.networkPolicy.allowExternalTraffic }}
+      {{- if $ingressFrom }}
+      from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+      {{- else if not .Values.networkPolicy.allowExternalTraffic }}
       from:
         - podSelector: {}
       {{- end }}

@@ -71,6 +71,28 @@ scripts/selfhost/pre-upgrade-check.sh \
 A successful gate does not make a migration reversible and does not authorize
 the upgrade. Keep the normal review and explicit mutation approval.
 
+### RelayHistory write-hold migrations
+
+A RelayHistory migration that needs a write hold cannot run in a single
+`helm upgrade`: its Job (`migrations.allowWriteHold=true`) refuses while any
+runtime-role session is connected, and Helm keeps the History Deployment at one
+replica. Do not scale the Deployment by hand (the next upgrade restores it while
+the Job may still be running). Use the two-step upgrade in
+[`charts/relayhistory/README.md`](../charts/relayhistory/README.md#write-hold-migrations-two-step-upgrade):
+
+1. `helm upgrade` with `relayhistory.migrations.allowWriteHold=true` and
+   `relayhistory.migrations.drainForWriteHold=true`. History renders with zero
+   replicas, and the migrate Job's init container waits until no History pod
+   of the release exists (terminating pods included) before migrating; it
+   needs API access (a chart-rendered Role that lists pods, plus
+   `relayhistory.migrations.drainWaitApiServerEgress` under restricted
+   egress). Wait for the migrate Job to complete. On failure, stop and follow
+   the safety rules above.
+2. `helm upgrade` with both flags back to `false`. History returns to one
+   replica.
+
+The recovery set for the gate above must be captured before step 1.
+
 ## Capture
 
 Capture a recovery set with `charts/agent-relay/scripts/gcp-recovery-backup.sh`.

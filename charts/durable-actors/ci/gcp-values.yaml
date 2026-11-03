@@ -1,0 +1,9 @@
+# CI fixture (not part of the upstream release). Placeholder GCP identities
+# that satisfy the upstream values schema; nothing here is a real resource.
+publicUrl: https://actors.example.com
+placement:
+  zone: us-west4-a
+storage:
+  bucket: example-actor-state
+serviceAccount:
+  googleServiceAccount: actors@example-project.iam.gserviceaccount.com

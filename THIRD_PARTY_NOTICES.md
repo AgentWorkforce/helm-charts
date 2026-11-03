@@ -7,7 +7,7 @@ Apache License 2.0 by the root [`LICENSE`](LICENSE). Third-party components
 retain their own licenses and notices; this file does not relicense them and
 is not legal advice.
 
-Evidence was checked on 2026-11-02 against the dependency chart archives that
+Evidence was checked on 2026-11-02 (refreshed 2026-11-03) against the dependency chart archives that
 `helm dependency build` produced from the committed `Chart.lock` files, and
 against the linked upstream repositories. Those archives are not committed
 (`*.tgz` is ignored) and the customer handoff does not ship them: they are
@@ -26,10 +26,11 @@ redistribution limits recorded below.
 
 ## Third-party Helm chart dependencies
 
-The SHA-256 values are those of the archives fetched on 2026-11-02, recorded
-so a rebuilt archive can be compared; they are not files in this repository.
-`charts/96bulls/Chart.lock` (digest
-`sha256:9f168c6141ecd03c2d88e8d4f6b2420313a0f33f79536eef4f68a4ce7c999de2`)
+The SHA-256 values are those of the archives fetched on 2026-11-02 and
+re-fetched unchanged on 2026-11-03, recorded so a rebuilt archive can be
+compared; they are not files in this repository. `charts/96bulls/Chart.lock`
+(digest
+`sha256:ade2941ed0a75a418ea51e873a57e645d16d3a9ea8e5810c71c07430b1f079a2`)
 pins the versions.
 
 | Component | Dependency archive (produced by `helm dependency build charts/96bulls`) | Upstream source | Upstream license evidence |
@@ -40,10 +41,27 @@ pins the versions.
 
 `helm dependency build charts/agent-relay` packages the same third-party chart
 contents inside `charts/agent-relay/charts/96bulls-0.5.4.tgz`, whose bytes
-depend on that local build (one 0.5.2 build had SHA-256
-`289b5aebc3a9c6cf58b62c5c23446f15dc03d5979a5cd9fefb0bb26bf0f4b9bc`); it is not
+depend on that local build (the 2026-11-03 build had SHA-256
+`a9136ff647222c3370a37f20c85ce0c030848ecec7c0d673f45714acc3cd857a`); it is not
 committed or shipped in the handoff. That archive also contains no license or
 notice file.
+
+### Vendored chart: durable-actors
+
+`charts/durable-actors` is the TerseAI durable-actors release chart 0.14.6,
+committed to this repository (not fetched) with the local patches listed in
+[`charts/durable-actors/UPSTREAM.md`](charts/durable-actors/UPSTREAM.md), and
+packaged into `agent-relay` as `charts/durable-actors-0.14.6.tgz` by
+`helm dependency build charts/agent-relay`. This repository never publishes it
+on its own.
+
+| Component | Source | Upstream license evidence |
+| --- | --- | --- |
+| durable-actors chart 0.14.6 | [`TerseAI/durable-actors`, tag `v0.14.6`, commit `5f0a2d62ed08e3060befd9b009333e1f0c3c6cd8`](https://github.com/TerseAI/durable-actors/tree/v0.14.6/charts/durable-actors); release asset `durable-actors-0.14.6.tgz` (SHA-256 `a489cd15c5b4319b2607114701db711f79b4ae5faddd4dd25beb0ac6cab15bee`) | [MIT License at that tag](https://github.com/TerseAI/durable-actors/blob/v0.14.6/LICENSE.md) ("Copyright (c) 2026 Terse"); copied into the chart as [`charts/durable-actors/LICENSE.md`](charts/durable-actors/LICENSE.md), so the packaged chart carries the notice the MIT License requires |
+
+The images it references (`us-central1-docker.pkg.dev/fluid-analogy-473415-c2/public/durable-actors`
+control-plane, TypeScript and Python runtimes, pinned by digest in the chart)
+are referenced, not copied.
 
 The CloudNativePG operator chart 0.29.1 is an install prerequisite fetched by
 CI/release workflows, not a chart dependency of any chart here. Its source is

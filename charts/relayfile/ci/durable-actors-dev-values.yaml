@@ -1,0 +1,22 @@
+# CI / kind: runtime.backend=durable-actors with the `durable-actors dev`
+# sidecar and S3-compatible (MinIO) blobs. Never a production shape.
+runtime:
+  backend: durable-actors
+  durableActors:
+    image:
+      tag: kind
+      pullPolicy: Never
+    workspaceImage:
+      tag: kind
+      pullPolicy: Never
+    existingSecret: relayfile-actors
+    blobStore:
+      driver: s3
+      bucket: relayfile
+      s3:
+        endpoint: http://minio:9000
+        forcePathStyle: true
+        existingSecret: relayfile-minio
+    devRuntime:
+      enabled: true
+      acknowledgeNonProduction: true

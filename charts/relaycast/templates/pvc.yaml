@@ -1,5 +1,5 @@
 {{- include "relaycast.validate" . }}
-{{- if not .Values.persistence.existingClaim }}
+{{- if and (not .Values.persistence.existingClaim) (include "relaycast.needsDataClaim" .) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
