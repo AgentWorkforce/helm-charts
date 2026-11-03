@@ -86,11 +86,14 @@ printf ' %s' "$@" >>"${MOCK_COMMAND_LOG}"
 printf '\n' >>"${MOCK_COMMAND_LOG}"
 case " $* " in
   *" status "*)
-    if [[ -f "${MOCK_FIXTURES}/helm-status.json" ]]; then
-      cat "${MOCK_FIXTURES}/helm-status.json"
-    else
-      printf '{"name":"relay","version":3,"info":{"status":"deployed"},"chart":{"metadata":{"version":"1.0.0"}}}\n'
+    # helm-revisions, when present, supplies one revision per call.
+    revision=3
+    if [[ -s "${MOCK_FIXTURES}/helm-revisions" ]]; then
+      revision="$(head -n 1 "${MOCK_FIXTURES}/helm-revisions")"
+      tail -n +2 "${MOCK_FIXTURES}/helm-revisions" >"${MOCK_FIXTURES}/helm-revisions.next"
+      mv "${MOCK_FIXTURES}/helm-revisions.next" "${MOCK_FIXTURES}/helm-revisions"
     fi
+    printf '{"name":"relay","version":%s,"info":{"status":"deployed"},"chart":{"metadata":{"version":"1.0.0"}}}\n' "${revision}"
     ;;
   *" show chart "*) printf 'name: agent-relay\nversion: 2.0.0\n' ;;
 esac
@@ -436,5 +439,54 @@ grep -Eq '^created vs-ar-[0-9]{8}t[0-9]{6}z-1111aaaa-relaycast$' "${command_log}
 grep -Eq '^created vs-ar-[0-9]{8}t[0-9]{6}z-2222bbbb-relayauth$' "${command_log}" ||
   fail "second capture did not get its own snapshot names"
 pass "backup snapshot names carry the full recovery ID"
+
+reset_fixtures
+write_backup_fixtures
+run_backup 3333cccc || { cat "${tmp_root}/backup.out" >&2; fail "crash-consistent backup failed"; }
+jq -e '.sourceRevision == 3 and .writesQuiesced == false and .consistency == "crash-consistent"' \
+  "$(latest_backup_evidence)" >/dev/null ||
+  fail "unquiesced backup evidence must record sourceRevision and writesQuiesced=false"
+
+reset_fixtures
+write_backup_fixtures
+cat >"${fixtures}/deployments.apps,statefulsets.apps.json" <<'JSON'
+{"items":[{"kind":"Deployment","spec":{"replicas":0},"status":{"replicas":0}},
+  {"kind":"StatefulSet","spec":{"replicas":0},"status":{}}]}
+JSON
+run_backup 4444dddd || { cat "${tmp_root}/backup.out" >&2; fail "quiesced backup failed"; }
+quiesced_evidence="$(latest_backup_evidence)"
+jq -e '.sourceRevision == 3 and .writesQuiesced == true and .consistency == "quiesced"' \
+  "${quiesced_evidence}" >/dev/null ||
+  fail "verified-quiesced backup evidence must record writesQuiesced=true"
+
+# The evidence the script writes must satisfy the documented pre-upgrade gate.
+write_upgrade_evidence "${tmp_root}/gate"
+cp "${quiesced_evidence}" "${tmp_root}/gate/backup.json"
+recovery_id="$(jq -r '.recoveryId' "${quiesced_evidence}")"
+jq --arg id "${recovery_id}" '.recoveryId = $id' "${tmp_root}/gate/restore.json" \
+  >"${tmp_root}/gate/restore.tmp" && mv "${tmp_root}/gate/restore.tmp" "${tmp_root}/gate/restore.json"
+write_jobs "${complete}"
+run_pre_upgrade "${tmp_root}/gate" || fail "pre-upgrade rejected evidence produced by the backup script"
+
+reset_fixtures
+write_backup_fixtures
+if run_backup 5555eeee REQUIRE_WRITES_QUIESCED=true; then
+  fail "REQUIRE_WRITES_QUIESCED accepted running writers"
+fi
+find "${gcs}" -name FAILED.json | grep -q . || fail "quiesce failure did not write FAILED.json"
+jq -e '.sourceRevision == 3 and .failedPhase == "quiesce-preflight"' \
+  "$(find "${gcs}" -name FAILED.json | head -n 1)" >/dev/null ||
+  fail "failure evidence lacks sourceRevision or phase"
+
+reset_fixtures
+write_backup_fixtures
+printf '3\n4\n' >"${fixtures}/helm-revisions"
+if run_backup 6666ffff; then
+  fail "backup accepted a Helm revision change during capture"
+fi
+if find "${gcs}" -name COMPLETE | grep -q .; then
+  fail "backup marked COMPLETE although the revision changed"
+fi
+pass "backup evidence records sourceRevision and verified writesQuiesced"
 
 printf 'All self-hosted script tests passed.\n'

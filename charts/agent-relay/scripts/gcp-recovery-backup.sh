@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 #
-# Coordinated, crash-consistent GCP recovery capture. Authentication is
-# intentionally delegated to GKE Workload Identity; this script has no
-# credential-file or service-account-key path.
+# Coordinated GCP recovery capture. Authentication is intentionally delegated
+# to GKE Workload Identity; this script has no credential-file or
+# service-account-key path.
+#
+# The capture is crash-consistent unless the release's writers are verified
+# quiesced (every Deployment/StatefulSet matching WRITER_SELECTOR scaled to
+# zero with no remaining replicas) both before and after the capture. Only
+# then does the evidence record writesQuiesced=true, which the pre-upgrade
+# gate requires. Set REQUIRE_WRITES_QUIESCED=true to fail instead of
+# recording a crash-consistent capture.
+#
+# The deployed Helm revision is read before and after the capture (helm
+# status, which needs read access to the release storage) and recorded as
+# sourceRevision; the capture fails if the revision changes meanwhile.
 
 set -Eeuo pipefail
 umask 077
@@ -15,6 +26,9 @@ STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 HELM_RELEASE="${HELM_RELEASE:-}"
 RECOVERY_ID=""
 RECOVERY_URI=""
+SOURCE_REVISION=""
+WRITES_QUIESCED=false
+REQUIRE_WRITES_QUIESCED="${REQUIRE_WRITES_QUIESCED:-false}"
 
 required_env=(
   PROJECT_ID CLOUDSQL_INSTANCE CLOUDSQL_DATABASES GCS_SOURCE_BUCKET
@@ -77,11 +91,11 @@ write_failure_evidence() {
   local rc=$1 completed_at
   completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   python3 - "$WORKDIR/failed.json" "$RECOVERY_ID" "$HELM_RELEASE" \
-    "$STARTED_AT" "$completed_at" "$PHASE" "$rc" <<'PY'
+    "$STARTED_AT" "$completed_at" "$PHASE" "$rc" "$SOURCE_REVISION" <<'PY'
 import json
 import sys
 
-path, recovery_id, release, started, completed, phase, code = sys.argv[1:]
+path, recovery_id, release, started, completed, phase, code, revision = sys.argv[1:]
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
@@ -90,6 +104,8 @@ with open(path, "w", encoding="utf-8") as stream:
             "status": "FAIL",
             "providerStatus": "FAILED",
             "sourceRelease": release,
+            "sourceRevision": int(revision) if revision.isdigit() else None,
+            "writesQuiesced": False,
             "startedAt": started,
             "completedAt": completed,
             "failedPhase": phase,
@@ -116,10 +132,70 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command_name in gcloud kubectl python3; do
+for command_name in gcloud kubectl helm python3; do
   command -v "$command_name" >/dev/null 2>&1 ||
     die "$command_name is required"
 done
+
+case "$REQUIRE_WRITES_QUIESCED" in
+  true|false) ;;
+  *) die "REQUIRE_WRITES_QUIESCED must be true or false" ;;
+esac
+WRITER_SELECTOR="${WRITER_SELECTOR:-app.kubernetes.io/instance=${HELM_RELEASE}}"
+
+# Print the deployed Helm revision of HELM_RELEASE. Helm output is parsed in
+# memory; only the integer revision is kept.
+deployed_revision() {
+  helm status "$HELM_RELEASE" --namespace "$KUBERNETES_NAMESPACE" \
+    --output json 2>/dev/null |
+    python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+revision = data.get("version")
+if data.get("info", {}).get("status") != "deployed":
+    raise SystemExit(1)
+if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+    raise SystemExit(1)
+print(revision)
+'
+}
+
+# Succeed only when at least one writer controller matches WRITER_SELECTOR
+# and every match is scaled to zero with no remaining replicas.
+writers_quiesced() {
+  kubectl --namespace "$KUBERNETES_NAMESPACE" \
+    get deployments.apps,statefulsets.apps -l "$WRITER_SELECTOR" \
+    -o json 2>/dev/null |
+    python3 -c '
+import json
+import sys
+
+items = json.load(sys.stdin).get("items", [])
+if not items:
+    raise SystemExit(1)
+for item in items:
+    spec = item.get("spec", {})
+    status = item.get("status", {})
+    if spec.get("replicas", 1) != 0:
+        raise SystemExit(1)
+    for field in ("replicas", "readyReplicas", "availableReplicas"):
+        if status.get(field, 0) not in (0, None):
+            raise SystemExit(1)
+'
+}
+
+PHASE="release-preflight"
+SOURCE_REVISION="$(deployed_revision)" ||
+  die "cannot read a deployed Helm revision for $HELM_RELEASE"
+
+PHASE="quiesce-preflight"
+if writers_quiesced; then
+  WRITES_QUIESCED=true
+elif [[ "$REQUIRE_WRITES_QUIESCED" == true ]]; then
+  die "release writers matching WRITER_SELECTOR are not scaled to zero"
+fi
 
 PHASE="archive-policy-preflight"
 gcloud storage buckets describe "gs://${GCS_ARCHIVE_BUCKET}" --format=json \
@@ -316,6 +392,18 @@ PHASE="gcs-copy"
 gcloud storage rsync --recursive "gs://${GCS_SOURCE_BUCKET}" \
   "${RECOVERY_URI}/gcs" >/dev/null
 
+PHASE="release-postflight"
+final_revision="$(deployed_revision)" ||
+  die "cannot re-read the deployed Helm revision after capture"
+[[ "$final_revision" == "$SOURCE_REVISION" ]] ||
+  die "Helm revision changed during capture ($SOURCE_REVISION -> $final_revision)"
+# Quiescence must hold for the whole capture, not only at the start.
+if [[ "$WRITES_QUIESCED" == true ]] && ! writers_quiesced; then
+  WRITES_QUIESCED=false
+  [[ "$REQUIRE_WRITES_QUIESCED" != true ]] ||
+    die "release writers were scaled up during capture"
+fi
+
 PHASE="evidence"
 COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 python3 - "$WORKDIR/backup.json" "$WORKDIR/cloudsql-backup-id" \
@@ -326,7 +414,7 @@ python3 - "$WORKDIR/backup.json" "$WORKDIR/cloudsql-backup-id" \
   "$RECOVERY_ID" "$HELM_RELEASE" "$STARTED_AT" "$COMPLETED_AT" \
   "$PROJECT_ID" "$CLOUDSQL_INSTANCE" "$GCS_SOURCE_BUCKET" \
   "$GCS_ARCHIVE_BUCKET" "$ARCHIVE_PREFIX" "$RETENTION_DAYS" \
-  "$RPO_MINUTES" "$RTO_HOURS" <<'PY'
+  "$RPO_MINUTES" "$RTO_HOURS" "$SOURCE_REVISION" "$WRITES_QUIESCED" <<'PY'
 import json
 import sys
 
@@ -350,6 +438,8 @@ import sys
     retention_days,
     rpo_minutes,
     rto_hours,
+    source_revision,
+    writes_quiesced,
 ) = sys.argv[1:]
 
 def load(path):
@@ -384,11 +474,12 @@ evidence = {
     "status": "PASS",
     "providerStatus": "SUCCESSFUL",
     "sourceRelease": release,
+    "sourceRevision": int(source_revision),
     "sourceProject": project,
     "startedAt": started,
     "completedAt": completed,
-    "writesQuiesced": False,
-    "consistency": "crash-consistent",
+    "writesQuiesced": writes_quiesced == "true",
+    "consistency": "quiesced" if writes_quiesced == "true" else "crash-consistent",
     "artifactsComplete": True,
     "policy": {
         "rpoMinutes": int(rpo_minutes),
