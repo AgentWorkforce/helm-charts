@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
+# jq programs are intentionally single-quoted.
+# shellcheck disable=SC2016
 
 # Shared safety and evidence helpers for the umbrella-chart conformance harness.
 # This file intentionally does not enable shell options; callers own their policy.
+# It must stay compatible with bash 3.2 (macOS /bin/bash).
 
 readonly CONFORMANCE_SCHEMA="agentworkforce.conformance/v1"
 
@@ -103,7 +106,8 @@ is_mutating_kubectl_verb() {
 assert_no_secret_read() {
   local verb="${1:-}"
   shift || true
-  local joined=" ${*,,} "
+  local joined
+  joined=" $(printf '%s ' "$@" | tr '[:upper:]' '[:lower:]')"
 
   # Metadata-only discovery is deliberately not supported. This stricter rule
   # makes it impossible for this harness to retrieve Kubernetes Secret payloads.

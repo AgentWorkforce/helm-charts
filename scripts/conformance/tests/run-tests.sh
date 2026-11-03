@@ -5,6 +5,9 @@ TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFORMANCE_DIR="$(cd -- "${TEST_DIR}/.." && pwd)"
 HARNESS="${CONFORMANCE_DIR}/run.sh"
 LIB="${CONFORMANCE_DIR}/lib.sh"
+# Run the harness under TEST_BASH (for example /bin/bash 3.2 on macOS) to
+# prove compatibility with the oldest supported shell.
+TEST_BASH="${TEST_BASH:-bash}"
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "${tmp_root}"' EXIT
 
@@ -90,11 +93,11 @@ chmod +x "${mock_bin}/helm" "${mock_bin}/kubectl" "${mock_bin}/curl" "${mock_bin
 export PATH="${mock_bin}:${PATH}"
 export MOCK_COMMAND_LOG="${command_log}"
 
-bash -n "${HARNESS}" "${LIB}" "${CONFORMANCE_DIR}/http-adapter.sh"
+"${TEST_BASH}" -n "${HARNESS}" "${LIB}" "${CONFORMANCE_DIR}/http-adapter.sh"
 pass "shell syntax"
 
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "${HARNESS}" "${LIB}" "${CONFORMANCE_DIR}/http-adapter.sh"
+  shellcheck -x "${HARNESS}" "${LIB}" "${CONFORMANCE_DIR}/http-adapter.sh"
   pass "shellcheck"
 fi
 
@@ -109,7 +112,7 @@ fi
 pass "reference HTTP adapter validates TLS and success envelopes"
 
 audit_evidence="${tmp_root}/audit-evidence"
-"${HARNESS}" \
+"${TEST_BASH}" "${HARNESS}" \
   --chart ./umbrella \
   --target-namespace production \
   --target-release agentworkforce \
@@ -126,7 +129,7 @@ jq -e '.scenarios[] | select(.scenario == "fresh-install" and .status == "PASS")
 pass "audit mode is dry-run/read-only and emits valid evidence"
 
 : >"${command_log}"
-if "${HARNESS}" --apply --approval NOPE --chart ./umbrella \
+if "${TEST_BASH}" "${HARNESS}" --apply --approval NOPE --chart ./umbrella \
   --evidence-dir "${tmp_root}/rejected" >/dev/null 2>&1; then
   fail "invalid apply approval was accepted"
 fi
@@ -153,7 +156,7 @@ exit 0
 MOCK
 chmod +x "${adapter}" "${hook}"
 
-if ! "${HARNESS}" \
+if ! "${TEST_BASH}" "${HARNESS}" \
   --apply --approval APPLY --cleanup \
   --chart ./umbrella \
   --current-version 2.0.0 \

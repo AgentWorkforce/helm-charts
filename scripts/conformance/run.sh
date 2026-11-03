@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# jq programs are intentionally single-quoted.
+# shellcheck disable=SC2016
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
 MODE="audit"
@@ -10,7 +12,7 @@ APPLY_REQUESTED=false
 APPROVAL="${CONFORMANCE_APPROVAL:-}"
 RUN_ID="${CONFORMANCE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 RELEASE_NAME="${CONFORMANCE_RELEASE:-agentworkforce-conformance}"
-RUN_NAMESPACE="${CONFORMANCE_NAMESPACE:-aw-conformance-${RUN_ID,,}}"
+RUN_NAMESPACE="${CONFORMANCE_NAMESPACE:-aw-conformance-$(printf '%s' "${RUN_ID}" | tr '[:upper:]' '[:lower:]')}"
 CHART="${CONFORMANCE_CHART:-}"
 CURRENT_VERSION="${CONFORMANCE_CURRENT_VERSION:-}"
 PREVIOUS_VERSION="${CONFORMANCE_PREVIOUS_VERSION:-}"
@@ -120,7 +122,7 @@ fi
 ((${#RELEASE_NAME} <= 43)) ||
   die "release prefix must be at most 43 characters to allow isolated suffixes"
 [[ "${TIMEOUT}" =~ ^[1-9][0-9]*(s|m|h)$ ]] || die "invalid timeout"
-for values_file in "${VALUES_FILES[@]}"; do
+for values_file in ${VALUES_FILES[@]+"${VALUES_FILES[@]}"}; do
   [[ -f "${values_file}" ]] || die "values file not found: ${values_file}"
 done
 
@@ -154,7 +156,7 @@ trap on_exit EXIT
 helm_values_args() {
   local values_file
   HELM_VALUES_ARGS=()
-  for values_file in "${VALUES_FILES[@]}"; do
+  for values_file in ${VALUES_FILES[@]+"${VALUES_FILES[@]}"}; do
     HELM_VALUES_ARGS+=("--values" "${values_file}")
   done
 }
@@ -187,7 +189,7 @@ install_release() {
   run_quiet safe_helm upgrade --install "${release}" "${CHART}" \
     --namespace "${namespace}" \
     --atomic --wait --timeout "${TIMEOUT}" --hide-secret \
-    "${HELM_VERSION_ARGS[@]}" "${HELM_VALUES_ARGS[@]}" "$@"
+    ${HELM_VERSION_ARGS[@]+"${HELM_VERSION_ARGS[@]}"} ${HELM_VALUES_ARGS[@]+"${HELM_VALUES_ARGS[@]}"} "$@"
 }
 
 dry_run_release() {
@@ -195,7 +197,7 @@ dry_run_release() {
   helm_version_args "${CURRENT_VERSION}"
   run_quiet safe_helm upgrade --install "${RELEASE_NAME}" "${CHART}" \
     --namespace "${RUN_NAMESPACE}" --dry-run --hide-secret \
-    "${HELM_VERSION_ARGS[@]}" "${HELM_VALUES_ARGS[@]}"
+    ${HELM_VERSION_ARGS[@]+"${HELM_VERSION_ARGS[@]}"} ${HELM_VALUES_ARGS[@]+"${HELM_VALUES_ARGS[@]}"}
 }
 
 release_is_deployed() {
@@ -540,7 +542,7 @@ scenario_cleanup() {
 
   local namespace
   local failed=false
-  for namespace in "${CREATED_NAMESPACES[@]}"; do
+  for namespace in ${CREATED_NAMESPACES[@]+"${CREATED_NAMESPACES[@]}"}; do
     if [[ "${namespace}" != "${RUN_NAMESPACE}" && "${namespace}" != "${RUN_NAMESPACE}-"* ]]; then
       failed=true
       continue
