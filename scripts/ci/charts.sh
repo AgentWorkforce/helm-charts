@@ -373,6 +373,20 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing origin" "relayauth.historyOrigin must be an HTTPS origin" --set relayauth.historyOrigin=
         expect_render_failure "$chart" "$v" "plaintext origin" "relayauth.historyOrigin must be an HTTPS origin" --set relayauth.historyOrigin=http://history.example.com
         expect_render_failure "$chart" "$v" "ingress without TLS" "ingress.enabled=true requires ingress.tls" --set-json 'ingress.tls=[]'
+        expect_render_failure "$chart" "$v" "drain without write hold" "migrations.drainForWriteHold requires migrations.allowWriteHold=true" --set migrations.drainForWriteHold=true
+        expect_render_failure "$chart" "$v" "drain without migrations" "migrations.drainForWriteHold requires migrations.enabled=true" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set migrations.enabled=false
+        expect_render_failure "$chart" "$v" "replicaCount 0" "set migrations.drainForWriteHold=true instead" --set replicaCount=0
+        # Write-hold step 1 drains History to zero replicas and runs the Job with the hold;
+        # default and step 2 keep one replica and no hold.
+        wh=$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v" --set migrations.allowWriteHold=true --set migrations.drainForWriteHold=true) \
+          || err "$chart: write-hold step 1 failed to render"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$wh")" = 0 ] || err "$chart: drainForWriteHold did not render replicas 0"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "ALLOW_WRITE_HOLD") | .value' <<<"$wh")" = yes ] \
+          || err "$chart: write-hold step 1 Job does not take the write hold"
+        dflt=$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v") || err "$chart: default render failed"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$dflt")" = 1 ] || err "$chart: default render is not one replica"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "ALLOW_WRITE_HOLD") | .value' <<<"$dflt")" = no ] \
+          || err "$chart: default Job takes a write hold"
         ;;
       agent-relay)
         v=charts/agent-relay/ci/gcp-proof-values.yaml

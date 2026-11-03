@@ -53,7 +53,15 @@ migrations:
   # Job instead of patching the immutable spec.template. Change identitySalt
   # only to force a re-run with an otherwise identical template.
   identitySalt: ""
+  # Lets the migrate Job take a write hold. It refuses while any runtime-role
+  # session is connected, so it cannot succeed while the History Deployment
+  # runs; pair it with drainForWriteHold for the two-step upgrade in README.md.
   allowWriteHold: false
+  # Step 1 of a write-hold upgrade: renders the History Deployment with
+  # replicas 0 so the migrate Job finds no runtime sessions. Requires
+  # allowWriteHold. Step 2 is the same upgrade with both set back to false,
+  # which restores replicaCount. History is unavailable between the steps.
+  drainForWriteHold: false
   rolloutBudgetSeconds: 600
   backoffLimit: 1
   activeDeadlineSeconds: 3600

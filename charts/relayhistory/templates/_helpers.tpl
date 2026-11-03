@@ -32,7 +32,9 @@ app.kubernetes.io/component: history
 {{- end -}}
 {{- define "relayhistory.validate" -}}
 {{- $image := include "relayhistory.image" . -}}
-{{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the GCP proof runs one History replica and the chart makes no HA claim" }}{{ end -}}
+{{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the GCP proof runs one History replica and the chart makes no HA claim (to drain it for a write-hold migration, set migrations.drainForWriteHold=true instead)" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold (not .Values.migrations.allowWriteHold) }}{{ fail "migrations.drainForWriteHold requires migrations.allowWriteHold=true: draining History only serves a write-hold migration" }}{{ end -}}
+{{- if and .Values.migrations.drainForWriteHold (not .Values.migrations.enabled) }}{{ fail "migrations.drainForWriteHold requires migrations.enabled=true" }}{{ end -}}
 {{- if not .Values.database.existingSecret }}{{ fail "database.existingSecret is required; the chart never creates database credentials" }}{{ end -}}
 {{- range $name, $key := .Values.database.keys }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString $key)) }}{{ fail (printf "database.keys.%s must be a Kubernetes Secret data key" $name) }}{{ end }}{{ end -}}
 {{- if and .Values.database.runtimeRole (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name" }}{{ end -}}

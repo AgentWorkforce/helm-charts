@@ -135,6 +135,15 @@ if acme_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f 
 fi
 grep -Fq 'relay-cloud-api.service.backendConfig=acme-relay-api' <<<"$acme_fail" \
   || { echo "values-gcp.yaml: stale backendConfig failed without naming the expected value" >&2; echo "$acme_fail" >&2; exit 1; }
+# RelayHistory write-hold step 1 through the umbrella: History drains to zero
+# replicas while its migrate Job takes the write hold.
+wh_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml \
+  --set relayhistory.migrations.allowWriteHold=true --set relayhistory.migrations.drainForWriteHold=true)
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relayhistory") | .spec.replicas' <<<"$wh_out")" = 0 \
+  || { echo "relayhistory.migrations.drainForWriteHold did not drain History" >&2; exit 1; }
+test "$(yq 'select(.kind == "Job" and .metadata.labels["app.kubernetes.io/component"] == "migration" and (.metadata.name | test("^relayhistory-migrate-"))) | .spec.template.spec.containers[0].env[] | select(.name == "ALLOW_WRITE_HOLD") | .value' <<<"$wh_out")" = yes \
+  || { echo "relayhistory write-hold Job does not take the hold" >&2; exit 1; }
 expect_leaf_failure_early() { # expected helm-args...
   local expected=$1 output; shift
   if output=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml "$@" 2>&1); then

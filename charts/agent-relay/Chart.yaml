@@ -27,7 +27,7 @@ dependencies:
     repository: file://../96bulls
     condition: components.sessionsPipeline
   - name: relayhistory
-    version: 0.1.0
+    version: 0.1.1
     repository: file://../relayhistory
     condition: components.relayhistory
   - name: relay-cloud-api

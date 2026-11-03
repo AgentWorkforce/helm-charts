@@ -20,6 +20,35 @@ present under this repository's `--no-hooks` installation path. The operator
 must wait for it to complete. The GCP proof uses one History replica and does
 not claim HA.
 
+### Write-hold migrations (two-step upgrade)
+
+Some migrations need a write hold. With `migrations.allowWriteHold=true` the
+migrate Job refuses while any runtime-role session is connected, so it cannot
+succeed while the History Deployment is running, and `replicaCount` must stay 1.
+Drain through values instead of scaling by hand:
+
+1. Upgrade with both flags set. The Deployment renders with `replicas: 0` and
+   the migrate Job runs against an idle database:
+
+   ```sh
+   helm upgrade <release> <chart> -n <ns> -f <your values> \
+     --set relayhistory.migrations.allowWriteHold=true \
+     --set relayhistory.migrations.drainForWriteHold=true
+   kubectl -n <ns> wait --for=delete pod -l app.kubernetes.io/component=history --timeout=5m
+   kubectl -n <ns> wait --for=condition=complete job -l app.kubernetes.io/component=migration --timeout=60m
+   ```
+
+   (Drop the `relayhistory.` prefix when installing this chart directly. Check
+   your release's labels with `kubectl get job --show-labels`.) If the Job
+   fails, stop: inspect its log before retrying, and do not run step 2.
+2. Upgrade again with both flags back to `false` (the defaults). The Deployment
+   returns to `replicaCount`. The migrate Job's pod template changes
+   (`ALLOW_WRITE_HOLD=no`), so a new Job runs; it finds nothing to apply.
+
+History is unavailable between the two steps. Take the recovery set described in
+[`docs/selfhost-backup-restore.md`](../../docs/selfhost-backup-restore.md) before
+step 1.
+
 `networkPolicy.enabled` defaults to true with `allowAllEgress: false`, which
 allows egress only to same-namespace pods and DNS. The external PostgreSQL
 database (and any service URL outside the namespace) is then unreachable, so

@@ -10,7 +10,7 @@ dependencies:
   version: 0.5.4
 - name: relayhistory
   repository: file://../relayhistory
-  version: 0.1.0
+  version: 0.1.1
 - name: relay-cloud-api
   repository: file://../relay-cloud-api
   version: 0.2.0
@@ -26,5 +26,5 @@ dependencies:
 - name: relayfile
   repository: file://../relayfile
   version: 0.2.0
-digest: sha256:b01debd3fd864213e35af804c7295364c78c346c771433a092844d36fa7290d7
-generated: "2026-11-03T02:09:18.751567-08:00"
+digest: sha256:9330436662871fb61b0c1b34ba7330aa0d88e732670c9ae7ddf635d16dca1c5f
+generated: "2026-11-03T03:06:28.290895-08:00"
