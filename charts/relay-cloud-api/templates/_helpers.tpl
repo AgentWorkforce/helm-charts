@@ -41,3 +41,44 @@ app.kubernetes.io/component: api
   value: /var/run/agent-relay/secrets/{{ $key }}
 {{- end }}
 {{- end -}}
+{{- define "relay-cloud-api.migrationPodTemplate" -}}
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: migration
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "relay-cloud-api.serviceAccountName" . }}
+  automountServiceAccountToken: false
+  securityContext: {{ toYaml .Values.podSecurityContext | nindent 4 }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: migrate
+      image: {{ include "relay-cloud-api.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: {{ toYaml .Values.migrations.command | nindent 8 }}
+      args: {{ toYaml .Values.migrations.args | nindent 8 }}
+      securityContext: {{ toYaml .Values.containerSecurityContext | nindent 8 }}
+      env:
+        - name: DATABASE_MIGRATIONS_URL_FILE
+          value: /var/run/agent-relay/secrets/{{ .Values.secretKeys.databaseMigrationsUrl }}
+        - name: SELFHOST_RUNTIME_DATABASE_ROLE
+          value: {{ .Values.database.runtimeRole | quote }}
+      volumeMounts:
+        - { name: database, mountPath: /var/run/agent-relay/secrets, readOnly: true }
+        - { name: tmp, mountPath: /tmp }
+      resources: {{ toYaml .Values.resources | nindent 8 }}
+  volumes:
+    - name: database
+      secret:
+        secretName: {{ .Values.existingSecret }}
+        defaultMode: 0440
+        items:
+          - key: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
+            path: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
+    - name: tmp
+      emptyDir: { sizeLimit: 64Mi }
+{{- end -}}

@@ -111,4 +111,19 @@ fi
 grep -q 'requires components.relayauth=true' <<<"$ar_fail" \
   || { echo "render failed without the expected components.relayauth error" >&2; exit 1; }
 
+# Migration Jobs: spec.template is immutable, so any pod template change
+# (here: resources) must produce a new Job name.
+proof_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml)
+for child in relayhistory relay-cloud-api; do
+  base_job=$(yq "select(.kind == \"Job\" and .metadata.name == \"${child}-migrate-*\") | .metadata.name" <<<"$out")
+  resized=$(helm template proof charts/agent-relay -n agent-relay --no-hooks "${proof_args[@]}" \
+    --set "${child}.resources.limits.memory=7Gi" |
+    yq "select(.kind == \"Job\" and .metadata.name == \"${child}-migrate-*\") | .metadata.name")
+  test -n "$base_job" || { echo "$child: no migration Job rendered" >&2; exit 1; }
+  if [ "$base_job" = "$resized" ]; then
+    echo "$child: migration Job name ignores pod template changes ($base_job)" >&2
+    exit 1
+  fi
+done
+
 echo "agent-relay GCP proof render contract: ok"

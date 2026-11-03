@@ -66,3 +66,46 @@ app.kubernetes.io/component: history
       key: {{ .Values.telemetry.key | quote }}
 {{- end }}
 {{- end -}}
+{{- define "relayhistory.migrationPodTemplate" -}}
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ include "relayhistory.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: migration
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "relayhistory.serviceAccountName" . }}
+  automountServiceAccountToken: false
+  securityContext: {{ toYaml .Values.podSecurityContext | nindent 4 }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: migrate
+      image: {{ include "relayhistory.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      args: [migrate.mjs]
+      securityContext: {{ toYaml .Values.containerSecurityContext | nindent 8 }}
+      env:
+        - name: DATABASE_MIGRATIONS_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.existingSecret }}
+              key: {{ .Values.database.keys.migrationsUrl | quote }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.existingSecret }}
+              key: {{ .Values.database.keys.url | quote }}
+        {{- with .Values.database.runtimeRole }}
+        - { name: DATABASE_RUNTIME_ROLE, value: {{ . | quote }} }
+        {{- end }}
+        - { name: ALLOW_WRITE_HOLD, value: {{ ternary "yes" "no" .Values.migrations.allowWriteHold | quote }} }
+        - { name: ROLLOUT_BUDGET_SECONDS, value: {{ .Values.migrations.rolloutBudgetSeconds | quote }} }
+      resources: {{ toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+        - { name: tmp, mountPath: /tmp }
+  volumes:
+    - name: tmp
+      emptyDir: { sizeLimit: 64Mi }
+{{- end -}}

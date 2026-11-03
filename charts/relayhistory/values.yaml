@@ -48,6 +48,10 @@ telemetry:
 
 migrations:
   enabled: true
+  # The Job name carries a hash of the fully rendered pod template, so any
+  # change to it (image, env, resources, security context...) creates a new
+  # Job instead of patching the immutable spec.template. Change identitySalt
+  # only to force a re-run with an otherwise identical template.
   identitySalt: ""
   allowWriteHold: false
   rolloutBudgetSeconds: 600
