@@ -122,6 +122,30 @@ class CommandPolicy:
     KUBECTL_READ_VERBS = {"get", "top"}
     HELM_READ_FORMS = {("status",), ("history",), ("get", "values")}
 
+    # Options are parsed positionally: anything not listed here is rejected,
+    # so an option value can never be mistaken for a verb or resource.
+    KUBECTL_GLOBAL_VALUE_OPTIONS = {
+        "--context", "--namespace", "-n", "--kubeconfig", "--cluster",
+        "--user", "--server", "-s", "--request-timeout", "--as",
+        "--as-group", "--as-uid", "--cache-dir", "--certificate-authority",
+        "--client-certificate", "--client-key", "--tls-server-name",
+    }
+    KUBECTL_GLOBAL_FLAGS = {"--insecure-skip-tls-verify", "--match-server-version"}
+    KUBECTL_VERB_VALUE_OPTIONS = {
+        "--selector", "-l", "--output", "-o", "--field-selector",
+        "--sort-by", "--chunk-size", "--label-columns", "-L",
+    }
+    KUBECTL_VERB_FLAGS = {"--no-headers", "--show-labels", "--ignore-not-found"}
+    HELM_GLOBAL_VALUE_OPTIONS = {
+        "--kube-context", "--namespace", "-n", "--kubeconfig",
+        "--kube-apiserver", "--kube-as-user", "--kube-as-group",
+        "--kube-ca-file", "--kube-tls-server-name", "--registry-config",
+        "--repository-cache", "--repository-config", "--burst-limit", "--qps",
+    }
+    HELM_GLOBAL_FLAGS = {"--debug"}
+    HELM_COMMAND_VALUE_OPTIONS = {"--output", "-o", "--revision", "--max"}
+    HELM_COMMAND_FLAGS = {"--all", "-a"}
+
     @staticmethod
     def _resource_is_secret(resource: str) -> bool:
         for part in resource.lower().split(","):
@@ -130,6 +154,35 @@ class CommandPolicy:
             if base in {"secret", "secrets"}:
                 return True
         return False
+
+    @staticmethod
+    def _positionals(
+        args: list[str],
+        value_options: set[str],
+        flags: set[str],
+    ) -> list[str]:
+        """Return positional words, rejecting any option that is not allowed."""
+        positionals: list[str] = []
+        index = 0
+        while index < len(args):
+            argument = args[index]
+            if argument == "--":
+                raise CollectionError("argument terminators are not allowed")
+            if argument.startswith("-") and argument != "-":
+                name = argument.split("=", 1)[0]
+                if name in value_options:
+                    if "=" not in argument:
+                        if index + 1 >= len(args):
+                            raise CollectionError(f"option {name} requires a value")
+                        index += 1
+                elif name in flags:
+                    pass
+                else:
+                    raise CollectionError(f"option is not on the read-only allowlist: {name}")
+            else:
+                positionals.append(argument)
+            index += 1
+        return positionals
 
     @classmethod
     def check(cls, argv: Iterable[str]) -> None:
@@ -142,38 +195,33 @@ class CommandPolicy:
 
         executable = pathlib.Path(args[0]).name
         if executable == "kubectl":
-            verb_indexes = [
-                i
-                for i, value in enumerate(args[1:], 1)
-                if value in cls.KUBECTL_READ_VERBS
-            ]
-            if len(verb_indexes) != 1:
+            positionals = cls._positionals(
+                args[1:],
+                cls.KUBECTL_GLOBAL_VALUE_OPTIONS | cls.KUBECTL_VERB_VALUE_OPTIONS,
+                cls.KUBECTL_GLOBAL_FLAGS | cls.KUBECTL_VERB_FLAGS,
+            )
+            if not positionals or positionals[0] not in cls.KUBECTL_READ_VERBS:
                 raise CollectionError("kubectl command is not on the read-only allowlist")
-            verb_index = verb_indexes[0]
-            verb = args[verb_index]
-            resource_index = verb_index + 1
-            if resource_index >= len(args):
+            verb, operands = positionals[0], positionals[1:]
+            if not operands:
                 raise CollectionError("kubectl resource is missing")
-            resource = args[resource_index]
-            if verb == "get" and cls._resource_is_secret(resource):
+            # Every operand is checked: a later operand may be "type/name"
+            # or a further resource list.
+            if any(cls._resource_is_secret(operand) for operand in operands):
                 raise CollectionError("Kubernetes Secret reads are centrally blocked")
-            if verb == "top" and resource not in {"pod", "pods"}:
+            if verb == "top" and operands[0] not in {"pod", "pods"}:
                 raise CollectionError("only kubectl top pods is allowed")
         elif executable == "helm":
-            command_indexes = [
-                i
-                for i, value in enumerate(args[1:], 1)
-                if value in {"status", "history", "get"}
-            ]
-            if len(command_indexes) != 1:
-                raise CollectionError("Helm command is not on the read-only allowlist")
-            command_index = command_indexes[0]
-            form = (
-                tuple(args[command_index : command_index + 2])
-                if args[command_index] == "get"
-                else (args[command_index],)
+            positionals = cls._positionals(
+                args[1:],
+                cls.HELM_GLOBAL_VALUE_OPTIONS | cls.HELM_COMMAND_VALUE_OPTIONS,
+                cls.HELM_GLOBAL_FLAGS | cls.HELM_COMMAND_FLAGS,
             )
-            if form not in cls.HELM_READ_FORMS:
+            if positionals[:1] == ["get"]:
+                form, operands = tuple(positionals[:2]), positionals[2:]
+            else:
+                form, operands = tuple(positionals[:1]), positionals[1:]
+            if form not in cls.HELM_READ_FORMS or len(operands) != 1:
                 raise CollectionError("Helm command is not on the read-only allowlist")
         else:
             raise CollectionError(f"external command is not allowed: {executable}")
