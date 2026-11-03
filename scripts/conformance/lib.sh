@@ -92,15 +92,143 @@ finalize_evidence() {
   chmod 0600 "${SUMMARY_JSON}"
 }
 
-is_mutating_kubectl_verb() {
+# Global options that take a separate value and may appear before the verb.
+# Anything else that looks like an option before the verb is rejected so a
+# value can never be mistaken for the verb.
+kubectl_global_option_takes_value() {
   case "$1" in
-    apply|create|delete|edit|label|annotate|patch|replace|rollout|scale|set|taint|cordon|uncordon|drain|exec|cp|attach|run|expose)
+    -n|--namespace|--context|--cluster|--user|--kubeconfig|-s|--server|\
+--as|--as-group|--as-uid|--request-timeout|--cache-dir|\
+--certificate-authority|--client-certificate|--client-key|\
+--tls-server-name|--token|--profile|--profile-output|-v|--v|--vmodule|\
+--log-file|--log-file-max-size|--log-flush-frequency)
       return 0
       ;;
-    *)
-      return 1
+  esac
+  return 1
+}
+
+kubectl_global_option_is_flag() {
+  case "$1" in
+    --insecure-skip-tls-verify|--insecure-skip-tls-verify=*|\
+--match-server-version|--match-server-version=*|\
+--warnings-as-errors|--warnings-as-errors=*|\
+--disable-compression|--disable-compression=*)
+      return 0
       ;;
   esac
+  return 1
+}
+
+helm_global_option_takes_value() {
+  case "$1" in
+    -n|--namespace|--kube-context|--kubeconfig|--kube-apiserver|\
+--kube-as-user|--kube-as-group|--kube-ca-file|--kube-token|\
+--kube-tls-server-name|--registry-config|--repository-cache|\
+--repository-config|--burst-limit|--qps|--content-cache)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+helm_global_option_is_flag() {
+  case "$1" in
+    --debug|--debug=*|--kube-insecure-skip-tls-verify|--kube-insecure-skip-tls-verify=*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# Print the first one or two positional words (verb and optional subverb)
+# after skipping known global options. Returns 98 when an unknown option or a
+# missing option value precedes the verb.
+# Usage: parse_command_words kubectl|helm ARGS...
+parse_command_words() {
+  local tool="$1"
+  shift
+  local words=""
+  local count=0
+  local expecting_value=false
+  local verb_seen=false
+  local arg
+
+  for arg in "$@"; do
+    if [[ "${expecting_value}" == true ]]; then
+      expecting_value=false
+      continue
+    fi
+    if [[ "${verb_seen}" == false && "${arg}" == -* ]]; then
+      if [[ "${arg}" == --*=* ]] && "${tool}_global_option_takes_value" "${arg%%=*}"; then
+        continue
+      fi
+      if "${tool}_global_option_takes_value" "${arg}"; then
+        expecting_value=true
+        continue
+      fi
+      if "${tool}_global_option_is_flag" "${arg}"; then
+        continue
+      fi
+      return 98
+    fi
+    if [[ "${verb_seen}" == true && "${arg}" == -* ]]; then
+      # Options after the verb end the search for a subverb.
+      break
+    fi
+    verb_seen=true
+    words="${words}${words:+ }${arg}"
+    count=$((count + 1))
+    ((count >= 2)) && break
+  done
+
+  [[ "${expecting_value}" == false && -n "${words}" ]] || return 98
+  printf '%s\n' "${words}"
+}
+
+# Read-only kubectl commands permitted in every mode. Everything not listed
+# here or in kubectl_mutation_class is denied (default deny).
+kubectl_is_read_only() {
+  local verb="$1"
+  local subverb="${2:-}"
+  case "${verb}" in
+    get|describe|version|wait|api-resources|api-versions|explain|top)
+      return 0
+      ;;
+    rollout)
+      [[ "${subverb}" == "status" || "${subverb}" == "history" ]]
+      return
+      ;;
+    auth)
+      [[ "${subverb}" == "can-i" ]]
+      return
+      ;;
+  esac
+  return 1
+}
+
+kubectl_is_mutating() {
+  case "$1" in
+    apply|create|delete|edit|label|annotate|patch|replace|rollout|scale|set|\
+taint|cordon|uncordon|drain|exec|cp|attach|run|expose|autoscale)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+# Kept for callers that only need the classification.
+is_mutating_kubectl_verb() {
+  kubectl_is_mutating "$1"
+}
+
+kubectl_supports_dry_run() {
+  case "$1" in
+    apply|create|delete|patch|replace|label|annotate|expose|run|set|scale|autoscale)
+      return 0
+      ;;
+  esac
+  return 1
 }
 
 assert_no_secret_read() {
@@ -125,30 +253,49 @@ assert_no_secret_read() {
 }
 
 safe_kubectl() {
-  local args=("$@")
-  local verb=""
-  local arg
+  local words verb subverb
+  if ! words="$(parse_command_words kubectl "$@")"; then
+    printf 'conformance: refusing kubectl command with unrecognized options before the verb\n' >&2
+    return 98
+  fi
+  verb="${words%% *}"
+  subverb=""
+  [[ "${words}" == *" "* ]] && subverb="${words#* }"
 
-  for arg in "${args[@]}"; do
-    [[ "${arg}" == -* ]] && continue
-    verb="${arg}"
-    break
-  done
+  assert_no_secret_read "${verb}" "$@" || return $?
 
-  assert_no_secret_read "${verb}" "${args[@]}" || return $?
-
-  if is_mutating_kubectl_verb "${verb}" && [[ "${MODE}" != "apply" ]]; then
-    case " ${args[*]} " in
-      *" --dry-run=client "*|*" --dry-run=server "*)
-        ;;
-      *)
-        printf 'conformance: blocked mutating kubectl command in audit mode: %s\n' "${verb}" >&2
-        return 97
-        ;;
-    esac
+  if kubectl_is_read_only "${verb}" "${subverb}"; then
+    :
+  elif kubectl_is_mutating "${verb}"; then
+    if [[ "${MODE}" != "apply" ]]; then
+      case " $* " in
+        *" --dry-run=client "*|*" --dry-run=server "*)
+          kubectl_supports_dry_run "${verb}" || {
+            printf 'conformance: blocked mutating kubectl command in audit mode: %s\n' "${verb}" >&2
+            return 97
+          }
+          ;;
+        *)
+          printf 'conformance: blocked mutating kubectl command in audit mode: %s\n' "${verb}" >&2
+          return 97
+          ;;
+      esac
+    fi
+  else
+    printf 'conformance: kubectl verb is not on the allowlist: %s\n' "${verb}" >&2
+    return 97
   fi
 
-  kubectl "${args[@]}"
+  kubectl "$@"
+}
+
+helm_is_read_only() {
+  case "$1" in
+    version|list|ls|status|history|show|search|env|lint)
+      return 0
+      ;;
+  esac
+  return 1
 }
 
 is_mutating_helm_verb() {
@@ -163,18 +310,30 @@ is_mutating_helm_verb() {
 }
 
 safe_helm() {
-  local args=("$@")
-  local verb="${args[0]:-}"
-  local joined=" ${args[*]} "
+  local words verb
+  local joined=" $* "
+  if ! words="$(parse_command_words helm "$@")"; then
+    printf 'conformance: refusing helm command with unrecognized options before the verb\n' >&2
+    return 98
+  fi
+  verb="${words%% *}"
 
   if [[ "${verb}" == "get" || "${verb}" == "template" ]]; then
     printf 'conformance: refusing Helm rendered/release output that may contain Secret payloads\n' >&2
     return 96
   fi
 
-  if is_mutating_helm_verb "${verb}" && [[ "${MODE}" != "apply" ]] &&
-    [[ "${joined}" != *" --dry-run "* && "${joined}" != *" --dry-run="* ]]; then
-    printf 'conformance: blocked mutating helm command in audit mode: %s\n' "${verb}" >&2
+  if helm_is_read_only "${verb}"; then
+    :
+  elif is_mutating_helm_verb "${verb}"; then
+    if [[ "${MODE}" != "apply" ]] &&
+      ! [[ "${verb}" =~ ^(install|upgrade)$ &&
+        ( "${joined}" == *" --dry-run "* || "${joined}" == *" --dry-run="* ) ]]; then
+      printf 'conformance: blocked mutating helm command in audit mode: %s\n' "${verb}" >&2
+      return 97
+    fi
+  else
+    printf 'conformance: helm verb is not on the allowlist: %s\n' "${verb}" >&2
     return 97
   fi
 
@@ -183,7 +342,7 @@ safe_helm() {
     return 96
   fi
 
-  helm "${args[@]}"
+  helm "$@"
 }
 
 run_quiet() {

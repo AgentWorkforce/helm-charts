@@ -220,4 +220,59 @@ set -e
 [[ ! -s "${command_log}" ]] || fail "unsafe Helm command reached helm"
 pass "Helm install/upgrade requires Secret redaction"
 
+# expect_wrapper RC MODE COMMAND... runs a wrapper in an isolated subshell
+# under TEST_BASH and asserts both the exit code and that a blocked command
+# never reached the mocked binary.
+expect_wrapper() {
+  local expected_rc="$1"
+  local mode="$2"
+  shift 2
+  local rc
+  : >"${command_log}"
+  set +e
+  MODE="${mode}" "${TEST_BASH}" -c 'set -u; source "$1"; shift; "$@"' \
+    wrapper "${LIB}" "$@" >/dev/null 2>&1
+  rc=$?
+  set -e
+  [[ "${rc}" -eq "${expected_rc}" ]] ||
+    fail "expected rc ${expected_rc} for MODE=${mode} $*, got ${rc}"
+  if [[ "${expected_rc}" -ne 0 && -s "${command_log}" ]]; then
+    fail "blocked command reached the binary: $*"
+  fi
+  if [[ "${expected_rc}" -eq 0 && ! -s "${command_log}" ]]; then
+    fail "allowed command did not run: $*"
+  fi
+}
+
+# Global option values must not be mistaken for the verb.
+expect_wrapper 97 audit safe_kubectl -n foo delete pod x
+expect_wrapper 97 audit safe_kubectl --namespace foo delete pod x
+expect_wrapper 97 audit safe_kubectl --context prod -n foo rollout restart deployment
+expect_wrapper 96 audit safe_kubectl -n get get secrets
+expect_wrapper 96 audit safe_kubectl --namespace=foo get secret/x
+expect_wrapper 0 audit safe_kubectl -n foo get pods
+expect_wrapper 0 audit safe_kubectl --context prod rollout status deployment
+expect_wrapper 98 audit safe_kubectl --unknown-flag foo delete pod x
+expect_wrapper 98 audit safe_kubectl -n
+expect_wrapper 97 audit safe_helm --namespace foo uninstall rel
+expect_wrapper 96 audit safe_helm -n foo get values rel
+expect_wrapper 96 audit safe_helm --kube-context prod template rel ./chart
+expect_wrapper 98 audit safe_helm --bogus x list
+expect_wrapper 0 audit safe_helm -n foo list --output json
+pass "wrappers skip global options before choosing the verb"
+
+# Unlisted verbs are denied (default deny), including in apply mode.
+expect_wrapper 97 audit safe_kubectl autoscale deploy x --max=3
+expect_wrapper 97 audit safe_kubectl debug pod/x
+expect_wrapper 97 apply safe_kubectl debug pod/x
+expect_wrapper 97 apply safe_kubectl port-forward svc/x 8080:80
+expect_wrapper 97 apply safe_kubectl proxy
+expect_wrapper 97 apply safe_kubectl certificate approve csr-1
+expect_wrapper 97 audit safe_kubectl exec --dry-run=client pod/x -- true
+expect_wrapper 0 audit safe_kubectl create namespace x --dry-run=client
+expect_wrapper 0 apply safe_kubectl autoscale deploy x --max=3
+expect_wrapper 97 apply safe_helm plugin install x
+expect_wrapper 97 audit safe_helm rollback rel 1
+pass "wrappers default-deny unknown or mutating verbs in audit mode"
+
 printf 'All conformance harness tests passed.\n'
