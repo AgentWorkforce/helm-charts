@@ -29,7 +29,10 @@ relayhistory:
 
 relay-cloud-api:
   image:
-    digest: sha256:6942f8ede4f69ea7db0b2defdabf1ad04217ad6b6e275084126c1c6ab7f84ce3
+    # Proof build of AgentWorkforce/relaycontrol 17bdc78 (selfhost/desktop-auth).
+    # Proof-only: not in self-hosted/customer-images.yaml, which audits the
+    # customer profile (values-gcp.yaml) for the release gate.
+    digest: sha256:99670d253b88c27499f6c4cca6ac1265ed97978ed7a9d5eaaeecd65de9e052dc
   resources:
     requests: { cpu: 25m, memory: 128Mi }
     limits: { memory: 512Mi }
@@ -52,4 +55,6 @@ relay-cloud-api:
 
 relay-dashboard:
   image:
-    digest: sha256:720ae773f2200afcf2512818cc45969b841d8330aec796482c9b4cba51aa5463
+    # Proof build of AgentWorkforce/relay-dashboard 53d484b
+    # (selfhost/device-approval; the self-host build served at /). Proof-only.
+    digest: sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62

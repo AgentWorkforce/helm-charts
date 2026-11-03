@@ -145,11 +145,20 @@ NEG. Sensitive Relaycast paths still route to an endpoint-less deny Service.
 
 All application credentials come from existing Secrets. The deployment values
 contain no credentials and no imagePullSecret reference. Rendering fails until
-all required immutable digests are present. The live proof pins:
+all required immutable digests are present. The live proof
+(`values-gcp-proof-live.yaml`) pins these proof-registry builds:
 
-- dashboard: `sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe`
-- selfhost API: `sha256:0452a72da76d36c9c69ac6de75e51299b1df1a0fdfaec37831bff6deb55c7cf8`
+- dashboard: `sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62`
+  (relay-dashboard `53d484b`, the self-host build served at `/`)
+- selfhost API: `sha256:99670d253b88c27499f6c4cca6ac1265ed97978ed7a9d5eaaeecd65de9e052dc`
+  (relaycontrol `17bdc78`)
 - experimental RelayHistory: `sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba`
+
+These are proof-only identities. The release gate audits the customer profile
+(`values-gcp.yaml`) against `self-hosted/customer-images.yaml`, which records
+the CI render fixture's dashboard digest (`ci/gcp-proof-values.yaml`) and the
+published `ghcr.io/agentworkforce/selfhost-api` digest, not the live pins; a
+proof pin never makes an image customer-ready.
 
 The RelayHistory image is an experimental proof build, not a released or
 supported artifact.
