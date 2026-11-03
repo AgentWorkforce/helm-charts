@@ -134,4 +134,25 @@ for child in relayhistory relay-cloud-api; do
     || { echo "$child: migration Job metadata lacks app.kubernetes.io/component=migration" >&2; exit 1; }
 done
 
+# Leaf-chart fail-closed validations for the suite's child charts, rendered
+# standalone from their CI values.
+expect_leaf_failure() { # chart expected-error helm-args...
+  local chart=$1 expected=$2 output; shift 2
+  if output=$(helm template ci "charts/$chart" -n ci --no-hooks -f "charts/$chart/ci/default-values.yaml" "$@" 2>&1); then
+    echo "$chart: rendered despite expected failure: $expected" >&2
+    exit 1
+  fi
+  grep -Fq "$expected" <<<"$output" \
+    || { echo "$chart: failed without expected error: $expected" >&2; echo "$output" >&2; exit 1; }
+}
+db_egress='[{"to":[{"ipBlock":{"cidr":"10.20.0.0/24"}}],"ports":[{"protocol":"TCP","port":5432}]}]'
+for child in relayhistory relay-cloud-api; do
+  expect_leaf_failure "$child" "allowAllEgress=false requires networkPolicy.additionalEgress" \
+    --set networkPolicy.allowAllEgress=false
+  expect_leaf_failure "$child" "additionalEgress rule needs a non-empty to" \
+    --set networkPolicy.allowAllEgress=false --set-json 'networkPolicy.additionalEgress=[{"ports":[{"port":5432}]}]'
+  helm template ci "charts/$child" -n ci --no-hooks -f "charts/$child/ci/default-values.yaml" \
+    --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" >/dev/null
+done
+
 echo "agent-relay GCP proof render contract: ok"

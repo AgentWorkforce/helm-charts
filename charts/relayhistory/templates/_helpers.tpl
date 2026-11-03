@@ -40,6 +40,8 @@ app.kubernetes.io/component: history
 {{- if not (regexMatch "^https?://[^?#]+$" .Values.relayauth.jwksUrl) }}{{ fail "relayauth.jwksUrl is required" }}{{ end -}}
 {{- if not (regexMatch "^https?://[^/?#]+$" .Values.relayauth.issuer) }}{{ fail "relayauth.issuer must be an HTTP(S) origin" }}{{ end -}}
 {{- if not (regexMatch "^https?://[^?#]+$" .Values.agentRelayCloud.apiUrl) }}{{ fail "agentRelayCloud.apiUrl is required" }}{{ end -}}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.networkPolicy.additionalEgress) }}{{ fail "networkPolicy.enabled with allowAllEgress=false requires networkPolicy.additionalEgress: restricted egress allows only same-namespace pods and DNS, which blocks the external PostgreSQL database and the RelayAuth JWKS / control API URLs when they are outside the namespace" }}{{ end -}}
+{{- range .Values.networkPolicy.additionalEgress }}{{ if empty .to }}{{ fail "every networkPolicy.additionalEgress rule needs a non-empty to (an empty to matches every destination; use ipBlock 0.0.0.0/0 to allow any destination explicitly)" }}{{ end }}{{ end -}}
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP" }}{{ end -}}
 {{- if and .Values.telemetry.enabled (not .Values.telemetry.host) }}{{ fail "telemetry.host is required when telemetry.enabled=true" }}{{ end -}}
 {{- range $name, $feature := dict "embeddings" .Values.embeddings "sessionAnalysis" .Values.sessionAnalysis "telemetry" .Values.telemetry }}{{ if and $feature.enabled (not (regexMatch "^[A-Za-z0-9._-]+$" (toString $feature.key))) }}{{ fail (printf "%s.key must name a Secret data key when %s.enabled=true" $name $name) }}{{ end }}{{ end -}}

@@ -20,6 +20,13 @@ present under this repository's `--no-hooks` installation path. The operator
 must wait for it to complete. The GCP proof uses one History replica and does
 not claim HA.
 
+`networkPolicy.enabled` defaults to true with `allowAllEgress: false`, which
+allows egress only to same-namespace pods and DNS. The external PostgreSQL
+database (and any service URL outside the namespace) is then unreachable, so
+the chart refuses to render until you either list it in
+`networkPolicy.additionalEgress` (each rule with a non-empty `to`) or set
+`allowAllEgress: true`, as the umbrella GCP profiles do.
+
 The RelayHistory digest documented for the GCP proof is an experimental build,
 not a released or supported RelayHistory artifact.
 

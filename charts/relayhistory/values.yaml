@@ -107,6 +107,12 @@ readinessProbe:
   timeoutSeconds: 3
 networkPolicy:
   enabled: true
+  # With allowAllEgress=false the pods may reach only same-namespace pods and
+  # DNS plus additionalEgress. The database (and any service URL outside the
+  # namespace) needs an additionalEgress rule, so rendering fails when
+  # allowAllEgress=false and additionalEgress is empty. Give each rule a
+  # non-empty `to` (enforced): an empty or omitted `to` matches every
+  # destination; use ipBlock 0.0.0.0/0 to allow any destination explicitly.
   ingressFrom: []
   allowAllEgress: false
   additionalEgress: []
