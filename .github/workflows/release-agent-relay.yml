@@ -74,9 +74,9 @@ jobs:
           fi
 
           chart_metadata="$(helm show chart "$CHART_DIR")"
-          chart_name="$(awk '$1 == "name:" { print $2; exit }' <<<"$chart_metadata")"
-          chart_version="$(awk '$1 == "version:" { print $2; exit }' <<<"$chart_metadata")"
-          chart_type="$(awk '$1 == "type:" { print $2; exit }' <<<"$chart_metadata")"
+          chart_name="$(awk '/^name:/ { print $2; exit }' <<<"$chart_metadata")"
+          chart_version="$(awk '/^version:/ { print $2; exit }' <<<"$chart_metadata")"
+          chart_type="$(awk '/^type:/ { print $2; exit }' <<<"$chart_metadata")"
           [[ "$chart_name" == "$CHART_NAME" ]] \
             || { echo "::error::Expected chart name $CHART_NAME, got $chart_name."; exit 1; }
           [[ "$chart_version" == "$version" ]] \
@@ -141,8 +141,8 @@ jobs:
             || { echo "::error::Expected exactly one chart archive."; exit 1; }
 
           packaged_metadata="$(helm show chart "$package")"
-          [[ "$(awk '$1 == "name:" { print $2; exit }' <<<"$packaged_metadata")" == "$CHART_NAME" ]]
-          [[ "$(awk '$1 == "version:" { print $2; exit }' <<<"$packaged_metadata")" == "$VERSION" ]]
+          [[ "$(awk '/^name:/ { print $2; exit }' <<<"$packaged_metadata")" == "$CHART_NAME" ]]
+          [[ "$(awk '/^version:/ { print $2; exit }' <<<"$packaged_metadata")" == "$VERSION" ]]
 
           (
             cd .release
