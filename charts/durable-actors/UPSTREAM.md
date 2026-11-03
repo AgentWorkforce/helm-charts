@@ -67,3 +67,10 @@ sha256 and digests above.
 - Only GKE Sandbox and Modal providers exist upstream. There is no
   kind/MinIO/S3 provider: local proofs use `durable-actors dev` instead (see
   docs/self-hosted-durable-actors.md).
+2. `invokeApiKeySecretKey` (`values.yaml`, `values.schema.json`,
+   `templates/control-plane.yaml`): when set, the control plane gets
+   `DURABLE_ACTORS_INVOKE_API_KEY` from that `credentialsSecret` key. Only a
+   control-plane image with the invoke-only key patch (durable-actors
+   `selfhost/scoped-credentials`, 7a7e9349) reads it; upstream 0.14.6 ignores
+   the variable. Default empty: renders are byte-identical to upstream. Drop
+   when upstream ships an invocation-scoped key.

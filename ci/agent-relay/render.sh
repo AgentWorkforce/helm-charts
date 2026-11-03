@@ -423,7 +423,7 @@ grep -q 'relaycast.url is required' <<<"$rauth_fail" \
 # Relayfile in runtime.backend=durable-actors) and the kind proof shape.
 da_digest() { printf 'sha256:%s' "$(printf "$1%.0s" $(seq 64))"; }
 da_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/values-gcp-proof-live.yaml
-  -f charts/agent-relay/values-gcp-proof-durable-actors.yaml
+  -f charts/agent-relay/values-gcp-proof-durable-actors.yaml -f charts/agent-relay/values-gcp-proof-relayfile.yaml
   --set "relaycast.runtime.durableActors.gateway.image.digest=$(da_digest a)"
   --set "relaycast.runtime.durableActors.deployer.image.digest=$(da_digest b)"
   --set "relayfile.runtime.durableActors.image.digest=$(da_digest c)"

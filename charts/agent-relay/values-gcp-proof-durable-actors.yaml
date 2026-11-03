@@ -5,10 +5,12 @@
 #   helm upgrade --install agent-relay charts/agent-relay -n agent-relay \
 #     -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml \
 #     -f values-gcp-proof-durable-actors.yaml \
-#     --set relaycast.runtime.durableActors.gateway.image.digest=sha256:<gateway> \
-#     --set relaycast.runtime.durableActors.deployer.image.digest=sha256:<deployer> \
-#     --set relayfile.runtime.durableActors.image.digest=sha256:<relayfile-actors> \
-#     --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<relayfile-actors-workspace>
+#     [-f values-gcp-proof-relayfile.yaml --set relayfile...digest=...]
+#
+# Image digests are pinned below (relay-briefs actor-images.md): the control
+# plane is durable-actors 0.14.6 plus the invoke-only key patch
+# (selfhost/scoped-credentials 7a7e9349, not upstream); relaycast gateway and
+# deployer are relaycast c1c9e756 (PR #618).
 #
 # It switches Relaycast to runtime.backend=durable-actors (a FRESH-INSTALL
 # backend: SQLite workspaces are not migrated, and only ar_ credentials work),
@@ -18,12 +20,12 @@
 # ("GCP provisioning"). No credential values appear here.
 components:
   durableActors: true
-  relayfile: true
+  # Relayfile in actor mode: add values-gcp-proof-relayfile.yaml.
+  relayfile: false
 
 gkeIngress:
   hosts:
     actors: actors.gcp-proof.agentrelay.com
-    files: files.gcp-proof.agentrelay.com
 
 durable-actors:
   publicUrl: https://actors.gcp-proof.agentrelay.com
@@ -35,6 +37,13 @@ durable-actors:
     bucket: agentrelay-96bulls-soc2-2610-actors
   # Keys: postgres-url, jwt-signing-key, api-key. One controller needs no Redis.
   credentialsSecret: actors-credentials
+  # Patched control plane: accepts DURABLE_ACTORS_INVOKE_API_KEY (invoke and
+  # socket grants only) from credentialsSecret key invoke-api-key.
+  invokeApiKeySecretKey: invoke-api-key
+  images:
+    controlPlane:
+      repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/durable-actors-control-plane
+      digest: 317967053e09b1245a7bb65f3c962b488a3a21e4804f92808d9f63e06160ba00
   serviceAccount:
     googleServiceAccount: durable-actors@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
   # The umbrella Ingress (gkeIngress.hosts.actors) is the only edge.
@@ -68,19 +77,21 @@ relaycast:
       gateway:
         image:
           repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-gateway
+          digest: sha256:27e0f05c13f7a561d39eacdf4224d0d69660b447c5eff4334c2e96a35fa128b6
         replicaCount: 2
-      # A copy of actors-credentials/api-key until upstream ships an
-      # invoke-only key (then: scope invoke-only, same Secret name).
+      # Same value as actors-credentials/invoke-api-key: the control plane's
+      # invoke-only key (invoke + socket grants; no deploy, no admin APIs).
       invocationSecret:
         name: relaycast-durable-actors-invoke
         key: durable-actors-invoke-key
-        scope: admin
+        scope: invoke-only
       adminKeySecret:
         name: actors-credentials
         key: api-key
       deployer:
         image:
           repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-deployer
+          digest: sha256:6405527fdfd916d70597012d1f89c3f5c598271944e234daef2d244bd2d26f27
         artifactBucket: agentrelay-96bulls-soc2-2610-actors
         serviceAccount:
           annotations:
@@ -92,39 +103,3 @@ relaycast:
       fileStore:
         driver: gcs
         bucket: agentrelay-96bulls-soc2-2610-relaycast-files
-
-relayfile:
-  fullnameOverride: relayfile
-  serviceAccount:
-    annotations:
-      iam.gke.io/gcp-service-account: relayfile@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
-  service:
-    annotations:
-      cloud.google.com/neg: '{"ingress": true}'
-  auth:
-    jwksUrl: http://relayauth.relayauth.svc:8787/.well-known/jwks.json
-  networkPolicy:
-    enabled: true
-    # GKE load balancer health checks and proxies reach the gateway.
-    allowExternalTraffic: true
-  runtime:
-    backend: durable-actors
-    durableActors:
-      image:
-        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors
-      workspaceImage:
-        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors-workspace
-      existingSecret: relayfile-actors
-      adminKeySecret:
-        name: actors-credentials
-        key: api-key
-      gateway:
-        replicaCount: 2
-      deployer:
-        artifactBucket: agentrelay-96bulls-soc2-2610-actors
-        serviceAccount:
-          annotations:
-            iam.gke.io/gcp-service-account: actors-deployer@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
-      blobStore:
-        driver: gcs
-        bucket: agentrelay-96bulls-soc2-2610-relayfile

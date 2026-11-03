@@ -192,12 +192,17 @@ pool), release `REL` in namespace `NS` (sandbox namespace `NS-REL`).
 6. Secrets (namespace `NS` unless noted; generate with `openssl`, never commit):
    - `actors-credentials`: `postgres-url`, `jwt-signing-key`
      (`openssl genpkey -algorithm ED25519 -outform DER | openssl base64 -A`),
-     `api-key` (`openssl rand -hex 32`), optional `redis-url`/`redis-ca`.
+     `api-key` (`openssl rand -hex 32`), optional `redis-url`/`redis-ca`, and
+     `invoke-api-key` (`openssl rand -hex 32`, distinct from `api-key`) when the
+     control-plane image carries the invoke-only key patch
+     (`durable-actors.invokeApiKeySecretKey: invoke-api-key`).
    - Relaycast `existingSecret`: `internal-secret`, `workspace-bootstrap-secret`,
      the credential keyring (`{"current":"a","keys":{"a":"<random>"}}`), the file
      signing secret.
    - Relaycast invocation Secret (for example `relaycast-durable-actors-invoke`):
-     `durable-actors-invoke-key` = the `api-key` value until an invoke-only key exists.
+     `durable-actors-invoke-key` = the `invoke-api-key` value (patched control
+     plane; `invocationSecret.scope: invoke-only`), otherwise the `api-key`
+     value with `scope: admin`.
    - Sandbox namespace `NS-REL`: `relaycast-actor-env`, labelled
      `terse.ai/customer-secret=true`, with `RELAYCAST_PUBLIC_URL`,
      `RELAYCAST_FILE_SIGNING_SECRET` (same value), `RELAYCAST_INTERNAL_SECRET`

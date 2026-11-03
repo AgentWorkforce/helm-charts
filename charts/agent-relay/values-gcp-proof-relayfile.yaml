@@ -1,0 +1,52 @@
+# Relayfile in runtime.backend=durable-actors for the GKE proof. Apply on top
+# of values-gcp-proof-durable-actors.yaml:
+#
+#   ... -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml \
+#     --set relayfile.runtime.durableActors.image.digest=sha256:<relayfile-actors> \
+#     --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<relayfile-actors-workspace>
+#
+# Images from the relayfile repo (branch selfhost/terse-actors, PR #557):
+# docker/actors.Dockerfile -> relayfile-actors, docker/actors-workspace.Dockerfile
+# -> relayfile-actors-workspace. GCP resources: docs/self-hosted-durable-actors.md.
+components:
+  relayfile: true
+
+gkeIngress:
+  hosts:
+    files: files.gcp-proof.agentrelay.com
+
+relayfile:
+  fullnameOverride: relayfile
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: relayfile@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  auth:
+    jwksUrl: http://relayauth.relayauth.svc:8787/.well-known/jwks.json
+  networkPolicy:
+    enabled: true
+    # GKE load balancer health checks and proxies reach the gateway.
+    allowExternalTraffic: true
+  runtime:
+    backend: durable-actors
+    durableActors:
+      image:
+        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors
+      workspaceImage:
+        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors-workspace
+      existingSecret: relayfile-actors
+      adminKeySecret:
+        name: actors-credentials
+        key: api-key
+      gateway:
+        replicaCount: 2
+      deployer:
+        artifactBucket: agentrelay-96bulls-soc2-2610-actors
+        serviceAccount:
+          annotations:
+            iam.gke.io/gcp-service-account: actors-deployer@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+      blobStore:
+        driver: gcs
+        bucket: agentrelay-96bulls-soc2-2610-relayfile
