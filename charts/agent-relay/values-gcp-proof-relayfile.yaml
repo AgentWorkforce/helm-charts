@@ -44,6 +44,7 @@ relayfile:
         replicaCount: 2
       deployer:
         artifactBucket: agentrelay-96bulls-soc2-2610-actors
+        backoffLimit: 10
         serviceAccount:
           annotations:
             iam.gke.io/gcp-service-account: actors-deployer@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com

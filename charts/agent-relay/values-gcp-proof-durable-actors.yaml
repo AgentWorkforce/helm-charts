@@ -68,6 +68,10 @@ relaycast:
     authority: self
   secretKeys:
     credentialKeyring: relaycast-credential-keyring
+    # A separate key from the SQLite release's relaycast-internal-secret, so
+    # switching backends never rewrites a live secret. Must equal
+    # RELAYCAST_INTERNAL_SECRET in the sandbox Secret relaycast-actor-env.
+    internalSecret: relaycast-actors-internal-secret
   serviceAccount:
     annotations:
       iam.gke.io/gcp-service-account: relaycast-files@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
@@ -93,6 +97,10 @@ relaycast:
           repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-deployer
           digest: sha256:6405527fdfd916d70597012d1f89c3f5c598271944e234daef2d244bd2d26f27
         artifactBucket: agentrelay-96bulls-soc2-2610-actors
+        # The control plane is created in the same upgrade (migrations, Cloud
+        # SQL proxy, cold image pull): pod-level retries with capped
+        # exponential backoff give it ~30 minutes instead of ~1.
+        backoffLimit: 10
         serviceAccount:
           annotations:
             iam.gke.io/gcp-service-account: actors-deployer@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com

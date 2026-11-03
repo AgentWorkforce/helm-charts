@@ -318,7 +318,7 @@ compatibility:
       status: unreleased
       current: true
       charts: { agent-relay: 0.2.0, relayhistory: 0.1.0, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0 }
-      app_versions: { agent-relay: 0.2.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
+      app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
         agent-relay: { relaycast: 0.3.0, relayauth: 0.1.2, 96bulls: 0.5.4, relayhistory: 0.1.0, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
       images:
