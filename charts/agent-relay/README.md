@@ -183,6 +183,17 @@ proof pin never makes an image customer-ready.
 The RelayHistory image is an experimental proof build, not a released or
 supported artifact.
 
+When a RelayHistory upgrade arms a write hold (the two-step
+`relayhistory.migrations.allowWriteHold` + `drainForWriteHold` upgrade in
+`charts/relayhistory/README.md`) and `values-gcp-proof-flows.yaml` is applied,
+do not pass `--wait-for-jobs` on step 1: the Relayflows smoke Job runs once per
+Helm revision and probes History, which has no pods during step 1, so the Job
+fails and Helm marks the revision failed although the migration succeeded.
+Wait on the migrate Job by name instead; step 2's smoke Job passes. If step 1
+did end as a failed revision, step 2 diffs against the last deployed revision,
+which never had the drain Role, so Helm leaves the `relayhistory-drain-wait`
+Role and RoleBinding behind: delete both after step 2.
+
 The live overlay expects an existing Secret (the portable example names it
 `example-agent-relay-secrets`) in the release namespace with these keys
 (values are never stored in this repository):
