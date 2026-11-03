@@ -196,9 +196,11 @@ install_release() {
   shift 3
   helm_values_args
   helm_version_args "${version}"
+  # Migration Jobs are plain (non-hook) Jobs; --wait alone does not wait for
+  # them, so a running or failed migration could otherwise report success.
   run_quiet safe_helm upgrade --install "${release}" "${CHART}" \
     --namespace "${namespace}" \
-    --atomic --wait --timeout "${TIMEOUT}" --hide-secret \
+    --atomic --wait --wait-for-jobs --timeout "${TIMEOUT}" --hide-secret \
     ${HELM_VERSION_ARGS[@]+"${HELM_VERSION_ARGS[@]}"} ${HELM_VALUES_ARGS[@]+"${HELM_VALUES_ARGS[@]}"} "$@"
 }
 

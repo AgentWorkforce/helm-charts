@@ -181,6 +181,9 @@ assert_contains "${command_log}" 'kubectl create namespace aw-conformance-test'
 assert_contains "${command_log}" 'helm upgrade --install aw-conformance-test'
 assert_contains "${command_log}" '--hide-secret'
 assert_contains "${command_log}" 'kubectl delete namespace aw-conformance-test'
+if rg 'helm upgrade --install' "${command_log}" | rg -v -- '--dry-run' | rg -qv -- '--wait-for-jobs'; then
+  fail "an apply-mode install did not wait for Jobs"
+fi
 jq -e '
   .success == true
   and .mode == "apply"
