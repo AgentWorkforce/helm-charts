@@ -95,6 +95,10 @@ auth:
   # Must be RelayAuth's issuer when jwksUrl points at RelayAuth.
   issuer: https://96bulls.local
   audience: relayhistory
+  # Temporary compatibility for legacy RelayAuth bearer tokens. Fail-closed by
+  # default and permitted only when environment=local. Hosted/customer
+  # installs must use origin-bound migration assertions instead.
+  allowInterimRelayAuthBearer: false
   # Optional RelayHistory origin (RELAYHISTORY_ORIGIN): the bare origin the
   # ingest expects as the History assertion audience. It must be byte-equal
   # to the courier's RELAYAUTH_HISTORY_ORIGIN. Empty = not rendered.
