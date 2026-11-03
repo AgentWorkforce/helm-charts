@@ -3,8 +3,8 @@
 #
 #   ... -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml
 #
-# Both images are pinned below: relayfile ffac02a9.
-# Images from the relayfile repo (branch selfhost/terse-actors, PR #557):
+# Both images are pinned below: relayfile main 39f84fcf (PR #557 merged).
+# Images from the relayfile repo:
 # docker/actors.Dockerfile -> relayfile-actors, docker/actors-workspace.Dockerfile
 # -> relayfile-actors-workspace. GCP resources: docs/self-hosted-durable-actors.md.
 components:
@@ -38,16 +38,25 @@ relayfile:
     durableActors:
       image:
         repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors
-        digest: sha256:c83d36ea34c3832d441b943a926076e3d197677aea0d7d0e108be89ff873c5de
+        digest: sha256:7fb2110701a004f9f7ed2b025d25156fbe993208598bfbd0498a48b30df48299
       workspaceImage:
         repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors-workspace
-        digest: sha256:67c492d218d219001190a4108bca19540b9932c62d239632e970dc5f02a7260c
+        digest: sha256:c5851a1b1f7624390a1a00ebdee69e8e521dc3f23f345c582d62e09dba9a6e83
       existingSecret: relayfile-actors
       adminKeySecret:
         name: actors-credentials
         key: api-key
+      # CPU requests sized for the proof's e2-medium pool (see the
+      # durable-actors overlay); memory stays at the chart defaults.
       gateway:
         replicaCount: 2
+        resources:
+          requests: { cpu: 25m, memory: 128Mi }
+          limits: { memory: 512Mi }
+      broker:
+        resources:
+          requests: { cpu: 10m, memory: 64Mi }
+          limits: { memory: 256Mi }
       deployer:
         artifactBucket: agentrelay-96bulls-soc2-2610-actors
         backoffLimit: 10

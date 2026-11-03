@@ -19,8 +19,10 @@ components:
 
 relayhistory:
   image:
-    # Erasure-fix proof build of relayhistory-cloud 74a6e526 (experimental).
-    digest: sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf
+    # Erasure-fix proof build of relayhistory-cloud 3cb76752 (experimental;
+    # branch proof/erasure-turns-on-4b5839f). Its 0074 arms the write hold:
+    # upgrade with the two-step drain in charts/relayhistory/README.md.
+    digest: sha256:f36ae1671bdcd88a2b8b2df62c8edecb1381237d9f968747b39298959ad33563
   resources:
     requests: { cpu: 25m, memory: 128Mi }
     limits: { memory: 512Mi }

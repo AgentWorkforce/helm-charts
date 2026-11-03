@@ -160,18 +160,19 @@ all required immutable digests are present. The live proof
   (relay-dashboard `53d484b`, the self-host build served at `/`)
 - selfhost API: `sha256:99670d253b88c27499f6c4cca6ac1265ed97978ed7a9d5eaaeecd65de9e052dc`
   (relaycontrol `17bdc78`)
-- experimental RelayHistory: `sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf`
-  (relayhistory-cloud `74a6e526`, the erasure-fix proof build; the CI render
+- experimental RelayHistory: `sha256:f36ae1671bdcd88a2b8b2df62c8edecb1381237d9f968747b39298959ad33563`
+  (relayhistory-cloud `3cb76752`, branch `proof/erasure-turns-on-4b5839f`, the
+  erasure-fix proof build whose 0074 arms the write hold; the CI render
   fixture keeps `sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba`)
 
 `values-gcp-proof-durable-actors.yaml` pins the relaycast actors gateway
-`sha256:6e69e96cfc687b800a0a29a8a2c7b1402e51a4ee09106a5a9ef6e6781e4a59a8` and
-deployer `sha256:2e08b649d7bd07be53df259b4f1dedce7f57e65c13f49cfefd67faedd53a7cde`
-(relaycast `9ad70e5d`); `values-gcp-proof-relayfile.yaml` pins relayfile-actors
-`sha256:c83d36ea34c3832d441b943a926076e3d197677aea0d7d0e108be89ff873c5de` and
+`sha256:faf66ec45d2c755ab5cdc6ee32bca6dc48446dff444118cab18fa1f765124ffa` and
+deployer `sha256:a81e91ed52bfb7cbb0a8c2773752df3b5d78afdc443608998b3203a30e314cee`
+(relaycast main `3624cc12`, PR #618); `values-gcp-proof-relayfile.yaml` pins relayfile-actors
+`sha256:7fb2110701a004f9f7ed2b025d25156fbe993208598bfbd0498a48b30df48299` and
 relayfile-actors-workspace
-`sha256:67c492d218d219001190a4108bca19540b9932c62d239632e970dc5f02a7260c`
-(relayfile `ffac02a9`).
+`sha256:c5851a1b1f7624390a1a00ebdee69e8e521dc3f23f345c582d62e09dba9a6e83`
+(relayfile main `39f84fcf`, PR #557).
 
 These are proof-only identities. The release gate audits the customer profile
 (`values-gcp.yaml`) against `self-hosted/customer-images.yaml`, which records
@@ -181,6 +182,17 @@ proof pin never makes an image customer-ready.
 
 The RelayHistory image is an experimental proof build, not a released or
 supported artifact.
+
+When a RelayHistory upgrade arms a write hold (the two-step
+`relayhistory.migrations.allowWriteHold` + `drainForWriteHold` upgrade in
+`charts/relayhistory/README.md`) and `values-gcp-proof-flows.yaml` is applied,
+do not pass `--wait-for-jobs` on step 1: the Relayflows smoke Job runs once per
+Helm revision and probes History, which has no pods during step 1, so the Job
+fails and Helm marks the revision failed although the migration succeeded.
+Wait on the migrate Job by name instead; step 2's smoke Job passes. If step 1
+did end as a failed revision, step 2 diffs against the last deployed revision,
+which never had the drain Role, so Helm leaves the `relayhistory-drain-wait`
+Role and RoleBinding behind: delete both after step 2.
 
 The live overlay expects an existing Secret (the portable example names it
 `example-agent-relay-secrets`) in the release namespace with these keys
