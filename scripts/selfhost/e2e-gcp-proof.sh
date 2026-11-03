@@ -39,7 +39,7 @@ BULLS_PROBE="$HERE/e2e-gcp-proof-sessions-pipeline.ts"
 CONTEXT=""
 NAMESPACE="agent-relay"
 BULLS_NAMESPACE="96bulls"
-SECRET_NAME="agent-relay-gcp-proof"
+SECRET_NAME=""
 BASE_DOMAIN=""
 SKIP_RESTART=false
 SKIP_SESSIONS_PIPELINE=false
@@ -77,7 +77,7 @@ Options:
                               the live proof's namespace; --bulls-namespace is
                               an alias)
       --secret NAME           release Secret holding the Relaycast internal secret
-                              (default: agent-relay-gcp-proof)
+                              (required; e.g. the release's existingSecret)
       --base-domain DOMAIN    public base domain (default: derived from the
                               relay-cloud-api SELFHOST_PUBLIC_URL)
       --skip-restart          do not restart relayhistory/relaycast (case 6 SKIP)
@@ -268,7 +268,7 @@ install_driver() {
 
 # phase_input: the state plus the secrets the driver may need, on stdout.
 phase_input() {
-  python3 - "$STATE" "$RCS" "$WORK/enrollment-token" "$RELAYCAST_MODE" "$RELAYCAST_CREATE_TIMEOUT" "$CLEANUP" <<'PY'
+  python3 - "$STATE" "$RCS" "$WORK/enrollment-token" "$RELAYCAST_MODE" "$RELAYCAST_CREATE_TIMEOUT" "$CLEANUP" "$BASE_DOMAIN" <<'PY'
 import json, sys
 text = open(sys.argv[1]).read().strip()
 state = json.loads(text) if text else {}
@@ -280,6 +280,8 @@ def read(path):
 state["secrets"] = {"relaycastInternalSecret": read(sys.argv[2]), "enrollmentToken": read(sys.argv[3])}
 state["relaycast"] = {"mode": sys.argv[4], "createTimeoutMs": int(sys.argv[5]) * 1000}
 state["cleanup"] = sys.argv[6] == "true"
+# Test users get addresses under the install's own public domain.
+state["emailDomain"] = sys.argv[7]
 sys.stdout.write(json.dumps(state))
 PY
 }
