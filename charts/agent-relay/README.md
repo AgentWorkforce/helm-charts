@@ -159,7 +159,18 @@ all required immutable digests are present. The live proof
   (relay-dashboard `53d484b`, the self-host build served at `/`)
 - selfhost API: `sha256:99670d253b88c27499f6c4cca6ac1265ed97978ed7a9d5eaaeecd65de9e052dc`
   (relaycontrol `17bdc78`)
-- experimental RelayHistory: `sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba`
+- experimental RelayHistory: `sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf`
+  (relayhistory-cloud `74a6e526`, the erasure-fix proof build; the CI render
+  fixture keeps `sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba`)
+
+`values-gcp-proof-durable-actors.yaml` pins the relaycast actors gateway
+`sha256:6e69e96cfc687b800a0a29a8a2c7b1402e51a4ee09106a5a9ef6e6781e4a59a8` and
+deployer `sha256:2e08b649d7bd07be53df259b4f1dedce7f57e65c13f49cfefd67faedd53a7cde`
+(relaycast `9ad70e5d`); `values-gcp-proof-relayfile.yaml` pins relayfile-actors
+`sha256:c83d36ea34c3832d441b943a926076e3d197677aea0d7d0e108be89ff873c5de` and
+relayfile-actors-workspace
+`sha256:67c492d218d219001190a4108bca19540b9932c62d239632e970dc5f02a7260c`
+(relayfile `ffac02a9`).
 
 These are proof-only identities. The release gate audits the customer profile
 (`values-gcp.yaml`) against `self-hosted/customer-images.yaml`, which records

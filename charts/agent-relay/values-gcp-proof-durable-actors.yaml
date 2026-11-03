@@ -5,12 +5,12 @@
 #   helm upgrade --install agent-relay charts/agent-relay -n agent-relay \
 #     -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml \
 #     -f values-gcp-proof-durable-actors.yaml \
-#     [-f values-gcp-proof-relayfile.yaml --set relayfile...digest=...]
+#     [-f values-gcp-proof-relayfile.yaml]
 #
 # Image digests are pinned below (relay-briefs actor-images.md): the control
 # plane is durable-actors 0.14.6 plus the invoke-only key patch
 # (selfhost/scoped-credentials 7a7e9349, not upstream); relaycast gateway and
-# deployer are relaycast c1c9e756 (PR #618).
+# deployer are relaycast 9ad70e5d (PR #618, review fixes F1-F5).
 #
 # It switches Relaycast to runtime.backend=durable-actors (a FRESH-INSTALL
 # backend: SQLite workspaces are not migrated, and only ar_ credentials work),
@@ -85,7 +85,7 @@ relaycast:
       gateway:
         image:
           repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-gateway
-          digest: sha256:27e0f05c13f7a561d39eacdf4224d0d69660b447c5eff4334c2e96a35fa128b6
+          digest: sha256:6e69e96cfc687b800a0a29a8a2c7b1402e51a4ee09106a5a9ef6e6781e4a59a8
         replicaCount: 2
       # Same value as actors-credentials/invoke-api-key: the control plane's
       # invoke-only key (invoke + socket grants; no deploy, no admin APIs).
@@ -99,7 +99,7 @@ relaycast:
       deployer:
         image:
           repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-deployer
-          digest: sha256:6405527fdfd916d70597012d1f89c3f5c598271944e234daef2d244bd2d26f27
+          digest: sha256:2e08b649d7bd07be53df259b4f1dedce7f57e65c13f49cfefd67faedd53a7cde
         artifactBucket: agentrelay-96bulls-soc2-2610-actors
         # The control plane is created in the same upgrade (migrations, Cloud
         # SQL proxy, cold image pull): pod-level retries with capped

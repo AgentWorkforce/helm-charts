@@ -1,10 +1,9 @@
 # Relayfile in runtime.backend=durable-actors for the GKE proof. Apply on top
 # of values-gcp-proof-durable-actors.yaml:
 #
-#   ... -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml \
-#     --set relayfile.runtime.durableActors.image.digest=sha256:<relayfile-actors> \
-#     --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<relayfile-actors-workspace>
+#   ... -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml
 #
+# Both images are pinned below: relayfile ffac02a9.
 # Images from the relayfile repo (branch selfhost/terse-actors, PR #557):
 # docker/actors.Dockerfile -> relayfile-actors, docker/actors-workspace.Dockerfile
 # -> relayfile-actors-workspace. GCP resources: docs/self-hosted-durable-actors.md.
@@ -39,8 +38,10 @@ relayfile:
     durableActors:
       image:
         repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors
+        digest: sha256:c83d36ea34c3832d441b943a926076e3d197677aea0d7d0e108be89ff873c5de
       workspaceImage:
         repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors-workspace
+        digest: sha256:67c492d218d219001190a4108bca19540b9932c62d239632e970dc5f02a7260c
       existingSecret: relayfile-actors
       adminKeySecret:
         name: actors-credentials
