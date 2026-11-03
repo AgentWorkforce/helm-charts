@@ -29,6 +29,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP; expose the dashboard only through ingress" }}{{ end -}}
 {{- if not (regexMatch "^https://[^/?#]+$" .Values.runtime.publicUrl) }}{{ fail "runtime.publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $path := dict "appPath" .Values.runtime.appPath "apiBasePath" .Values.runtime.apiBasePath "loginPath" .Values.runtime.loginPath }}{{ if not (regexMatch "^/[^?#]*$" $path) }}{{ fail (printf "runtime.%s must be an absolute path without query or fragment" $name) }}{{ end }}{{ end -}}
+{{- /* The ingress routes apiBasePath and loginPath to the API and / to the
+dashboard: "/" or a shared path would create duplicate Prefix paths with
+different backends, which controllers reject or resolve unpredictably. */ -}}
+{{- $appPath := trimSuffix "/" .Values.runtime.appPath -}}
+{{- $apiPath := trimSuffix "/" .Values.runtime.apiBasePath -}}
+{{- $loginPath := trimSuffix "/" .Values.runtime.loginPath -}}
+{{- range $name, $path := dict "apiBasePath" $apiPath "loginPath" $loginPath }}{{ if not $path }}{{ fail (printf "runtime.%s must not be /: it would shadow the dashboard route" $name) }}{{ end }}{{ if eq $path $appPath }}{{ fail (printf "runtime.%s must differ from runtime.appPath" $name) }}{{ end }}{{ end -}}
+{{- if eq $apiPath $loginPath }}{{ fail "runtime.apiBasePath and runtime.loginPath must differ" }}{{ end -}}
 {{- if .Values.ingress.enabled -}}
 {{- if not .Values.ingress.host }}{{ fail "ingress.host is required when ingress.enabled=true" }}{{ end -}}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" .Values.ingress.host) }}{{ fail "ingress.host must be a DNS hostname" }}{{ end -}}

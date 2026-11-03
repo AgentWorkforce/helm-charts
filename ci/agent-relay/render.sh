@@ -166,4 +166,9 @@ test "$last_env_from" = ci-relayhistory \
 expect_leaf_failure relay-cloud-api "ingress.hosts must include the publicUrl host" \
   --set-json 'ingress.hosts=["other.gcp-proof.agentrelay.com"]'
 
+expect_leaf_failure relay-dashboard "runtime.apiBasePath must not be /" --set runtime.apiBasePath=/
+expect_leaf_failure relay-dashboard "runtime.loginPath must not be /" --set runtime.loginPath=/
+expect_leaf_failure relay-dashboard "runtime.apiBasePath and runtime.loginPath must differ" --set runtime.loginPath=/cloud/api/
+expect_leaf_failure relay-dashboard "runtime.loginPath must differ from runtime.appPath" --set runtime.appPath=/app --set runtime.loginPath=/app/
+
 echo "agent-relay GCP proof render contract: ok"
