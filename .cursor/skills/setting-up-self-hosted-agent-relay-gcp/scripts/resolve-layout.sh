@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
-# Resolve either the source-repository layout or the standalone customer
-# handoff layout. Source this file and call resolve_agent_relay_layout so the
-# resolved paths remain available to the caller.
+# Resolve either the source-repository layout (also the extracted customer
+# handoff archive, which keeps charts/agent-relay) or the standalone chart
+# layout. The base values file is always the customer values-gcp.yaml; the
+# proof-environment values files are never shipped to customers. Source this
+# file and call resolve_agent_relay_layout so the resolved paths remain
+# available to the caller.
 
 _agent_relay_layout_error() {
   printf 'resolve-layout: %s\n' "$*" >&2
@@ -21,11 +24,11 @@ _agent_relay_try_root() {
   root=$(_agent_relay_canonical_dir "$root") || return 1
 
   if test -f "$root/charts/agent-relay/Chart.yaml" &&
-    test -f "$root/charts/agent-relay/values-gcp-proof.yaml"; then
+    test -f "$root/charts/agent-relay/values-gcp.yaml"; then
     AGENT_RELAY_LAYOUT=repository
     AGENT_RELAY_ROOT=$root
     AGENT_RELAY_CHART_PATH=$root/charts/agent-relay
-    AGENT_RELAY_BASE_VALUES_FILE=$root/charts/agent-relay/values-gcp-proof.yaml
+    AGENT_RELAY_BASE_VALUES_FILE=$root/charts/agent-relay/values-gcp.yaml
     AGENT_RELAY_96BULLS_CHART=
     AGENT_RELAY_STATIC_CHECK=
 
@@ -38,7 +41,7 @@ _agent_relay_try_root() {
     return 0
   fi
 
-  test -f "$root/values-gcp-proof.yaml" || return 1
+  test -f "$root/values-gcp.yaml" || return 1
 
   if test -f "$root/agent-relay/Chart.yaml"; then
     AGENT_RELAY_CHART_PATH=$root/agent-relay
@@ -52,7 +55,7 @@ _agent_relay_try_root() {
 
   AGENT_RELAY_LAYOUT=standalone
   AGENT_RELAY_ROOT=$root
-  AGENT_RELAY_BASE_VALUES_FILE=$root/values-gcp-proof.yaml
+  AGENT_RELAY_BASE_VALUES_FILE=$root/values-gcp.yaml
   AGENT_RELAY_96BULLS_CHART=
   AGENT_RELAY_STATIC_CHECK=
   return 0

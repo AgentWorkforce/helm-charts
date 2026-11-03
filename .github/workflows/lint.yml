@@ -2,7 +2,7 @@ name: Lint Charts
 
 on:
   pull_request:
-  workflow_call:  # release.yml calls this before publishing a chart
+  workflow_call:  # release.yml and release-agent-relay.yml call this before publishing
     secrets:
       BULLS96_READ_TOKEN:
         required: false  # search-worker-role-kind fails closed without it
@@ -52,6 +52,11 @@ jobs:
           helm dependency build charts/96bulls >/dev/null
           ci/96bulls-search-worker-role/render.sh
 
+      # The development-preview customer handoff builds, verifies, extracts,
+      # and its umbrella resolves every file:// dependency and renders.
+      - name: Customer handoff package smoke
+        run: ci/customer-handoff/smoke.sh
+
       # Every 96bulls profile (charts/96bulls/profiles/*.yaml and ci/*-values.yaml)
       # renders with the manifests and role bootstrap path it must produce.
       - name: 96bulls profile render matrix
@@ -69,8 +74,22 @@ jobs:
       - name: Self-hosted requirements registry regression tests
         run: ci/self-hosted-requirements/test.sh
 
+      # The gate validates evidence with a real JSON Schema 2020-12 validator.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install customer release gate dependencies
+        run: python3 -m pip install -r ci/customer-release-gate/requirements.txt
+
       - name: Customer release gate regression tests
         run: python3 ci/customer-release-gate/test.py
+
+      # The checked-in records stay consistent even while the release is
+      # blocked: evidence is schema-valid, customer-images.yaml uses the gate's
+      # vocabulary, and release.imageManifestSha256 is its current hash.
+      - name: Customer release records are consistent
+        run: python3 scripts/release/validate-customer-release.py --consistency
 
       - name: Self-hosted requirements doc is generated
         run: |
@@ -88,6 +107,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The gate renders the fixture chart (helm), parses it (yq, preinstalled
+      # on ubuntu-latest) and validates evidence with jsonschema.
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install customer release gate dependencies
+        run: python3 -m pip install -r ci/customer-release-gate/requirements.txt
       - name: Customer release gate regression tests
         run: python3 ci/customer-release-gate/test.py
 
@@ -185,7 +214,7 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" != pull_request ] \
-            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|deps/pins\.txt$|ci/96bulls-search-worker-role/|ci/96bulls-profiles/|\.github/workflows/(lint|release)\.yml$)'; then
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|deps/pins\.txt$|ci/96bulls-search-worker-role/|ci/96bulls-profiles/|\.github/workflows/(lint|release|release-agent-relay)\.yml$)'; then
             echo run=true >> "$GITHUB_OUTPUT"
           fi
 

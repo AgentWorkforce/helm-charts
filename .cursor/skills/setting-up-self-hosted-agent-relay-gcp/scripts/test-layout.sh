@@ -18,13 +18,14 @@ assert_equal() {
     fail "$label: expected '$expected', got '$actual'"
 }
 
-test_root=$(mktemp -d)
+# Canonical path: macOS mktemp returns /var/..., a symlink to /private/var.
+test_root=$(cd -- "$(mktemp -d)" && pwd -P)
 trap 'rm -rf -- "$test_root"' EXIT
 
 repo="$test_root/source repository"
 mkdir -p "$repo/charts/agent-relay" "$repo/charts/96bulls" "$repo/scripts/ci"
 : >"$repo/charts/agent-relay/Chart.yaml"
-: >"$repo/charts/agent-relay/values-gcp-proof.yaml"
+: >"$repo/charts/agent-relay/values-gcp.yaml"
 : >"$repo/charts/96bulls/Chart.yaml"
 : >"$repo/scripts/ci/charts.sh"
 
@@ -34,15 +35,30 @@ assert_equal "$AGENT_RELAY_CHART_PATH" "$repo/charts/agent-relay" "repository ch
 assert_equal "$AGENT_RELAY_96BULLS_CHART" "$repo/charts/96bulls" "96bulls chart"
 assert_equal "$AGENT_RELAY_STATIC_CHECK" "$repo/scripts/ci/charts.sh" "static check"
 
+# The extracted customer handoff archive: charts/ without the repository's CI
+# scripts, and no proof values files.
+handoff="$test_root/agent-relay-customer-handoff"
+mkdir -p "$handoff/charts/agent-relay" "$handoff/charts/96bulls" "$handoff/docs"
+: >"$handoff/charts/agent-relay/Chart.yaml"
+: >"$handoff/charts/agent-relay/values-gcp.yaml"
+: >"$handoff/charts/96bulls/Chart.yaml"
+(
+  cd "$handoff/docs"
+  resolve_agent_relay_layout
+  assert_equal "$AGENT_RELAY_LAYOUT" repository "handoff layout"
+  assert_equal "$AGENT_RELAY_BASE_VALUES_FILE" "$handoff/charts/agent-relay/values-gcp.yaml" "handoff values"
+  assert_equal "$AGENT_RELAY_STATIC_CHECK" "" "handoff static check"
+)
+
 bundle="$test_root/customer bundle"
 mkdir -p "$bundle/nested/work"
 : >"$bundle/agent-relay-0.1.0.tgz"
-: >"$bundle/values-gcp-proof.yaml"
+: >"$bundle/values-gcp.yaml"
 
 resolve_agent_relay_layout "$bundle"
 assert_equal "$AGENT_RELAY_LAYOUT" standalone "standalone layout"
 assert_equal "$AGENT_RELAY_CHART_PATH" "$bundle/agent-relay-0.1.0.tgz" "packaged chart"
-assert_equal "$AGENT_RELAY_BASE_VALUES_FILE" "$bundle/values-gcp-proof.yaml" "bundle values"
+assert_equal "$AGENT_RELAY_BASE_VALUES_FILE" "$bundle/values-gcp.yaml" "bundle values"
 assert_equal "$AGENT_RELAY_STATIC_CHECK" "" "standalone static check"
 
 layout_exports=$(bash "$script_dir/resolve-layout.sh" "$bundle")
@@ -74,7 +90,7 @@ assert_equal "$AGENT_RELAY_CHART_PATH" "$bundle/agent-relay" "extracted chart pr
 
 ambiguous="$test_root/ambiguous"
 mkdir -p "$ambiguous"
-: >"$ambiguous/values-gcp-proof.yaml"
+: >"$ambiguous/values-gcp.yaml"
 : >"$ambiguous/agent-relay-0.1.0.tgz"
 : >"$ambiguous/agent-relay-0.2.0.tgz"
 if resolve_agent_relay_layout "$ambiguous" >/dev/null 2>&1; then
@@ -88,4 +104,4 @@ if resolve_agent_relay_layout "$missing" >/dev/null 2>&1; then
 fi
 
 printf '%s\n' \
-  'test-layout: PASS (repository, standalone, extracted, discovery, shell exports, rejection)'
+  'test-layout: PASS (repository, handoff, standalone, extracted, discovery, shell exports, rejection)'

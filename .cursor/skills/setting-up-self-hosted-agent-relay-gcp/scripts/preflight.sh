@@ -41,11 +41,42 @@ actual_project_number=$(
 test "$actual_project_number" = "$GCP_PROJECT_NUMBER" ||
   die "project number is $actual_project_number, expected $GCP_PROJECT_NUMBER"
 
-context=$(kubectl config current-context)
-case "$context" in
-  *"$GCP_PROJECT_ID"*"$GCP_REGION"*"$GKE_CLUSTER"*) ;;
-  *) die "kube context $context does not name the approved project/region/cluster" ;;
-esac
+# Kube-context identity: the exact gcloud-generated context name, which must
+# be both the pinned KUBE_CONTEXT and the current context, and whose API
+# server must be an endpoint of the approved cluster according to GKE itself
+# (a renamed or edited context pointing elsewhere fails here).
+expected_context="gke_${GCP_PROJECT_ID}_${GCP_REGION}_${GKE_CLUSTER}"
+test "${KUBE_CONTEXT:-}" = "$expected_context" ||
+  die "KUBE_CONTEXT must be exported as $expected_context (got '${KUBE_CONTEXT:-}')"
+current_context=$(kubectl config current-context 2>/dev/null || true)
+test "$current_context" = "$expected_context" ||
+  die "current kube context is '$current_context', expected $expected_context"
+
+context_server=$(
+  kubectl config view --raw \
+    -o "jsonpath={.clusters[?(@.name==\"$(
+      kubectl config view -o "jsonpath={.contexts[?(@.name==\"$expected_context\")].context.cluster}"
+    )\")].cluster.server}"
+)
+test -n "$context_server" || die "kube context $expected_context has no API server"
+
+cluster_endpoints=$(
+  gcloud container clusters describe "$GKE_CLUSTER" \
+    --project "$GCP_PROJECT_ID" --location "$GCP_REGION" --format=json |
+    jq -r '[.endpoint,
+            .privateClusterConfig.privateEndpoint,
+            .controlPlaneEndpointsConfig.dnsEndpointConfig.endpoint]
+           | map(select(. != null and . != "")) | .[]'
+) || die "cannot describe GKE cluster $GKE_CLUSTER in $GCP_PROJECT_ID/$GCP_REGION"
+server_matches=false
+while IFS= read -r endpoint; do
+  test -n "$endpoint" || continue
+  if test "$context_server" = "https://$endpoint"; then
+    server_matches=true
+  fi
+done <<<"$cluster_endpoints"
+test "$server_matches" = true ||
+  die "kube context $expected_context server $context_server is not an endpoint of cluster $GKE_CLUSTER"
 
 for host in "$BASE_DOMAIN" "api.$BASE_DOMAIN" "cast.$BASE_DOMAIN" "history.$BASE_DOMAIN"; do
   case "$host" in
@@ -53,6 +84,7 @@ for host in "$BASE_DOMAIN" "api.$BASE_DOMAIN" "cast.$BASE_DOMAIN" "history.$BASE
   esac
 done
 
-printf 'preflight: project=%s number=%s region=%s cluster=%s domain=%s\n' \
-  "$GCP_PROJECT_ID" "$GCP_PROJECT_NUMBER" "$GCP_REGION" "$GKE_CLUSTER" "$BASE_DOMAIN"
+printf 'preflight: project=%s number=%s region=%s cluster=%s context=%s server=%s domain=%s\n' \
+  "$GCP_PROJECT_ID" "$GCP_PROJECT_NUMBER" "$GCP_REGION" "$GKE_CLUSTER" \
+  "$KUBE_CONTEXT" "$context_server" "$BASE_DOMAIN"
 printf 'preflight: OK\n'

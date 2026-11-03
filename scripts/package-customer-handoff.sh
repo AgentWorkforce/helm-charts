@@ -35,19 +35,17 @@ CHECKSUMS_NAME = "SHA256SUMS"
 # These are the only source trees eligible for the handoff. The final,
 # revision-specific list is sorted, recorded in RELEASE-MANIFEST.json, and
 # passed to the archive writers one entry at a time.
+#
+# Charts are not listed here: the umbrella (UMBRELLA_CHART) is followed
+# through its file:// dependencies, recursively, at the packaged revision, so
+# a new umbrella dependency (e.g. charts/relayflows) can never be left out.
+UMBRELLA_CHART = "charts/agent-relay"
 INCLUDE_TREES = (
     ".cursor/skills/setting-up-self-hosted-agent-relay-gcp",
-    "charts/96bulls",
-    "charts/96bulls-worker",
-    "charts/alleyoop",
-    "charts/agent-relay",
-    "charts/relay-cloud-api",
-    "charts/relay-dashboard",
-    "charts/relayauth",
-    "charts/relaycast",
-    "charts/relayhistory",
     "deps",
     "docs/conformance",
+    "docs/diagrams",
+    "docs/handoff",
     "docs/licenses",
     "scripts/conformance",
     "scripts/release",
@@ -59,6 +57,8 @@ INCLUDE_FILES = (
     "THIRD_PARTY_NOTICES.md",
     "docs/self-hosted-image-supply-chain.md",
     "docs/self-hosted-reference-architecture.md",
+    "docs/self-hosted-relayflows.md",
+    "docs/self-hosted-requirements.md",
     "docs/selfhost-backup-restore.md",
     "scripts/package-customer-handoff.sh",
 )
@@ -113,6 +113,7 @@ REQUIRED_FILES = (
     "docs/licenses/Apache-2.0.txt",
     "docs/self-hosted-image-supply-chain.md",
     "docs/self-hosted-reference-architecture.md",
+    "docs/self-hosted-requirements.md",
     "docs/selfhost-backup-restore.md",
     "self-hosted/customer-images.yaml",
     "self-hosted/customer-release-evidence.json",
@@ -174,7 +175,38 @@ def canonical_json(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def selected_path(path: str) -> bool:
+FILE_DEPENDENCY = re.compile(
+    rb"""^\s*repository:\s*["']?file://\.\./([A-Za-z0-9._-]+)/?["']?\s*(?:#.*)?$""",
+    re.MULTILINE,
+)
+
+
+def chart_trees(read_chart_yaml) -> tuple[str, ...]:
+    """The umbrella chart plus every chart it reaches through file://
+    dependencies. read_chart_yaml(chart_dir) returns Chart.yaml bytes or None."""
+    seen: set[str] = set()
+    queue = [UMBRELLA_CHART]
+    while queue:
+        chart = queue.pop()
+        if chart in seen:
+            continue
+        seen.add(chart)
+        data = read_chart_yaml(chart)
+        if data is None:
+            continue
+        for match in FILE_DEPENDENCY.finditer(data):
+            queue.append(f"charts/{match.group(1).decode('ascii')}")
+    return tuple(sorted(seen))
+
+
+def required_files(charts: tuple[str, ...]) -> set[str]:
+    required = set(REQUIRED_FILES)
+    for chart in charts:
+        required.update((f"{chart}/Chart.yaml", f"{chart}/values.yaml"))
+    return required
+
+
+def selected_path(path: str, charts: tuple[str, ...]) -> bool:
     pure = PurePosixPath(path)
     if any(part in EXCLUDED_COMPONENTS for part in pure.parts):
         return False
@@ -189,19 +221,33 @@ def selected_path(path: str) -> bool:
         return False
     if path in INCLUDE_FILES:
         return True
-    return any(path.startswith(tree + "/") for tree in INCLUDE_TREES)
+    return any(path.startswith(tree + "/") for tree in (*INCLUDE_TREES, *charts))
 
 
-def parse_tree(repo: Path, revision: str) -> dict[str, tuple[int, bytes]]:
+def parse_tree(
+    repo: Path, revision: str
+) -> tuple[dict[str, tuple[int, bytes]], tuple[str, ...]]:
     raw = git(repo, "ls-tree", "-r", "-z", revision)
-    result: dict[str, tuple[int, bytes]] = {}
+    records = []
+    blobs: dict[str, bytes] = {}
     for record in raw.split(b"\0"):
         if not record:
             continue
         metadata, path_bytes = record.split(b"\t", 1)
         mode_text, kind, object_id = metadata.split(b" ", 2)
         path = path_bytes.decode("utf-8")
-        if not selected_path(path):
+        records.append((mode_text, kind, object_id, path))
+        if path.startswith("charts/") and path.endswith("/Chart.yaml") and kind == b"blob":
+            blobs[path] = object_id
+
+    def read_chart_yaml(chart: str) -> bytes | None:
+        object_id = blobs.get(f"{chart}/Chart.yaml")
+        return git(repo, "cat-file", "blob", object_id.decode("ascii")) if object_id else None
+
+    charts = chart_trees(read_chart_yaml)
+    result: dict[str, tuple[int, bytes]] = {}
+    for mode_text, kind, object_id, path in records:
+        if not selected_path(path, charts):
             continue
         if kind != b"blob" or mode_text not in (b"100644", b"100755"):
             raise HandoffError(
@@ -211,7 +257,7 @@ def parse_tree(repo: Path, revision: str) -> dict[str, tuple[int, bytes]]:
         mode = 0o755 if mode_text == b"100755" else 0o644
         data = git(repo, "cat-file", "blob", object_id.decode("ascii"))
         result[path] = (mode, data)
-    return result
+    return result, charts
 
 
 def local_identifiers(repo: Path) -> tuple[bytes, ...]:
@@ -560,6 +606,12 @@ def verify_archive(
     listed_files = manifest.get("files")
     if not isinstance(listed_files, list):
         raise HandoffError("release manifest files list is missing")
+
+    def archived_chart_yaml(chart: str) -> bytes | None:
+        entry = entries.get(f"{root}/{chart}/Chart.yaml")
+        return None if entry is None or entry["directory"] else bytes(entry["data"])
+
+    charts = chart_trees(archived_chart_yaml)
     expected_payload: dict[str, dict[str, object]] = {}
     previous = ""
     for item in listed_files:
@@ -579,13 +631,13 @@ def verify_archive(
         ):
             raise HandoffError("release manifest file metadata is invalid")
         safe_member_name(relpath)
-        if not selected_path(relpath):
+        if not selected_path(relpath, charts):
             raise HandoffError(f"release manifest contains an ineligible path: {relpath}")
         if relpath <= previous:
             raise HandoffError("release manifest files are not strictly sorted")
         previous = relpath
         expected_payload[relpath] = item
-    actual_missing = sorted(set(REQUIRED_FILES) - set(expected_payload))
+    actual_missing = sorted(required_files(charts) - set(expected_payload))
     if missing_required != actual_missing:
         raise HandoffError("release manifest required-input state is inconsistent")
     evidence_path = "self-hosted/customer-release-evidence.json"
@@ -772,8 +824,8 @@ def build(repo: Path, args: argparse.Namespace) -> None:
             detail = exc.stderr.strip() or exc.stdout.strip()
             raise HandoffError(f"production release gate failed:\n{detail}") from exc
         print(gated.stdout.strip())
-    source_files = parse_tree(repo, revision)
-    missing = sorted(set(REQUIRED_FILES) - set(source_files))
+    source_files, charts = parse_tree(repo, revision)
+    missing = sorted(required_files(charts) - set(source_files))
     if missing and not args.dev_allow_incomplete:
         detail = "\n  ".join(missing)
         raise HandoffError(f"required tracked inputs are missing:\n  {detail}")

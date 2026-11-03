@@ -49,6 +49,7 @@ policy:
 images:
   - id: relaycast
     active: true
+    firstParty: true
     component: relaycast
     workloads:
       - Deployment/relaycast:relaycast
@@ -75,16 +76,19 @@ images:
       trigger: workflow_dispatch
       buildsCommittedRevision: true
       publishesSbom: false
-      publishesProvenance: buildx-default
+      # buildx default (mode=min, unsigned) attestation only; not verifiable.
+      publishesProvenance: false
+      provenanceMode: buildx-default
     customerAcquisition:
       status: available-public
       procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
     approval:
-      status: chart-shipped
-      blockingReasons: []
+      status: blocked
+      blockingReasons: [IMG-BLOCK-005]
 
   - id: relayauth
     active: true
+    firstParty: true
     component: relayauth
     workloads:
       - Deployment/relayauth:relayauth
@@ -117,11 +121,15 @@ images:
       status: available-public
       procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
     approval:
-      status: chart-shipped
+      status: approved
+      basis: >-
+        Public digest from a reviewed workflow at the recorded revision, with
+        SBOM, provenance and amd64+arm64 verified from the registry.
       blockingReasons: []
 
   - id: sessions-services
     active: true
+    firstParty: true
     component: 96bulls
     workloads:
       - Deployment/*-alleyoop-ingest:ingest
@@ -145,15 +153,18 @@ images:
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: []
-      status: expected-from-workflow-not-registry-verified
-      note: Anonymous manifest inspection returned unauthorized.
+      status: unverified
+      note: >-
+        Expected from the workflow; not registry-verified (anonymous manifest
+        inspection returned unauthorized).
     release:
       workflow: https://github.com/AgentWorkforce/sessions-pipeline/blob/7d7229bb31c121ecb98cd4e35c248fc2cf5669ad/.github/workflows/publish-image.yml
       run: https://github.com/AgentWorkforce/sessions-pipeline/actions/runs/41375745173
       trigger: workflow_dispatch-with-approval-phrase
       buildsCommittedRevision: true
       publishesSbom: false
-      publishesProvenance: buildx-default
+      publishesProvenance: false
+      provenanceMode: buildx-default
     customerAcquisition:
       status: blocked
       procedure: null
@@ -162,10 +173,11 @@ images:
         entitlement and vendor-to-customer registry promotion process.
     approval:
       status: blocked
-      blockingReasons: [IMG-BLOCK-001]
+      blockingReasons: [IMG-BLOCK-001, IMG-BLOCK-005]
 
   - id: sessions-migration-postgresql
     active: true
+    firstParty: false
     component: 96bulls
     workloads:
       - Job/*-worker-migrate-*:wait-for-role
@@ -191,7 +203,10 @@ images:
       workflow: https://github.com/cloudnative-pg/postgres-containers/blob/main/.github/workflows/bake.yml
       run: null
       trigger: upstream-managed
-      buildsCommittedRevision: unknown
+      buildsCommittedRevision: false
+      publishesSbom: false
+      publishesProvenance: false
+      note: Upstream-managed; the build run, SBOM and provenance for this digest are not recorded.
     customerAcquisition:
       status: available-public-review-required
       procedure: Mirror the public upstream digest into the customer registry after third-party approval.
@@ -201,6 +216,7 @@ images:
 
   - id: relayhistory
     active: true
+    firstParty: true
     component: relayhistory
     workloads:
       - Deployment/relayhistory:history
@@ -208,7 +224,6 @@ images:
     current:
       repository: <private-proof-registry-not-for-customer-use>/relayhistory
       digest: sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba
-      proofTag: null
       chartStatus: experimental-proof-only
     source:
       repository: https://github.com/AgentWorkforce/relayhistory-cloud
@@ -223,12 +238,15 @@ images:
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
-      status: verified-with-operator-credentials
+      status: verified
+      verificationAccess: operator-credentials
     release:
       workflow: null
       run: null
       trigger: manual-local-buildx
-      buildsCommittedRevision: manually-observed
+      # Built from the recorded commit by hand (manually observed), not by a
+      # reviewed release workflow.
+      buildsCommittedRevision: false
       publishesSbom: true
       publishesProvenance: true
       note: The repository publish workflow releases an npm client, not this container.
@@ -244,6 +262,7 @@ images:
 
   - id: selfhost-api
     active: true
+    firstParty: true
     component: relay-cloud-api
     workloads:
       - Deployment/relay-cloud-api:api
@@ -251,7 +270,6 @@ images:
     current:
       repository: ghcr.io/agentworkforce/selfhost-api
       digest: sha256:48ba1877d97e47b523e859a0e532bc7f5c4a3920b999f0fbea86f3bbb04fee84
-      proofTag: "0.1.0"
       chartStatus: published-awaiting-visibility
     source:
       repository: https://github.com/AgentWorkforce/relaycontrol
@@ -264,20 +282,22 @@ images:
         dedicated relaycontrol repository; the published image builds exactly
         this committed revision (tags 0.1.0 and sha-10c069b...).
     license:
-      status: approved-package-scope
+      status: approved
       spdx: Apache-2.0
-      evidence: Canonical packages/selfhost-api/LICENSE and package/image metadata.
+      evidence: https://github.com/AgentWorkforce/relaycontrol/blob/10c069bb8adf15cae39f8d4e61a0a3b33fcb116c/LICENSE
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
-      status: complete
+      status: verified
     release:
       workflow: release-selfhost-api-image.yml
       run: https://github.com/AgentWorkforce/relaycontrol/actions/runs/41556195969
       trigger: workflow_dispatch
       buildsCommittedRevision: true
+      publishedTags: ["0.1.0", sha-10c069b]
       publishesSbom: true
-      publishesProvenance: max
+      publishesProvenance: true
+      provenanceMode: max
     customerAcquisition:
       status: blocked
       procedure: copy-by-digest
@@ -291,6 +311,7 @@ images:
 
   - id: relay-dashboard
     active: true
+    firstParty: true
     component: relay-dashboard
     workloads:
       - Deployment/relay-dashboard:copy-dashboard
@@ -298,7 +319,6 @@ images:
     current:
       repository: <private-proof-registry-not-for-customer-use>/relay-dashboard
       digest: sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe
-      proofTag: null
       chartStatus: proof-only
     source:
       repository: https://github.com/AgentWorkforce/relay-dashboard
@@ -311,13 +331,15 @@ images:
         untracked dashboard, replay, packaging, Docker, and workflow files.
         The base revision does not reproduce the image.
     license:
-      status: source-approved-binary-review-blocked
+      status: review-required
       spdx: Apache-2.0
       evidence: Public repository license; exact proof source snapshot is not committed.
+      note: Source license approved; binary distribution review blocked.
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
-      status: verified-with-operator-credentials
+      status: verified
+      verificationAccess: operator-credentials
     release:
       workflow: null
       run: null
@@ -396,6 +418,15 @@ blockers:
       - exact proof source and workflow are committed and reviewed
       - a new image is built from that commit
       - approved customer channel and promotion evidence exist
+  - id: IMG-BLOCK-005
+    severity: hard
+    images: [relaycast, sessions-services]
+    summary: >-
+      The release workflows publish no SBOM and only buildx's default
+      (mode=min, unsigned) provenance, which is not verifiable provenance.
+    closeWhen:
+      - the release workflow publishes an SBOM and signed provenance for the recorded revision
+      - a new digest built that way is recorded here
   - id: IMG-REVIEW-001
     severity: review
     images: [sessions-migration-postgresql]

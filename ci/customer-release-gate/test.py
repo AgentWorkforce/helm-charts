@@ -41,7 +41,9 @@ def set_manifest_hash(work: Path) -> None:
     write(work / "evidence.json", evidence)
 
 
-def run(work: Path, require_clean: bool = False) -> subprocess.CompletedProcess[str]:
+def run(
+    work: Path, require_clean: bool = False, consistency: bool = False
+) -> subprocess.CompletedProcess[str]:
     command = [
         sys.executable,
         str(GATE),
@@ -58,6 +60,8 @@ def run(work: Path, require_clean: bool = False) -> subprocess.CompletedProcess[
     ]
     if require_clean:
         command.append("--require-clean")
+    if consistency:
+        command.append("--consistency")
     return subprocess.run(
         command,
         stdout=subprocess.PIPE,
@@ -109,6 +113,63 @@ def add_hard_blocker(manifest: dict[str, Any]) -> None:
     manifest["blockers"] = [
         {"id": "IMG-BLOCK-TEST", "severity": "hard", "images": ["relayhistory"]}
     ]
+
+
+def compose(*steps: Callable[[Path], None]) -> Callable[[Path], None]:
+    def apply(work: Path) -> None:
+        for step in steps:
+            step(work)
+
+    return apply
+
+
+UNREVIEWED = "docker.io/attacker/unreviewed@sha256:" + ("e" * 64)
+
+
+def extra_rendered_image(work: Path) -> None:
+    (work / "charts/agent-relay/templates/extra.yaml").write_text(
+        "apiVersion: v1\nkind: Pod\nmetadata:\n  name: extra\nspec:\n"
+        f"  containers:\n    - name: extra\n      image: {UNREVIEWED}\n",
+        encoding="utf-8",
+    )
+
+
+def chart_default_drift(work: Path) -> None:
+    path = work / "charts/agent-relay/values.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("d" * 64, "f" * 64),
+        encoding="utf-8",
+    )
+
+
+def unrendered_manifest_image(manifest: dict[str, Any]) -> None:
+    extra = json.loads(json.dumps(image(manifest)))
+    extra["id"] = "relayhistory-unused"
+    extra["current"]["repository"] = "registry.northwind.io/agent-relay/unused"
+    manifest["images"].append(extra)
+
+
+def placeholder_values(values: dict[str, Any]) -> None:
+    values["relayhistory"]["image"][
+        "repository"
+    ] = "us-central1-docker.pkg.dev/example-project/example-images/relayhistory"
+
+
+def placeholder_manifest(manifest: dict[str, Any]) -> None:
+    image(manifest)["current"][
+        "repository"
+    ] = "us-central1-docker.pkg.dev/example-project/example-images/relayhistory"
+
+
+def drop_relayhistory_license(evidence: dict[str, Any]) -> None:
+    evidence["licenses"]["firstParty"] = [
+        x for x in evidence["licenses"]["firstParty"] if x["id"] != "relayhistory"
+    ]
+
+
+def stale_manifest_hash(work: Path) -> None:
+    with (work / "customer-images.yaml").open("a", encoding="utf-8") as stream:
+        stream.write("\n")
 
 
 def non_test_hook(work: Path) -> None:
@@ -198,6 +259,115 @@ CASES: list[tuple[str, str, Callable[[Path], None]]] = [
         values_case(
             lambda v: v["relayhistory"]["image"].update(
                 digest="", tag="latest"
+            )
+        ),
+    ),
+    (
+        "values image differs from the manifest",
+        "rendered-images",
+        values_case(
+            lambda v: v["relayhistory"]["image"].update(
+                repository="docker.io/attacker/unreviewed"
+            )
+        ),
+    ),
+    ("extra rendered image", "rendered-images", extra_rendered_image),
+    ("chart default image drift", "rendered-images", chart_default_drift),
+    (
+        "active manifest image not rendered",
+        "rendered-images",
+        manifest_case(unrendered_manifest_image),
+    ),
+    (
+        "placeholder repository",
+        "registry",
+        compose(values_case(placeholder_values), manifest_case(placeholder_manifest)),
+    ),
+    (
+        "empty source repository",
+        "source-repository",
+        compose(
+            manifest_case(lambda m: image(m)["source"].update(repository="")),
+            evidence_case(drop_relayhistory_license),
+        ),
+    ),
+    (
+        "source repository not allowlisted",
+        "source-repository",
+        manifest_case(
+            lambda m: image(m)["source"].update(
+                repository="https://github.com/attacker/relayhistory"
+            )
+        ),
+    ),
+    (
+        "first-party image marked third-party",
+        "source-repository",
+        manifest_case(lambda m: image(m).update(firstParty=False)),
+    ),
+    (
+        "manifest vocabulary",
+        "manifest-vocabulary",
+        manifest_case(
+            lambda m: image(m)["release"].update(publishesProvenance="max")
+        ),
+    ),
+    ("stale image manifest hash", "images-manifest", stale_manifest_hash),
+    (
+        "missing operational readiness",
+        "schema",
+        evidence_case(lambda e: e.pop("operationalReadiness")),
+    ),
+    (
+        "missing version compatibility",
+        "schema",
+        evidence_case(lambda e: e.pop("versionCompatibility")),
+    ),
+    (
+        "failed load test",
+        "operational-readiness",
+        evidence_case(
+            lambda e: e["operationalReadiness"]["loadTest"].update(result="fail")
+        ),
+    ),
+    (
+        "load test for another chart version",
+        "operational-readiness",
+        evidence_case(
+            lambda e: e["operationalReadiness"]["loadTest"].update(
+                chartVersion="0.9.0"
+            )
+        ),
+    ),
+    (
+        "empty observability evidence",
+        "schema",
+        evidence_case(
+            lambda e: e["operationalReadiness"]["observability"]["alerts"].update(
+                evidence=""
+            )
+        ),
+    ),
+    (
+        "failed compatibility cell",
+        "version-compatibility",
+        evidence_case(
+            lambda e: e["versionCompatibility"]["matrix"][
+                "serverPreviousDesktopCurrent"
+            ].update(result="not-run")
+        ),
+    ),
+    (
+        "approved with Desktop not run",
+        "schema",
+        evidence_case(lambda e: e["desktop"].update(result="not-run")),
+    ),
+    (
+        "zero upgrade artifact digest",
+        "upgrade-evidence",
+        evidence_case(
+            lambda e: e["upgradeRestore"]["upgrade"].update(
+                artifactSha256="sha256:" + ("0" * 64)
             )
         ),
     ),
@@ -296,6 +466,26 @@ def main() -> int:
         else:
             print("ok   dirty source worktree")
 
+        result = run(positive, consistency=True)
+        if result.returncode != 0:
+            print(f"FAIL consistency mode\n{result.stderr}", file=sys.stderr)
+            failures += 1
+        else:
+            print("ok   consistency mode")
+        stale = base / "stale-consistency"
+        shutil.copytree(FIXTURE, stale)
+        shutil.copy2(SCHEMA, stale / "schema.json")
+        stale_manifest_hash(stale)
+        result = run(stale, consistency=True)
+        if result.returncode == 0 or "ERROR [images-manifest:" not in result.stderr:
+            print(
+                f"FAIL consistency mode accepted a stale hash\n{result.stderr}",
+                file=sys.stderr,
+            )
+            failures += 1
+        else:
+            print("ok   consistency mode stale hash")
+
         for index, (name, category, mutate) in enumerate(CASES):
             work = base / f"negative-{index:02d}"
             shutil.copytree(FIXTURE, work)
@@ -317,7 +507,7 @@ def main() -> int:
     if failures:
         print(f"customer release gate tests: FAIL ({failures})", file=sys.stderr)
         return 1
-    print(f"customer release gate tests: PASS ({3 + len(CASES)} cases)")
+    print(f"customer release gate tests: PASS ({5 + len(CASES)} cases)")
     return 0
 
 

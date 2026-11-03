@@ -182,7 +182,6 @@
           "uniqueItems": true
         },
         "evidence": {
-          "minLength": 1,
           "type": "string"
         },
         "result": {
@@ -426,41 +425,81 @@
           "operationalReadiness": {
             "properties": {
               "loadTest": {
+                "required": [
+                  "result",
+                  "evidence"
+                ],
                 "properties": {
                   "result": {
                     "const": "pass"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "recovery": {
+                "required": [
+                  "result",
+                  "evidence"
+                ],
+                "properties": {
+                  "result": {
+                    "const": "pass"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               },
               "observability": {
                 "properties": {
                   "alerts": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
                   },
                   "dashboards": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
                   },
                   "runbooks": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
-                  }
-                }
-              },
-              "recovery": {
-                "properties": {
-                  "result": {
-                    "const": "pass"
                   }
                 }
               }
@@ -471,32 +510,176 @@
               "matrix": {
                 "properties": {
                   "serverCurrentDesktopCurrent": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
                   },
                   "serverCurrentDesktopPrevious": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
                   },
                   "serverPreviousDesktopCurrent": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
                   },
                   "serverPreviousDesktopPrevious": {
+                    "required": [
+                      "result",
+                      "evidence"
+                    ],
                     "properties": {
                       "result": {
                         "const": "pass"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     }
+                  }
+                }
+              }
+            }
+          },
+          "upgradeRestore": {
+            "properties": {
+              "upgrade": {
+                "required": [
+                  "result",
+                  "evidence"
+                ],
+                "properties": {
+                  "result": {
+                    "const": "pass"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "restore": {
+                "required": [
+                  "result",
+                  "evidence"
+                ],
+                "properties": {
+                  "result": {
+                    "const": "pass"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "desktop": {
+            "required": [
+              "result",
+              "evidence"
+            ],
+            "properties": {
+              "result": {
+                "const": "pass"
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1
+              },
+              "testedPlatforms": {
+                "minItems": 1
+              }
+            }
+          },
+          "relayHistoryMigrations": {
+            "properties": {
+              "evidence": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceCount": {
+                "minimum": 1
+              }
+            }
+          },
+          "licenses": {
+            "properties": {
+              "firstParty": {
+                "items": {
+                  "properties": {
+                    "evidence": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "release": {
+            "properties": {
+              "branchControls": {
+                "properties": {
+                  "protected": {
+                    "const": true
+                  },
+                  "requiresPullRequest": {
+                    "const": true
+                  },
+                  "requiredApprovals": {
+                    "minimum": 1
+                  },
+                  "requiredStatusChecks": {
+                    "contains": {
+                      "const": "customer-release-gate"
+                    }
+                  }
+                }
+              },
+              "environmentControls": {
+                "properties": {
+                  "protected": {
+                    "const": true
+                  },
+                  "preventsSelfReview": {
+                    "const": true
+                  },
+                  "requiredApprovals": {
+                    "minimum": 1
                   }
                 }
               }
@@ -632,7 +815,6 @@
           "type": "string"
         },
         "evidence": {
-          "minLength": 1,
           "type": "string"
         },
         "imageManifestSha256": {
