@@ -37,10 +37,10 @@ Desktop setup. Relayflows, durable actors and Relayfile are optional preview
 components, off by default. Billing, provider integrations and hosted fleet
 are out of scope.
 
-## agent-relay 0.3.0 (2026-11-03): reviewable release
+## agent-relay 0.3.1 (2026-11-03): reviewable release
 
 This is the first published release of the umbrella chart
-(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.0). It is meant
+(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.1). It is meant
 for review by a company evaluating self-hosted Agent Relay on GCP. It is a
 `portable-single` preview, not an HA or production-readiness claim, and the
 handoff archive is labelled a development preview because the fail-closed
@@ -63,10 +63,10 @@ them to your registry by digest):
 Full revisions, release runs, platforms and blockers are in
 `self-hosted/customer-images.yaml`.
 
-Changes since the unreleased 0.2.0 profile:
+Changes since the unreleased 0.2.x/0.3.0 profiles (0.3.0 renamed the `96bulls:` values key to `sessions-pipeline:`):
 
 - `values-gcp.yaml` pins the release images above instead of placeholders.
-- `values-gcp.yaml` sets `96bulls.alleyoop.auth.issuer` to RelayAuth's issuer
+- `values-gcp.yaml` sets `sessions-pipeline.alleyoop.auth.issuer` to RelayAuth's issuer
   and asks for `historyOrigin`. The chart default (`https://96bulls.local`)
   rejected every RelayAuth-signed courier assertion.
 - The self-host dashboard image talks only to the same-origin `/cloud/api`

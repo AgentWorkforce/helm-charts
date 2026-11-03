@@ -3,61 +3,110 @@
     "customerPlatforms": [
       "linux/amd64"
     ],
-    "evidence": "",
+    "evidence": "Not yet done; planned. The custom-origin (self-hosted sign-in) Desktop branch AgentWorkforce/relay-desktop selfhost/custom-origin @ c2aa1e09 passed CI run https://github.com/AgentWorkforce/relay-desktop/actions/runs/41606660810 on macOS arm64/x64, Linux x64/arm64 and Windows (all jobs success), but it has no merged PR or release, so there is no released Desktop to record as release evidence.",
     "result": "not-run",
-    "testedPlatforms": []
+    "testedPlatforms": [
+      "darwin/amd64",
+      "darwin/arm64",
+      "linux/amd64",
+      "linux/arm64"
+    ]
   },
   "licenses": {
     "firstParty": [
       {
         "decision": "approved",
-        "evidence": "LICENSE",
+        "evidence": "https://github.com/AgentWorkforce/helm-charts/blob/main/LICENSE (Apache-2.0; GitHub license detection: Apache-2.0)",
         "id": "helm-charts",
         "spdx": "Apache-2.0"
       },
       {
         "decision": "approved",
-        "evidence": "self-hosted/customer-images.yaml",
+        "evidence": "https://github.com/AgentWorkforce/relaycast/blob/main/LICENSE (Apache-2.0; root LICENSE at the image source revision recorded in self-hosted/customer-images.yaml)",
         "id": "relaycast",
         "spdx": "Apache-2.0"
       },
       {
         "decision": "approved",
-        "evidence": "self-hosted/customer-images.yaml",
+        "evidence": "https://github.com/AgentWorkforce/relayauth/blob/784582ef983bb72b13b43512d9a4142ef5dfabb2/LICENSE (Apache-2.0)",
         "id": "relayauth",
         "spdx": "Apache-2.0"
       },
       {
-        "decision": "blocked",
-        "evidence": "self-hosted/customer-images.yaml",
+        "decision": "approved",
+        "evidence": "Owner decision (Khaliq, 2026-11-03): Apache-2.0. Canonical LICENSE and package.json license added by https://github.com/AgentWorkforce/sessions-pipeline/pull/172; present at the image source revision recorded in self-hosted/customer-images.yaml",
         "id": "sessions-services",
-        "spdx": null
+        "spdx": "Apache-2.0"
       },
       {
-        "decision": "blocked",
-        "evidence": "self-hosted/customer-images.yaml",
+        "decision": "approved",
+        "evidence": "Owner decision (Khaliq, 2026-11-03): Apache-2.0. Canonical LICENSE and package.json license added by https://github.com/AgentWorkforce/relayhistory-cloud/pull/279; present at the image source revision recorded in self-hosted/customer-images.yaml",
         "id": "relayhistory",
-        "spdx": null
+        "spdx": "Apache-2.0"
       },
       {
-        "decision": "blocked",
-        "evidence": "self-hosted/customer-images.yaml",
+        "decision": "approved",
+        "evidence": "https://github.com/AgentWorkforce/relaycontrol/blob/main/LICENSE (Apache-2.0; package.json license Apache-2.0)",
         "id": "selfhost-api",
-        "spdx": null
+        "spdx": "Apache-2.0"
       },
       {
-        "decision": "blocked",
-        "evidence": "self-hosted/customer-images.yaml",
+        "decision": "approved",
+        "evidence": "https://github.com/AgentWorkforce/relay-dashboard/blob/main/LICENSE (Apache-2.0; package.json license Apache-2.0; image label org.opencontainers.image.licenses=Apache-2.0)",
         "id": "relay-dashboard",
-        "spdx": null
+        "spdx": "Apache-2.0"
       }
     ]
   },
+  "operationalReadiness": {
+    "loadTest": {
+      "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "chartVersion": "0.3.1",
+      "evidence": "Not yet done; planned. The supported-100 ramp, 24-hour steady run, burst, drain and fault phases in docs/operations/capacity-and-load-test.md have not run. No capacity or SLO claim is made.",
+      "imageManifestSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "result": "not-run",
+      "workloadProfile": "supported-100"
+    },
+    "observability": {
+      "alerts": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "evidence": "Not yet done; planned. No alerts are shipped or evidenced for the self-hosted stack yet.",
+        "result": "not-run"
+      },
+      "dashboards": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "evidence": "Not yet done; planned. No dashboards are shipped or evidenced for the self-hosted stack yet.",
+        "result": "not-run"
+      },
+      "runbooks": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "evidence": "Not yet done; planned. Backup/restore and pre-upgrade runbooks exist (docs/selfhost-backup-restore.md, docs/support/), but no incident runbook set has been reviewed against alerts.",
+        "result": "not-run"
+      }
+    },
+    "recovery": {
+      "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "evidence": "Not yet done; planned. A small-dataset isolated restore drill met the targets (RPO 0 s quiesced, RTO about 13 min; see upgradeRestore.restore), but the recovery gate is defined at supported-100 scale under load, which has not run.",
+      "result": "not-run",
+      "rpoMinutes": 15,
+      "rtoMinutes": 240
+    },
+    "serviceLevel": {
+      "availabilityPercent": 99.9,
+      "errorBudgetPercent": 0.1,
+      "measurementWindow": "calendar-month"
+    },
+    "supportedTier": {
+      "concurrentAgents": 50,
+      "sessionsPerDay": 10000,
+      "users": 100
+    }
+  },
   "relayHistoryMigrations": {
-    "evidence": "",
-    "imageCount": 0,
-    "sourceCount": 0,
-    "sourceRevision": "4b5839f17c5e0cd481e92712c2a1a340a1604e73"
+    "evidence": "2026-11-03 GKE drill: relayhistory-cloud 74a6e526 has 47 packages/relayhistory/db/migrations/*.sql; the image built from it (sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf, the live-proof RelayHistory image) has 47 *.sql in /app/db/migrations, and after install and after the 0.3.0 upgrade the sessions.__migrations ledger had 47 rows with 47/47 checksums equal to the file hashes (release-lane drill evidence migrations/relayhistory-previous.json, relayhistory-post-upgrade.json). This is NOT yet the RelayHistory release image: that image is unpublished (relayhistory-cloud #280 held), so the revision intentionally differs from customer-images.yaml.",
+    "imageCount": 47,
+    "sourceCount": 47,
+    "sourceRevision": "74a6e526afd2a821860afd341fb2a12907164829"
   },
   "release": {
     "branchControls": {
@@ -67,32 +116,80 @@
       "requiredStatusChecks": [],
       "requiresPullRequest": false
     },
-    "chartVersion": "0.1.0",
+    "chartVersion": "0.3.1",
     "environmentControls": {
       "name": "customer-release",
       "preventsSelfReview": false,
       "protected": false,
       "requiredApprovals": 0
     },
-    "imageManifestSha256": "sha256:ed56434f147719ac3ff9a1c72c889eb3296815a094ec6a1a463050fe92fab321",
+    "imageManifestSha256": "sha256:f87587573a1ee83a5e69da1cd73c06cbe62439188bdcfaf6393e81a99536af9e",
     "valuesFile": "charts/agent-relay/values-gcp.yaml"
   },
   "releaseDecision": "blocked",
   "schemaVersion": 1,
   "upgradeRestore": {
     "restore": {
-      "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      "chartVersion": "0.1.0",
-      "evidence": "",
-      "imageManifestSha256": "sha256:f646c0c9371b623e4bbdc301793e32887f9c32ea04d1206fffab1d1a69f95fff",
-      "result": "not-run"
+      "artifactSha256": "sha256:7bd437ce495b8d1a87b6cb8ac0adc443690268b91ed5b38766d0ed2dd82147d6",
+      "chartVersion": "0.1.1",
+      "evidence": "2026-11-03 GKE drill: charts/agent-relay/scripts/gcp-recovery-backup.sh captured ar-20261103T181010Z-manual with writes quiesced (writesQuiesced=true, artifactsComplete=true; Cloud SQL backup + 3 exports, 2 Retain PVC snapshots, GCS copy, locked 35-day archive). Restored into a separate Cloud SQL instance, bucket, namespace and PVCs from imported snapshots; all 7 verification gates in docs/selfhost-backup-restore.md passed (Cloud SQL ledgers/roles, Relaycast and RelayAuth PRAGMA integrity_check ok, GCS names/sizes/CRC32C, isolated two-agent ping/reply, session list/replay/search, idempotent delivery retry, cross-workspace denial, no production references). RPO 0 s (quiesced), RTO 387 s to Ready / 578 s to gates passed (about 769 s cold). The first delivery-gate attempt failed on a harness bug and is recorded. The restore was of the PREVIOUS release (0.1.1, its images), not 0.3.0. Artifact: drill-restore-ar-20261103T181010Z-manual.tar.gz.",
+      "imageManifestSha256": "sha256:91d7a00c271cd4476e0d76786fa3b0a39e0a9bff82b50c9d91c92314961e4615",
+      "result": "pass"
     },
     "upgrade": {
-      "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      "chartVersion": "0.1.0",
-      "evidence": "",
-      "imageManifestSha256": "sha256:f646c0c9371b623e4bbdc301793e32887f9c32ea04d1206fffab1d1a69f95fff",
-      "result": "not-run"
+      "artifactSha256": "sha256:ef818a389f0249c96e81feeb9602fa6bd51e0807ea773931fd5d77501345c820",
+      "chartVersion": "0.3.0",
+      "evidence": "2026-11-03 GKE drill, isolated namespace: helm upgrade from agent-relay 0.1.1 (helm-charts db747f1) to the release candidate, then versioned 0.3.0 (before the upstream 96bulls -> sessions-pipeline chart rename that the published 0.3.1 also contains) with values-gcp.yaml plus a drill overlay, gated by scripts/selfhost/pre-upgrade-check.sh (rc=0, recovery set ar-20261103T181010Z-manual, backward-compatible, side-by-side-restore). Pods Ready in 23 s, no migration re-run; 17/17 post-upgrade checks passed (Relaycast DM + agents, control-plane org + workspaces, session list/replay/search, sessions pipeline, cross-workspace denial, dashboard healthz + runtime-config, API/History/Relaycast health). PARTIAL against this manifest: the dashboard ran the release image, relaycast and relayauth the release pins; selfhost-api ran the previous image (release package private, not pullable), RelayHistory and Sessions ran live-proof images (release images unpublished). imageManifestSha256 is the sha256 of the drill image overlay actually used, so the gate correctly reports it as not tested against customer-images.yaml. Artifact: drill-upgrade-agent-relay-drill-0.1.1-to-0.3.0.tar.gz.",
+      "imageManifestSha256": "sha256:b7ad799d62eda821985a9c0adba5f19dce8a20f1ae472587423807fbef69ca02",
+      "result": "pass"
     }
+  },
+  "versionCompatibility": {
+    "desktopCurrentVersion": "unreleased-custom-origin",
+    "desktopPreviousVersion": "none",
+    "matrix": {
+      "serverCurrentDesktopCurrent": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "desktopVersion": "unreleased-custom-origin",
+        "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
+        "result": "not-run",
+        "serverVersion": "0.3.1",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      },
+      "serverCurrentDesktopPrevious": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "desktopVersion": "none",
+        "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
+        "result": "not-run",
+        "serverVersion": "0.3.1",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      },
+      "serverPreviousDesktopCurrent": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "desktopVersion": "unreleased-custom-origin",
+        "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
+        "result": "not-run",
+        "serverVersion": "0.1.1",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      },
+      "serverPreviousDesktopPrevious": {
+        "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "desktopVersion": "none",
+        "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
+        "result": "not-run",
+        "serverVersion": "0.1.1",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      }
+    },
+    "serverCurrentVersion": "0.3.1",
+    "serverPreviousVersion": "0.1.1"
   }
 }

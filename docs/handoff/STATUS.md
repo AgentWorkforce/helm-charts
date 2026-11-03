@@ -1,7 +1,7 @@
 # Release status: what is proven and what is preview
 
-Release: `agent-relay` chart __CHART_VERSION__ (OCI `oci://ghcr.io/agentworkforce/charts/agent-relay`,
-version __CHART_VERSION__), 2026-11-03.
+Release: `agent-relay` chart 0.3.1 (OCI `oci://ghcr.io/agentworkforce/charts/agent-relay`,
+version 0.3.1), 2026-11-03.
 
 This release is for **review by a company evaluating a self-hosted Agent Relay
 on GCP**. It is a reviewable, digest-pinned, `portable-single` release. It is not
@@ -16,9 +16,9 @@ This archive is therefore labelled a development preview.
 |---|---|
 | Licensing | Every first-party image repository is Apache-2.0 at the image source revision. The chart repository is Apache-2.0. The third-party PostgreSQL image (CloudNativePG) is Apache-2.0 packaging. See `self-hosted/customer-release-evidence.json` (`licenses.firstParty`). |
 | Image supply chain | Each image is built by its repository's release workflow from a reviewed commit on `main` and pushed to `ghcr.io/agentworkforce/*` with an SBOM and max-mode provenance. Revisions, runs, digests and platforms are in `self-hosted/customer-images.yaml`. |
-| Chart publication | The chart is published to GHCR as an OCI artifact from the `agent-relay-__CHART_VERSION__` tag, with GitHub build-provenance attestation (`release-agent-relay.yml`). |
+| Chart publication | The chart is published to GHCR as an OCI artifact from the `agent-relay-0.3.1` tag, with GitHub build-provenance attestation (`release-agent-relay.yml`). |
 | End-to-end function on GKE | The reference GKE deployment passes all 15 end-to-end cases: single-org control plane, workspace isolation on 28 routes, session erasure, Relaycast messaging, the sessions API, admin env vars and audit, flows on an in-namespace worker, and the dashboard. See `docs/handoff/evidence/gke-e2e.md`. The harness is in `scripts/selfhost/`. |
-| Upgrade and restore drills | __DRILL_SUMMARY__ |
+| Upgrade and restore drills | An isolated GKE drill ran a quiesced backup, a restore into separate Cloud SQL, GCS, PVCs and namespace (all 7 verification gates PASS; RPO 0 s, RTO about 10-13 min), the pre-upgrade gate (OK), and an upgrade from 0.1.1 to the release candidate (17/17 checks PASS; run before the Sessions chart rename that the final 0.3.1 also contains). It is partial against the release images: the control-plane API, RelayHistory and Sessions ran pre-release images. See `docs/handoff/evidence/gke-upgrade-restore-drills.md`. |
 
 ## Preview (shipped as documentation, not in the release matrix)
 
@@ -47,4 +47,18 @@ These gate items are open. None of them is claimed.
   41606660810), but it is not merged or released yet.
 - **High availability**: Relaycast and RelayAuth are single-writer SQLite
   workloads on RWO volumes.
-__EXTRA_GAPS__
+- **Pending release images**: RelayHistory (its self-host runtime PR is held
+  because merging deploys hosted production) and the attested Sessions
+  services image (needs the owner's publish dispatch). Both stay REQUIRED
+  OVERRIDE in `values-gcp.yaml`. The Relaycast image has no SBOM yet; its
+  attested rebuild is held for the same reason. The control-plane API image
+  is published but its package is not public yet.
+- **Session ingest auth**: couriers need machine-bound History assertions. The
+  interim RelayAuth bearer is refused unless the operator opts in
+  (`ALLOW_INTERIM_RELAYAUTH_BEARER`), which the customer profile leaves off,
+  and the drills did not test without it.
+- **Dashboard API prefix**: the self-host dashboard only talks to the
+  same-origin `/cloud/api` prefix (route `/cloud/api` and `/login` to the
+  control-plane API).
+- **Customer release gate**: `python3 scripts/release/validate-customer-release.py`
+  fails closed on the items above. Its output is recorded with the release.

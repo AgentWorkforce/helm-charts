@@ -37,9 +37,9 @@ gkeIngress:
 relaycast:
   fullnameOverride: relaycast
   image:
-    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
-    repository: us-central1-docker.pkg.dev/example-project/example-images/relaycast
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # Release image (public GHCR, relaycast bdf1b69; an SBOM-attested rebuild is pending relaycast #619). Mirror by digest and override repository.
+    repository: ghcr.io/agentworkforce/relaycast-self-host
+    digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
   # REQUIRED OVERRIDE: must use the same cast host as gkeIngress.hosts.cast.
   baseUrl: https://cast.placeholder.company
   # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
@@ -83,9 +83,9 @@ relaycast:
 relayauth:
   fullnameOverride: relayauth
   image:
-    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
-    repository: us-central1-docker.pkg.dev/example-project/example-images/relayauth
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # Release image (public GHCR). Mirror it by digest to your registry and override repository.
+    repository: ghcr.io/agentworkforce/relayauth
+    digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288
   baseUrl: http://relayauth:8787
   issuer: http://relayauth:8787
   # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
@@ -113,8 +113,10 @@ relayauth:
 sessions-pipeline:
   worker:
     image:
-      # REQUIRED OVERRIDE: repository path under global.imageRegistry and digest.
-      repository: example-project/example-images/sessions-services
+      # PENDING: the SBOM-attested Sessions release image waits on Khaliq's
+      # publish-image dispatch. REQUIRED OVERRIDE until it is pinned here: a
+      # fully qualified repository (or a path under global.imageRegistry) and digest.
+      repository: ghcr.io/agentworkforce/96bulls-services
       digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
     # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
     existingSecret: example-agent-relay-secrets
@@ -163,8 +165,8 @@ sessions-pipeline:
       functionBoundaryMode: global-default-revoke
   alleyoop:
     image:
-      # REQUIRED OVERRIDE: same services image repository and digest as worker.
-      repository: example-project/example-images/sessions-services
+      # Same services image repository and digest as worker.
+      repository: ghcr.io/agentworkforce/96bulls-services
       digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
     # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
     existingSecret: example-agent-relay-secrets
@@ -183,6 +185,12 @@ sessions-pipeline:
     extraEnv: *sessionsGcsDataPath
     auth:
       jwksUrl: http://relayauth:8787/.well-known/jwks.json
+      # Must equal relayauth.issuer; the chart default (https://96bulls.local)
+      # rejects every RelayAuth-signed courier assertion.
+      issuer: http://relayauth:8787
+      # REQUIRED OVERRIDE: the bare origin couriers use as the History
+      # assertion audience (byte-equal to RELAYAUTH_HISTORY_ORIGIN).
+      historyOrigin: https://history.placeholder.company
   hoopdb:
     enabled: false
   locker:
@@ -191,8 +199,8 @@ sessions-pipeline:
 relayhistory:
   fullnameOverride: relayhistory
   image:
-    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
-    repository: us-central1-docker.pkg.dev/example-project/example-images/relayhistory
+    # PENDING: the RelayHistory release image is not published yet (relayhistory-cloud #280 is held). REQUIRED OVERRIDE until it is: an approved image digest.
+    repository: ghcr.io/agentworkforce/relayhistory
     digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
   database:
     # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
@@ -220,9 +228,9 @@ relayhistory:
 relay-cloud-api:
   fullnameOverride: relay-cloud-api
   image:
-    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
-    repository: us-central1-docker.pkg.dev/example-project/example-images/control-api
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # Release image (GHCR, relaycontrol 8e989a1). Mirror it by digest to your registry and override repository.
+    repository: ghcr.io/agentworkforce/selfhost-api
+    digest: sha256:535e6718fa239ce87dead3d22e7c53324bed44bfcef94018918e8804d24af478
   database:
     runtimeRole: control_api_runtime
   # Non-secret id of the encryption key (SELFHOST_ENCRYPTION_KEY_ID), stored
@@ -261,9 +269,9 @@ relay-cloud-api:
 relay-dashboard:
   fullnameOverride: relay-dashboard
   image:
-    # REQUIRED OVERRIDE: customer-accessible image mirror and immutable digest.
-    repository: us-central1-docker.pkg.dev/example-project/example-images/dashboard
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # Release image (public GHCR). Mirror it by digest to your registry and override repository.
+    repository: ghcr.io/agentworkforce/relay-dashboard
+    digest: sha256:bbeca872c7e204a02a17050db6ac6309c6d36a07bcd00e1da3a739923f990282
   runtime:
     # REQUIRED OVERRIDE: publicUrl must use gkeIngress.hosts.root.
     publicUrl: https://dashboard.placeholder.company

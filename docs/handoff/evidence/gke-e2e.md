@@ -12,7 +12,7 @@ and the install's public origins.
   Pub/Sub, a global external Application Load Balancer with Google-managed
   certificates on four hosts (dashboard, api, cast, history).
 - Components: relaycontrol (self-host control-plane API), Relay Dashboard,
-  Relaycast, RelayAuth, RelayHistory, 96Bulls Sessions, plus an in-namespace
+  Relaycast, RelayAuth, RelayHistory, Sessions Pipeline, plus an in-namespace
   relayflows worker for the flows case.
 
 ## Result
