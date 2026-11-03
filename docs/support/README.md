@@ -12,9 +12,11 @@ Secret, which holds the rendered manifest and values. The collector never
 requests a Secret itself and keeps only curated fields and a redacted
 fingerprint, but the Secret is read. The bundle's `manifest.json` says so:
 `secretResourcesRead: true`, `secretResourcesReadBy: ["helm-release-storage"]`,
-and `helmStorageDriver`. The collector's identity therefore needs `get` and
-`list` on Secrets in the release namespace; without them the Helm sections are
-recorded in `collection-errors.json`. Grant that only to identities trusted
+and `helmStorageDriver`. The collector's identity therefore needs `list` on Secrets in the release
+namespace: these commands read the latest release through Helm's release query,
+which lists the release's Secrets by label, and the collector never asks for a
+specific revision, so `get` on Secrets is not needed. Without `list` the Helm
+sections are recorded in `collection-errors.json`. Grant that only to identities trusted
 with the release's values.
 
 ## Usage

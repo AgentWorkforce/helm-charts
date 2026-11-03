@@ -160,8 +160,9 @@ jq -e '
 ## GKE resource expectations
 
 The networking scenario checks the resources the charts actually deploy: a
-GCE Ingress with a ManagedCertificate and FrontendConfig, whose health checks
-are derived from readiness probes. It does not look for `BackendConfig` or
+GCE Ingress with a ManagedCertificate, whose health checks are derived from
+readiness probes. The charts may also attach a `FrontendConfig`, but the
+scenario does not validate it, and it does not look for `BackendConfig` or
 `HealthCheckPolicy`. It passes only when:
 
 - at least one `NetworkPolicy` exists in the namespace;

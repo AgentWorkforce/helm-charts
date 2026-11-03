@@ -100,14 +100,21 @@ The script needs `gcloud`, `kubectl`, `helm`, and `python3`. Authentication is
 GKE Workload Identity or the operator's own `gcloud` login; it has no
 credential-file path. The identity needs:
 
-- Cloud SQL backup and export rights on the instance, and write access to the
-  archive bucket;
-- Kubernetes rights to read Deployments, StatefulSets, and PVCs, and to create
-  and read `VolumeSnapshot` and `VolumeSnapshotContent` objects;
+- Cloud SQL backup and export rights on the instance;
+- read and list access to the source bucket (`GCS_SOURCE_BUCKET`), which the
+  `gcs-copy` phase copies from, plus read (bucket metadata), list, and write
+  access to the archive bucket (`GCS_ARCHIVE_BUCKET`);
+- Kubernetes rights in the release namespace to list Deployments,
+  StatefulSets, and Pods (the quiesce check), read PVCs, and create and read
+  `VolumeSnapshot` objects;
+- cluster-scoped read (`get`) on the `VolumeSnapshotClass` named by
+  `SNAPSHOT_CLASS`, which the `snapshot-policy-preflight` phase checks before
+  either snapshot is created, and on `VolumeSnapshotContent`;
 - **Helm release-storage access:** the script runs `helm status` before and
   after the capture to record the deployed revision (`sourceRevision`) and
-  fails if it changes. Helm stores releases as Secrets, so the identity needs
-  `get` and `list` on Secrets in the release namespace.
+  fails if it changes. Helm stores releases as Secrets and reads the latest
+  release by listing them by label, so the identity needs `list` on Secrets in
+  the release namespace.
 
 The archive bucket must differ from the source bucket and enforce a locked
 retention policy of at least `RETENTION_DAYS` (minimum 35), uniform
@@ -213,7 +220,7 @@ kubectl -n "$KUBERNETES_NAMESPACE" scale deploy,statefulset \
 ### 2. Run the capture
 
 ```bash
-charts/agent-relay/scripts/gcp-recovery-backup.sh
+bash charts/agent-relay/scripts/gcp-recovery-backup.sh
 ```
 
 The script snapshots both PVCs, creates the Cloud SQL backup and per-database

@@ -600,8 +600,9 @@ scenario_restart_outbox() {
 }
 
 # Print a JSON summary of GKE Ingress backend health as the charts deploy it:
-# a GCE Ingress with a ManagedCertificate and FrontendConfig, health checks
-# derived from readiness probes (no BackendConfig or HealthCheckPolicy).
+# a GCE Ingress with a ManagedCertificate, health checks derived from
+# readiness probes (a FrontendConfig, if attached, is not checked; no
+# BackendConfig or HealthCheckPolicy).
 gke_backend_health_summary() {
   local namespace="$1"
   local ingresses_json="" certificates_json=""
