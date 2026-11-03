@@ -52,6 +52,11 @@ jobs:
           helm dependency build charts/96bulls >/dev/null
           ci/96bulls-search-worker-role/render.sh
 
+      # The development-preview customer handoff builds, verifies, extracts,
+      # and its umbrella resolves every file:// dependency and renders.
+      - name: Customer handoff package smoke
+        run: ci/customer-handoff/smoke.sh
+
       # Every 96bulls profile (charts/96bulls/profiles/*.yaml and ci/*-values.yaml)
       # renders with the manifests and role bootstrap path it must produce.
       - name: 96bulls profile render matrix
