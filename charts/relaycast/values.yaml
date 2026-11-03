@@ -19,10 +19,117 @@ server:
   environment: production
 
 runtime:
-  # The released self-host image implements only the portable single-node
-  # SQLite adapter. Future HA adapters must be implemented and proven in the
-  # Relaycast engine before this chart can select them.
+  # sqlite: the released portable single-node image (one replica, SQLite and
+  #   files on one PVC).
+  # durable-actors: the Relaycast engine in one TerseAI durable-actors
+  #   `Workspace` actor per workspace, behind a stateless gateway Deployment
+  #   with the same name, Service and selector. Env contract v1:
+  #   docs/self-hosted-durable-actors.md. Requires a durable-actors control
+  #   plane (agent-relay components.durableActors) and ar_ credentials.
   backend: sqlite
+  durableActors:
+    projectId: relaycast
+    # durable-actors organization the deployer registers under.
+    organizationId: relaycast
+    # Control-plane origin. Empty: the umbrella's durable-actors release,
+    # http://<release>-durable-actors.<namespace>.svc.cluster.local:7100.
+    controlPlaneUrl: ""
+    # Optional DURABLE_ACTORS_HOME_REGION for the gateway's invocations.
+    homeRegion: ""
+    gateway:
+      image:
+        repository: ghcr.io/agentworkforce/relaycast-actors-gateway
+        # Pin a digest; a tag is accepted for local proofs only.
+        digest: ""
+        tag: ""
+        pullPolicy: IfNotPresent
+      # More than one replica requires fileStore.driver gcs or s3.
+      replicaCount: 1
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { memory: 512Mi }
+      livenessProbe:
+        httpGet: { path: /healthz, port: http }
+        periodSeconds: 20
+        timeoutSeconds: 5
+      readinessProbe:
+        httpGet: { path: /readyz, port: http }
+        periodSeconds: 10
+        timeoutSeconds: 5
+    # The gateway's invocation credential (DURABLE_ACTORS_SECRET), in its OWN
+    # Secret so an invoke-only key replaces it with a values change only.
+    # scope: admin means it is still a copy of the durable-actors admin
+    # api-key (NOT release-grade: upstream has no invoke-only key yet);
+    # invoke-only once the upstream scoped key exists.
+    invocationSecret:
+      name: ""
+      key: durable-actors-invoke-key
+      scope: admin
+    # The durable-actors admin api-key: read ONLY by the deployer Job.
+    adminKeySecret:
+      name: actors-credentials
+      key: api-key
+    # Registers the Workspace actor bundle: a plain Job named by a hash of its
+    # pod template (no Helm hook), so a new image or setting runs it again.
+    deployer:
+      enabled: true
+      image:
+        repository: ghcr.io/agentworkforce/relaycast-actors-deployer
+        digest: ""
+        tag: ""
+        pullPolicy: IfNotPresent
+      # The durable-actors storage.bucket (written through Workload Identity).
+      artifactBucket: ""
+      backoffLimit: 3
+      serviceAccount:
+        annotations: {}
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits: { memory: 1Gi }
+    # Secrets in the durable-actors SANDBOX namespace, labelled
+    # terse.ai/customer-secret=true, whose keys become actor env
+    # (DURABLE_ACTORS_SECRET_REFS): RELAYCAST_PUBLIC_URL (= baseUrl),
+    # RELAYCAST_FILE_SIGNING_SECRET, RELAYCAST_INTERNAL_SECRET and optional
+    # engine settings. Operator-provided; the chart never renders secret values.
+    actorEnvSecrets: [relaycast-actor-env]
+    # Key in existingSecret for RELAYCAST_FILE_SIGNING_SECRET (same value as
+    # the actor env secret's).
+    fileSigningSecretKey: file-signing-secret
+    # Where /_relayfiles bytes live. local needs persistence.* and one replica.
+    fileStore:
+      driver: gcs
+      bucket: ""
+      prefix: ""
+      dir: /data/files
+      s3:
+        region: us-east-1
+        endpoint: ""
+        forcePathStyle: false
+        # Secret with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY; empty uses
+        # the pod's ambient identity.
+        existingSecret: ""
+    maxUploadBytes: 67108864
+    shutdownGraceMs: 10000
+    logFormat: json
+    # kind/CI only: a `durable-actors dev` sidecar in the gateway pod running
+    # the Workspace actor (image: durable-actors TypeScript runtime + the
+    # relaycast actor project). Actors inherit the sidecar's env, so the
+    # sidecar gets RELAYCAST_PUBLIC_URL/FILE_SIGNING/INTERNAL directly. One
+    # replica, no deployer; never for production.
+    devRuntime:
+      enabled: false
+      acknowledgeNonProduction: false
+      image:
+        repository: ghcr.io/agentworkforce/relaycast-actors-dev
+        digest: ""
+        tag: ""
+        pullPolicy: IfNotPresent
+      port: 7100
+      # Key in existingSecret holding the dev runtime's DURABLE_ACTORS_SECRET.
+      secretKey: durable-actors-dev-secret
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits: { memory: 2Gi }
 
 # REQUIRED. Relaycast embeds this origin in signed file URLs and A2A cards.
 # By default it must be an HTTPS origin with public, multi-label DNS, without a

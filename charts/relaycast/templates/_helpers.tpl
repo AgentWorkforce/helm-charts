@@ -71,10 +71,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "relaycast.validate" -}}
 {{- if ne (int .Values.replicaCount) 1 }}
-{{- fail "replicaCount must be 1: Relaycast self-host stores SQLite and uploaded files on one persistent volume" }}
+{{- fail "replicaCount must be 1: Relaycast self-host stores SQLite and uploaded files on one persistent volume (runtime.backend=durable-actors scales runtime.durableActors.gateway.replicaCount instead)" }}
 {{- end }}
-{{- if ne .Values.runtime.backend "sqlite" }}
-{{- fail "runtime.backend must be sqlite: no HA Relaycast backend has been released and proven yet" }}
+{{- if not (has (toString .Values.runtime.backend) (list "sqlite" "durable-actors")) }}
+{{- fail "runtime.backend must be sqlite or durable-actors" }}
+{{- end }}
+{{- if eq (toString .Values.runtime.backend) "durable-actors" }}
+{{- include "relaycast.actors.validate" . }}
 {{- end }}
 {{- if not .Values.baseUrl }}
 {{- fail "baseUrl is required: the HTTPS origin clients use, or an http:// cluster-internal origin with allowInsecureBaseUrl=true" }}
