@@ -8,7 +8,10 @@ settings are passed with `DASHBOARD_PUBLIC_URL`, `DASHBOARD_APP_PATH`,
 The browser calls `runtime.apiBasePath` (default `/cloud/api`) on its current
 origin. When ingress is enabled, the chart routes `runtime.apiBasePath` and
 `runtime.loginPath` to `api.serviceName` and `/` to the dashboard.
-The API Service must exist in the same namespace. The separate
+`api.serviceName` has no default and is required with ingress: set it to the
+relay-cloud-api Service in the same namespace, which is that release's
+fullname (`<release>-relay-cloud-api`, or its `fullnameOverride`; for example
+`api-relay-cloud-api` after `helm install api charts/relay-cloud-api`). The separate
 `relay-cloud-api` ingress can expose that same Service on an `api.` host.
 
 The current dashboard image is a single static replica. This chart makes no HA

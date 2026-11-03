@@ -33,7 +33,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if not .Values.ingress.host }}{{ fail "ingress.host is required when ingress.enabled=true" }}{{ end -}}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" .Values.ingress.host) }}{{ fail "ingress.host must be a DNS hostname" }}{{ end -}}
 {{- if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end -}}
-{{- if not .Values.api.serviceName }}{{ fail "api.serviceName is required; runtime.apiBasePath must fail closed to relay-cloud-api" }}{{ end -}}
+{{- if not .Values.api.serviceName }}{{ fail "api.serviceName is required when ingress.enabled=true: set it to the relay-cloud-api Service name (its fullname, <release>-relay-cloud-api unless fullnameOverride is set)" }}{{ end -}}
 {{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end -}}
 {{- end -}}
 {{- end -}}
