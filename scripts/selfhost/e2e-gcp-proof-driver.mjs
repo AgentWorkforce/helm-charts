@@ -165,6 +165,9 @@ async function checkRelaycastInternal() {
   must(capabilities.status === 200, `relaycast /internal/capabilities status=${capabilities.status} error=${errorCode(capabilities)} (mode=${state.relaycast?.mode})`);
   const admin = rcData(capabilities)?.workspace_admin;
   must(!admin || admin.create !== false, "relaycast reports workspace_admin.create=false");
+  // Cleanup deletes what bootstrap creates, so a Relaycast that cannot
+  // delete workspaces is refused before anything is created.
+  must(!admin || admin.delete !== false, "relaycast reports workspace_admin.delete=false; the run could not clean up its workspaces");
   return admin ? `create=${admin.create} delete=${admin.delete}` : "workspace_admin=unreported";
 }
 
@@ -179,7 +182,9 @@ async function createRelaycastWorkspace(label) {
       timeoutMs,
     });
   } catch (error) {
-    throw new CheckError(`relaycast internal create (${label}) failed after ${Date.now() - started}ms: ${error?.name === "TimeoutError" ? `timeout ${timeoutMs}ms` : error?.message}`);
+    // The create may still commit server-side; Relaycast has no lookup by
+    // name, so name the possible orphan for manual removal.
+    throw new CheckError(`relaycast internal create (${label}) failed after ${Date.now() - started}ms: ${error?.name === "TimeoutError" ? `timeout ${timeoutMs}ms` : error?.message}; a workspace named e2e-${state.marker}-${label} may exist and need manual deletion`);
   }
   const ms = Date.now() - started;
   must(rc.status === 201, `relaycast internal create (${label}) status=${rc.status} error=${errorCode(rc)} after ${ms}ms`);
@@ -1538,45 +1543,82 @@ async function phaseMint96bulls() {
 // resources (404) count as removed.
 async function cleanupResources() {
   const a = state.a;
-  const resources = state.resources ?? {};
+  const caps = state.capabilities ?? {};
   const removed = [];
   if (!a?.accessToken) return removed;
-  for (const name of [...(resources.workerNames ?? [])]) {
-    const workers = await call("GET", `${API}/api/v1/workers`, { token: a.accessToken });
-    must(workers.status === 200 && Array.isArray(workers.json?.workers), `worker list status=${workers.status}`);
-    for (const worker of workers.json.workers.filter((entry) => entry.name === name && entry.status !== "revoked")) {
+  // Discover leftovers by the run's unique marker as well as from the tracked
+  // list: the tracked list lives in the driver's memory for the length of a
+  // phase, so a phase interrupted mid-way never hands it back.
+  const prefix = `e2e-${state.marker}`;
+  const envTag = state.marker.toUpperCase();
+  const list = async (url, pick) => {
+    const response = await call("GET", url, { token: a.accessToken });
+    must(response.status === 200, `list ${url.replace(API, "")} status=${response.status}`);
+    return pick(response.json) ?? [];
+  };
+  const tracked = (kind) => state.resources?.[kind] ?? [];
+  if (caps.flows) {
+    const workers = await list(`${API}/api/v1/workers`, (json) => json.workers);
+    for (const worker of workers.filter((w) => w.status !== "revoked" &&
+      (w.name?.startsWith(prefix) || tracked("workerNames").includes(w.name)))) {
       const revoked = await call("DELETE", `${API}/api/v1/workers/${worker.id}`, { token: a.accessToken });
       must([200, 404].includes(revoked.status), `worker ${worker.id} revoke status=${revoked.status}`);
       removed.push(`worker:${worker.id}`);
     }
-    untrack("workerNames", name);
-  }
-  const sweep = async (kind, url, label) => {
-    for (const id of [...(resources[kind] ?? [])]) {
-      const response = await call("DELETE", url(id), { token: a.accessToken });
-      must([200, 404].includes(response.status), `${label} ${id} delete status=${response.status}`);
-      if (response.status === 200) removed.push(`${label}:${id}`);
-      untrack(kind, id);
+    const tokens = await list(`${API}/api/v1/workers/enrollment-tokens`, (json) => json.tokens);
+    const tokenIds = new Set([...tracked("enrollmentTokens"),
+      ...tokens.filter((t) => t.name?.startsWith(prefix) && t.status !== "used" && t.status !== "revoked").map((t) => t.id)]);
+    for (const id of tokenIds) {
+      const response = await call("DELETE", `${API}/api/v1/workers/enrollment-tokens/${id}`, { token: a.accessToken });
+      must([200, 404].includes(response.status), `enrollment token ${id} revoke status=${response.status}`);
+      if (response.status === 200) removed.push(`enrollment_token:${id}`);
     }
-  };
-  await sweep("enrollmentTokens", (id) => `${API}/api/v1/workers/enrollment-tokens/${id}`, "enrollment_token");
-  await sweep("flows", (id) => `${API}/api/v1/flows/${id}`, "flow");
-  await sweep("envVars", (name) => `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${name}`, "env_var");
+    const flows = await list(`${API}/api/v1/flows`, (json) => json.flows);
+    const flowIds = new Set([...tracked("flows"), ...flows.filter((f) => f.name?.startsWith(prefix)).map((f) => f.id)]);
+    for (const id of flowIds) {
+      const response = await call("DELETE", `${API}/api/v1/flows/${id}`, { token: a.accessToken });
+      must([200, 404].includes(response.status), `flow ${id} delete status=${response.status}`);
+      if (response.status === 200) removed.push(`flow:${id}`);
+    }
+  }
+  if (caps.admin) {
+    const vars = await list(`${API}/api/v1/workspaces/${a.workspaceId}/secrets`, (json) => json.data?.items);
+    const names = new Set([...tracked("envVars"), ...vars.filter((v) => v.name?.includes(envTag)).map((v) => v.name)]);
+    for (const name of names) {
+      const response = await call("DELETE", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${name}`, { token: a.accessToken });
+      must([200, 404].includes(response.status), `env var ${name} delete status=${response.status}`);
+      if (response.status === 200) removed.push(`env_var:${name}`);
+    }
+  }
+  state.resources = {};
   return removed;
 }
 
 // Case 15, and the shell's EXIT trap after an interruption. Every step is
 // recorded in state.cleaned so a second invocation only finishes what is left.
+// Each step is attempted even when an earlier one fails, so one bad delete
+// never leaves the Relaycast workspaces or device sessions behind.
+async function step(check, run) {
+  try {
+    await run();
+  } catch (error) {
+    fail(check, error instanceof CheckError ? error.message : `unexpected: ${error?.message ?? error}`);
+  }
+}
+
 async function phaseCleanup() {
   state.cleaned ??= {};
   if (!state.cleaned.resources) {
-    const removed = await cleanupResources();
-    state.cleaned.resources = true;
-    pass("cleanup.control_plane_resources", removed.length ? `removed=${removed.join(",")}` : "leftover=0");
+    await step("cleanup.control_plane_resources", async () => {
+      const removed = await cleanupResources();
+      state.cleaned.resources = true;
+      pass("cleanup.control_plane_resources", removed.length ? `removed=${removed.join(",")}` : "leftover=0");
+    });
   }
   for (const label of ["a", "b"]) {
     const tenant = state[label];
     if (!tenant?.relaycastWorkspaceId || state.cleaned[`relaycast_${label}`]) continue;
+    await step(`cleanup.relaycast_${label}`, async () => {
     const response = await call("DELETE", `${RELAYCAST}/internal/workspaces/${tenant.relaycastWorkspaceId}`, {
       token: secrets.relaycastInternalSecret,
       timeoutMs: state.relaycast?.createTimeoutMs ?? 180_000,
@@ -1584,12 +1626,14 @@ async function phaseCleanup() {
     must(response.status === 204 || response.status === 200, `delete relaycast workspace ${label} status=${response.status} (mode=${state.relaycast?.mode})`);
     state.cleaned[`relaycast_${label}`] = true;
     pass(`cleanup.relaycast_${label}`, `deleted=${tenant.relaycastWorkspaceId}`);
+    });
   }
   // Revoke the device sessions the run minted; revocation covers both the
   // access and the refresh token of the session.
   for (const label of ["a", "b"]) {
     const tenant = state[label];
     if (!tenant?.accessToken || state.cleaned[`tokens_${label}`]) continue;
+    await step(`cleanup.tokens_${label}`, async () => {
     const revoked = await call("POST", `${API}/api/v1/auth/token/revoke`, { body: { token: tenant.accessToken } });
     must(revoked.status === 200 && revoked.json?.revoked === true, `revoke ${label} status=${revoked.status}`);
     const who = await call("GET", `${API}/api/v1/auth/whoami`, { token: tenant.accessToken });
@@ -1597,6 +1641,7 @@ async function phaseCleanup() {
     must(who.status === 401 && refresh.status === 403, `after revoke ${label} whoami=${who.status} refresh=${refresh.status}`);
     state.cleaned[`tokens_${label}`] = true;
     pass(`cleanup.tokens_${label}`, `revoked=true whoami_after=${who.status} refresh_after=${refresh.status}`);
+    });
   }
   if (!state.a?.workspaceId || !state.b?.workspaceId || state.cleaned.workspaces) return;
   // relaycontrol has no workspace (or user) delete route, so the two test

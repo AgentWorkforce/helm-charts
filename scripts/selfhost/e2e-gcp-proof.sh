@@ -200,7 +200,8 @@ remove_worker() {
 CLEANUP_RAN=false
 cleanup_exit() {
   remove_worker
-  if $CLEANUP && ! $CLEANUP_RAN && [[ -s "$STATE" && -n "$(state_get a.relaycastWorkspaceId 2>/dev/null)" ]]; then
+  if $CLEANUP && ! $CLEANUP_RAN && [[ -s "$STATE" ]] &&
+    [[ -n "$(state_get a.relaycastWorkspaceId 2>/dev/null)$(state_get b.relaycastWorkspaceId 2>/dev/null)" ]]; then
     CLEANUP_RAN=true
     printf '\n== interrupted: cleanup (%s)\n' "$(date -u +%FT%TZ)"
     run_phase cleanup
@@ -479,6 +480,11 @@ printf 'E2E_PUBLIC_READY=%s\n' "$PUBLIC_READY"
 # public_gate <check prefix>: 0 when the case may use the public edge;
 # otherwise records a FAIL (--require-public) or SKIPs the case.
 public_gate() {
+  # A certificate that turned Active since the preflight is picked up here.
+  if ! $SKIP_PUBLIC && ! $PUBLIC_READY && [[ "$(cert_status)" == "Active " ]]; then
+    PUBLIC_READY=true
+    PUBLIC_STATUS="status=Active (became Active after the preflight)"
+  fi
   if $SKIP_PUBLIC; then
     case_skip "--skip-public"
   elif $PUBLIC_READY; then
@@ -623,6 +629,9 @@ case_end 9 "erasure: session removed from list, replay, search and turns"
 # ---------------------------------------------------------------- case 10
 
 case_begin 10 "public edge"
+if ! $SKIP_PUBLIC && ! $PUBLIC_READY && [[ "$(cert_status)" == "Active " ]]; then
+  PUBLIC_READY=true
+fi
 if $SKIP_PUBLIC; then
   case_skip "--skip-public"
 elif ! $PUBLIC_READY; then
