@@ -131,7 +131,10 @@ expect_leaf_failure_early() { # expected helm-args...
 }
 expect_leaf_failure_early "not both" --set service.backendConfig=x-api \
   --set-json 'service.annotations={"cloud.google.com/backend-config":"{\"default\":\"x-api\"}"}'
-expect_leaf_failure_early "service.backendConfig must be a BackendConfig name" --set service.backendConfig=Bad_Name
+for bad in 'service.backendConfig=Bad_Name' 'service.backendConfig=0' 'service.backendConfig=false'; do
+  expect_leaf_failure_early "service.backendConfig must be a BackendConfig name" --set "$bad"
+done
+expect_leaf_failure_early "contain google" --set flows.storage=gcs --set flows.gcsBucket=my-google-flows
 expect_umbrella_failure "flows.queuePingMs must be below gkeIngress.backends.api.timeoutSec" \
   --set gkeIngress.backends.api.timeoutSec=60 --set relay-cloud-api.flows.queuePingMs=60000
 # encryption.keyId is required (relaycontrol crash-loops without it).

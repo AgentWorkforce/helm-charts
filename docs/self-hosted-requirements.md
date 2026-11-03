@@ -1613,7 +1613,7 @@ ingress denies /internal on the api host.
 - Values: `secretKeys.internalToken`
 - Env: `SELFHOST_INTERNAL_TOKEN_FILE`
 - Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.internalToken` (optional: enables /internal/v1 (flows env delivery, telemetry issue reports))
-- Verify: kubectl exec deploy/relay-cloud-api -- sh -c 'test -s "$SELFHOST_INTERNAL_TOKEN_FILE"' (expanded inside the pod); curl https://<api host>/internal/v1/... is refused at the edge
+- Verify: kubectl exec deploy/<release>-relay-cloud-api (or the fullnameOverride, relay-cloud-api in the agent-relay GCP profiles) -- sh -c 'test "$(tr -d "\r\n" < "$SELFHOST_INTERNAL_TOKEN_FILE" \| wc -c)" -ge 32' (expanded inside the pod; at least 32 bytes); curl https://<api host>/internal/v1/... is refused at the edge
 - Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl), [`charts/agent-relay/templates/gke-ingress.yaml`](../charts/agent-relay/templates/gke-ingress.yaml)
 
 #### opt.relay-cloud-api.dashboard-url

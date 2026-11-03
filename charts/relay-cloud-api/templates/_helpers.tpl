@@ -156,7 +156,7 @@ at startup is refused at render time instead of crash-looping. */ -}}
 {{- if not (regexMatch "^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$" $bucket) }}{{ fail "flows.gcsBucket must be a GCS bucket name: 3-222 lowercase letters, digits, dots, dashes and underscores, starting and ending with a letter or digit" }}{{ end -}}
 {{- if and (not (contains "." $bucket)) (gt (len $bucket) 63) }}{{ fail "flows.gcsBucket must be at most 63 characters unless it is a dotted name" }}{{ end -}}
 {{- range $part := splitList "." $bucket }}{{ if or (empty $part) (gt (len $part) 63) (not (regexMatch "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$" $part)) }}{{ fail "flows.gcsBucket dotted components must each be 1-63 characters and start and end with a letter or digit" }}{{ end }}{{ end -}}
-{{- if or (hasPrefix "goog" $bucket) (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$" $bucket) }}{{ fail "flows.gcsBucket must not start with goog or be an IP address" }}{{ end -}}
+{{- if or (hasPrefix "goog" $bucket) (contains "google" $bucket) (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$" $bucket) }}{{ fail "flows.gcsBucket must not start with goog, contain google, or be an IP address" }}{{ end -}}
 {{- end -}}
 {{- with .Values.flows.workerRelaycastUrl }}{{ if not (regexMatch "^https?://[^/?#@\\s]+(/[^?#\\s]*)?$" .) }}{{ fail "flows.workerRelaycastUrl must be an absolute http(s) URL without credentials, query or fragment" }}{{ end }}{{ end -}}
 {{- if not (kindIs "invalid" .Values.flows.queuePingMs) }}{{ if ne (toString .Values.flows.queuePingMs) "" }}
