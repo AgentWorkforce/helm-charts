@@ -47,6 +47,8 @@ INCLUDE_TREES = (
     "docs/diagrams",
     "docs/handoff",
     "docs/licenses",
+    "docs/operations",
+    "docs/support",
     "scripts/conformance",
     "scripts/release",
     "scripts/selfhost",
@@ -55,6 +57,7 @@ INCLUDE_TREES = (
 INCLUDE_FILES = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
+    "docs/self-hosted-durable-actors.md",
     "docs/self-hosted-image-supply-chain.md",
     "docs/self-hosted-reference-architecture.md",
     "docs/self-hosted-relayflows.md",
