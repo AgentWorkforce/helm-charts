@@ -240,7 +240,7 @@ class CommandRunner:
             text=True,
             timeout=self.timeout,
             shell=False,
-            env={**os.environ, "HELM_DRIVER": os.environ.get("HELM_DRIVER", "secret")},
+            env={**os.environ, "HELM_DRIVER": helm_driver()},
         )
 
     def run_json(self, argv: list[str]) -> Any:
@@ -257,6 +257,22 @@ class CommandRunner:
         if result.returncode:
             raise CollectionError("read-only command failed")
         return result.stdout
+
+
+def helm_driver() -> str:
+    return os.environ.get("HELM_DRIVER") or "secret"
+
+
+def helm_storage_reads_secrets(driver: str) -> bool:
+    """Whether Helm reads release records from Kubernetes Secrets.
+
+    helm status/get values/history load the release record, which with the
+    default driver is a sh.helm.release.v1 Secret holding the rendered
+    manifest and values. The collector keeps only curated fields and a
+    redacted fingerprint, but the Secret itself is read and the collector's
+    identity needs get/list on Secrets in the release namespace.
+    """
+    return driver.lower() in {"secret", "secrets"}
 
 
 @dataclass
@@ -915,7 +931,18 @@ def collect(options: Options, runner: CommandRunner) -> tuple[dict[str, Any], di
         "release": options.release,
         "selector": options.selector,
         "readOnly": True,
-        "secretResourcesRead": False,
+        # Honest accounting: Kubernetes Secrets are never requested directly,
+        # but Helm reads its release-storage Secret for status, values and
+        # history. Only curated fields leave memory.
+        "secretResourcesRead": helm_storage_reads_secrets(helm_driver()),
+        "secretResourcesReadBy": (
+            ["helm-release-storage"]
+            if helm_storage_reads_secrets(helm_driver())
+            else []
+        ),
+        "helmStorageDriver": helm_driver(),
+        "kubernetesSecretsCollected": False,
+        "secretPayloadsIncluded": False,
         "passwordBearingUrlsBlocked": True,
         "rawLogsIncluded": False,
         "rawManifestsIncluded": False,

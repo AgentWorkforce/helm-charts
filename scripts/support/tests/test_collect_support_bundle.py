@@ -305,6 +305,22 @@ class MockedCollectionTests(unittest.TestCase):
             documents["migration-ledger-status.json"]["databaseRowsRead"]
         )
 
+    def test_manifest_reports_helm_release_storage_secret_reads(self):
+        runner = mock.create_autospec(support_bundle.CommandRunner, instance=True)
+        runner.run_json.side_effect = support_bundle.CollectionError("offline")
+        runner.run_text.return_value = ""
+        for driver, expected in (("", True), ("secret", True), ("configmap", False)):
+            with self.subTest(driver=driver):
+                with mock.patch.dict(support_bundle.os.environ, {"HELM_DRIVER": driver}):
+                    _, manifest = support_bundle.collect(self.options, runner)
+                self.assertIs(manifest["secretResourcesRead"], expected)
+                self.assertEqual(
+                    manifest["secretResourcesReadBy"],
+                    ["helm-release-storage"] if expected else [],
+                )
+                self.assertFalse(manifest["kubernetesSecretsCollected"])
+                self.assertFalse(manifest["secretPayloadsIncluded"])
+
 
 if __name__ == "__main__":
     unittest.main()
