@@ -48,6 +48,8 @@ REQUIRE_PUBLIC=false
 CERT_WAIT=0
 PIPELINE_TIMEOUT=300
 CLEANUP=true
+ALLOWED_GAPS=()
+KNOWN_GAPS=(relayhistory-turns-erasure)
 SKIP_FLOWS=false
 EDGE_WAIT=900
 WORKER_WAIT=600
@@ -85,6 +87,9 @@ Options:
                               (default 600)
       --worker-image IMAGE    worker Pod image (default node:22.23.3-bookworm-slim)
       --agent-relay-version V agent-relay CLI the worker runs (default 12.4.1)
+      --allow-known-gap NAME  report a documented product gap as SKIP instead of
+                              FAIL (repeatable). Known: relayhistory-turns-erasure
+                              (session erasure leaves conversation turns readable)
       --no-cleanup            keep the Relaycast workspaces and device tokens
                               (case 15 SKIP); --cleanup is the default
   -h, --help                  show this help
@@ -108,7 +113,7 @@ need_value() {
 
 while (($#)); do
   case "$1" in
-    --context|-n|--namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version)
+    --context|-n|--namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap)
       need_value "$1" "$#" ;;
   esac
   case "$1" in
@@ -125,6 +130,9 @@ while (($#)); do
     --pipeline-timeout) PIPELINE_TIMEOUT="$2"; shift 2 ;;
     --cleanup) CLEANUP=true; shift ;;
     --no-cleanup) CLEANUP=false; shift ;;
+    --allow-known-gap)
+      [[ " ${KNOWN_GAPS[*]} " == *" $2 "* ]] || die_usage "unknown gap: $2 (known: ${KNOWN_GAPS[*]})"
+      ALLOWED_GAPS+=("$2"); shift 2 ;;
     --skip-flows) SKIP_FLOWS=true; shift ;;
     --edge-wait) EDGE_WAIT="$2"; shift 2 ;;
     --worker-wait) WORKER_WAIT="$2"; shift 2 ;;
@@ -496,8 +504,9 @@ case_end 8 "96bulls Sessions pipeline: courier push, indexer, referee, bob-costa
 # ---------------------------------------------------------------- case 9
 
 case_begin 9 "erasure"
+state_set_json allowedGaps "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' ${ALLOWED_GAPS[@]+"${ALLOWED_GAPS[@]}"})" 2>/dev/null || true
 if $DELIVERED; then run_phase erasure; else emit FAIL erasure.blocked "no delivered session"; fi
-case_end 9 "erasure: session removed from list, replay and search"
+case_end 9 "erasure: session removed from list, replay, search and turns"
 
 # ---------------------------------------------------------------- case 10
 
@@ -862,6 +871,7 @@ fi
 case_end 15 "cleanup: Relaycast workspaces deleted, device tokens revoked (control-plane workspaces have no delete API)"
 
 printf '\n== summary (%s)\n' "$(ts)"
+((${#ALLOWED_GAPS[@]})) && printf 'E2E_ALLOWED_GAPS=%s\n' "${ALLOWED_GAPS[*]}"
 printf 'E2E_MARKER=%s\n' "$(state_get marker)"
 printf '%s\n' "${CASE_LINES[@]}" | sort -t'|' -k2,2n
 if ((FAILS == 0)); then

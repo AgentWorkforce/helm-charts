@@ -1291,8 +1291,19 @@ async function phaseErasure() {
   must(!direct.json.sessions.some((item) => item.sessionId === sessionId), "relayhistory search still returns it");
   const turns = await call("GET", `${API}/cloud/api/v1/workspaces/${state.a.workspaceId}/sessions/${encodeURIComponent(sessionId)}/turns?source=${SOURCE}`, { token: state.a.accessToken });
   const turnsLeft = turns.status === 200 && Array.isArray(turns.json?.turns) ? turns.json.turns.length : null;
-  must(turns.status === 404 || turnsLeft === 0, `turns after erasure status=${turns.status} turns=${turnsLeft ?? "unknown"}`);
-  pass("erasure.verified", `turns_status=${turns.status} turns_left=${turnsLeft ?? 0} list_absent=true search_absent=true replay_status=${replay.status} replay_events=0 relayhistory_status=${direct.status} relayhistory_absent=true`);
+  must(turns.status === 404 || turnsLeft !== null, `turns after erasure status=${turns.status}`);
+  // Known RelayHistory gap: session erasure (sessions.set_session_uploads) and
+  // the full reset never delete sessions.conversation_turns, so the turns
+  // stay readable. Strict by default; --allow-known-gap relayhistory-turns-erasure
+  // reports it as SKIP instead, never as PASS.
+  if (turns.status === 404 || turnsLeft === 0) {
+    pass("erasure.turns_purged", `turns_status=${turns.status} turns_left=0`);
+  } else if ((state.allowedGaps ?? []).includes("relayhistory-turns-erasure")) {
+    proof("SKIP", "erasure.turns_purged", `KNOWN GAP relayhistory-turns-erasure: turns_left=${turnsLeft} after erasure (allowed by --allow-known-gap)`);
+  } else {
+    fail("erasure.turns_purged", `turns_left=${turnsLeft} after erasure; RelayHistory erasure does not delete conversation turns`);
+  }
+  pass("erasure.verified", `list_absent=true search_absent=true replay_status=${replay.status} replay_events=0 relayhistory_status=${direct.status} relayhistory_absent=true`);
 
   // The receipt survives erasure, so a stale client retry of the original
   // batch must replay that receipt without resurrecting the session.
