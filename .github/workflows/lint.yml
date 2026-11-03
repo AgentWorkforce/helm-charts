@@ -69,6 +69,14 @@ jobs:
       - name: Self-hosted requirements registry regression tests
         run: ci/self-hosted-requirements/test.sh
 
+      # The gate validates evidence with a real JSON Schema 2020-12 validator.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install customer release gate dependencies
+        run: python3 -m pip install -r ci/customer-release-gate/requirements.txt
+
       - name: Customer release gate regression tests
         run: python3 ci/customer-release-gate/test.py
 
@@ -88,6 +96,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The gate renders the fixture chart (helm), parses it (yq, preinstalled
+      # on ubuntu-latest) and validates evidence with jsonschema.
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install customer release gate dependencies
+        run: python3 -m pip install -r ci/customer-release-gate/requirements.txt
       - name: Customer release gate regression tests
         run: python3 ci/customer-release-gate/test.py
 

@@ -2,7 +2,7 @@
   "relayhistory": {
     "image": {
       "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "repository": "registry.example.com/customer/relayhistory",
+      "repository": "registry.northwind.io/agent-relay/relayhistory",
       "tag": ""
     }
   }
