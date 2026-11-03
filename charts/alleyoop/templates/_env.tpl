@@ -18,6 +18,12 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
 {{- if and .Values.auth.localJwks (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when auth.localJwks=true" }}{{ end -}}
+{{- if not (has (toString .Values.allowInClusterHttp) (list "true" "false")) }}{{ fail "alleyoop: allowInClusterHttp must be true or false" }}{{ end -}}
+{{- with .Values.auth.historyOrigin }}{{ if not (regexMatch "^https?://[^/?#@]+$" .) }}{{ fail "alleyoop: auth.historyOrigin must be a bare origin (scheme://host[:port], no path, query or credentials)" }}{{ end }}{{ end -}}
+{{- $ingestEnvNames := list -}}
+{{- range concat (.Values.extraEnv | default list) (.Values.ingest.env | default list) }}{{ $ingestEnvNames = append $ingestEnvNames (.name | default "") }}{{ end -}}
+{{- if has "ALLOW_IN_CLUSTER_HTTP" $ingestEnvNames }}{{ fail "alleyoop: extraEnv/ingest.env must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" }}{{ end -}}
+{{- if and .Values.auth.historyOrigin (has "RELAYHISTORY_ORIGIN" $ingestEnvNames) }}{{ fail "alleyoop: set RELAYHISTORY_ORIGIN through auth.historyOrigin or extraEnv/ingest.env, not both" }}{{ end -}}
 {{- include "alleyoop.validateLocker" . }}
 {{- end }}
 

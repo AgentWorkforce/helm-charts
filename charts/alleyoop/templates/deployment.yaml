@@ -42,6 +42,12 @@ spec:
               value: {{ .Values.auth.issuer | quote }}
             - name: AUTH_AUDIENCE
               value: {{ .Values.auth.audience | quote }}
+            - name: ALLOW_IN_CLUSTER_HTTP
+              value: {{ ternary "true" "false" (eq (toString .Values.allowInClusterHttp) "true") | quote }}
+            {{- with .Values.auth.historyOrigin }}
+            - name: RELAYHISTORY_ORIGIN
+              value: {{ . | quote }}
+            {{- end }}
             {{- if .Values.auth.jwksUrl }}
             - name: RELAYAUTH_JWKS_URL
               value: {{ .Values.auth.jwksUrl | quote }}

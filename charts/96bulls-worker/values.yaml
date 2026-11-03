@@ -79,6 +79,11 @@ deployment:
   name: selfhost      # DEPLOYMENT
   id: ""              # DEPLOYMENT_ID; defaults to the release namespace/name
 environment: production
+# ALLOW_IN_CLUSTER_HTTP for every component. false (default): service URLs
+# must be https (or loopback). true allows plain http only to in-cluster
+# Service FQDNs (<svc>.<ns>.svc[.cluster.local]), never public hosts, IPs or
+# short names.
+allowInClusterHttp: false
 # Extra env for every component: [{ name: X, value: y }].
 extraEnv: []
 
