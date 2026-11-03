@@ -17,7 +17,10 @@ Pub/Sub and secrets. Internal identifiers are removed.
   the bucket, so the bucket's retention lock does not protect them.
   After the drill, cleanup deleted the snapshots and the drill's Cloud SQL
   instance with its backups; the exports, the bucket copy and the evidence
-  remain in the locked archive.
+  remain in the locked archive. This is a deviation from the runbook
+  (`docs/selfhost-backup-restore.md`), made only because the drill's source
+  install and data were disposable. A customer must keep the recovery set's
+  snapshots and backup, and delete only the isolated restore target.
 - The restore went into a new Cloud SQL instance, bucket, namespace and Helm
   release, with PVCs from imported snapshots and no Jobs rendered. The restore
   record (`restore.json`) has seven verification gates, and all passed:
