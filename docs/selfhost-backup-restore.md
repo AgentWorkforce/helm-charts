@@ -8,8 +8,12 @@ This runbook covers the `agent-relay` `portable-single` suite:
 - RelayAuth SQLite on its retained RWO PVC;
 - 96Bulls Locker objects in GCS.
 
-A recovery set is valid only when all artifacts use one recovery ID and are
-captured while application writes are stopped. Cloud SQL backups are
+A recovery set is valid only when all artifacts use one recovery ID, carry a
+`COMPLETE` marker naming that ID, and are captured while application writes
+are stopped: every writer matching `WRITER_SELECTOR` scaled to zero, recorded
+as `writesQuiesced: true` (see [Capture](#capture); set
+`REQUIRE_WRITES_QUIESCED=true` to fail rather than record a crash-consistent
+set). Cloud SQL backups are
 instance-wide; repeat the database steps when the databases use separate
 instances.
 
@@ -37,8 +41,13 @@ following before `helm upgrade`:
 1. a migration compatibility review from the current chart and image versions
    to the exact target versions, classifying each migration as
    backward-compatible or forward-only;
-2. a complete recovery set captured from the currently deployed Helm revision
-   while writes are quiesced;
+2. a complete recovery set captured by `gcp-recovery-backup.sh` from the
+   currently deployed Helm revision while writes are quiesced: its
+   `evidence/backup.json` must record `writesQuiesced: true`, which requires
+   every writer matching `WRITER_SELECTOR` at zero replicas for the whole
+   capture (run with `REQUIRE_WRITES_QUIESCED=true` to fail fast). The capture
+   needs `helm` and RBAC to read Helm release storage (Secrets) in the release
+   namespace;
 3. a successful isolated restore of that recovery set, including all
    verification gates below;
 4. an approved database-aware recovery strategy: database restore or
@@ -51,8 +60,8 @@ in [`scripts/selfhost/README.md`](../scripts/selfhost/README.md):
 ```bash
 scripts/selfhost/pre-upgrade-check.sh \
   --context "$(kubectl config current-context)" \
-  --namespace "$PROD_NS" \
-  --release "$RELEASE" \
+  --namespace "$KUBERNETES_NAMESPACE" \
+  --release "$HELM_RELEASE" \
   --target-chart ./charts/agent-relay \
   --backup-evidence "$EVIDENCE_DIR/backup.json" \
   --restore-evidence "$EVIDENCE_DIR/restore.json" \
@@ -64,24 +73,79 @@ the upgrade. Keep the normal review and explicit mutation approval.
 
 ## Capture
 
-Set environment-specific variables:
+Capture a recovery set with `charts/agent-relay/scripts/gcp-recovery-backup.sh`.
+Do not hand-assemble one: the pre-upgrade gate and the restore drill scripts
+read the layout and evidence this script writes. A manual capture is valid only
+if it reproduces the same contract exactly:
+
+- recovery ID `ar-<UTC timestamp>Z-<suffix>`, for example
+  `ar-20261102T140500Z-manual`; the suffix is the lowercase alphanumeric first
+  eight characters of `POD_UID` (default `manual`);
+- everything under `gs://<archive bucket>/recovery/<recovery ID>/`
+  (`ARCHIVE_PREFIX`, default `recovery`):
+  - `cloudsql/<database>.sql.gz`: one Cloud SQL export per database, alongside
+    an on-demand Cloud SQL backup whose description is the recovery ID;
+  - `gcs/`: a copy of the Sessions source bucket;
+  - `evidence/backup.json`: the non-secret evidence the pre-upgrade gate reads;
+  - `COMPLETE`: written last, containing exactly the recovery ID;
+- one retained `VolumeSnapshot` each for Relaycast and RelayAuth, named
+  `vs-<lowercase recovery ID>-<component>` and labelled `recovery-id`.
+
+A recovery set without a `COMPLETE` marker naming its own ID is incomplete and
+must not be restored. A failed run leaves `evidence/FAILED.json` instead.
+
+### Requirements
+
+The script needs `gcloud`, `kubectl`, `helm`, and `python3`. Authentication is
+GKE Workload Identity or the operator's own `gcloud` login; it has no
+credential-file path. The identity needs:
+
+- Cloud SQL backup and export rights on the instance, and write access to the
+  archive bucket;
+- Kubernetes rights to read Deployments, StatefulSets, and PVCs, and to create
+  and read `VolumeSnapshot` and `VolumeSnapshotContent` objects;
+- **Helm release-storage access:** the script runs `helm status` before and
+  after the capture to record the deployed revision (`sourceRevision`) and
+  fails if it changes. Helm stores releases as Secrets, so the identity needs
+  `get` and `list` on Secrets in the release namespace.
+
+The archive bucket must differ from the source bucket and enforce a locked
+retention policy of at least `RETENTION_DAYS` (minimum 35), uniform
+bucket-level access, and public access prevention. The snapshot class must use
+`deletionPolicy: Retain`.
+
+Set the environment:
 
 ```bash
 export PROJECT_ID="customer-project"
 export REGION="us-central1"
 export CLUSTER="customer-gke"
-export PROD_NS="agent-relay"
-export RELEASE="agent-relay"
-export SQL_SOURCE="agent-relay-postgres"
-export GCS_SOURCE="customer-session-locker"
-export GCS_BACKUP="${PROJECT_ID}-agent-relay-backups"
+export KUBERNETES_NAMESPACE="agent-relay"
+export HELM_RELEASE="agent-relay"
+export CLOUDSQL_INSTANCE="agent-relay-postgres"
+export CLOUDSQL_DATABASES="hoopdb,relayhistory,control_api"   # your database names
+export GCS_SOURCE_BUCKET="customer-session-locker"
+export GCS_ARCHIVE_BUCKET="${PROJECT_ID}-agent-relay-backups"
 export SNAPSHOT_CLASS="approved-retain-snapshot-class"
-export RECOVERY_ID="ar-$(date -u +%Y%m%dT%H%M%SZ)"
-export EVIDENCE_DIR="./evidence/${RECOVERY_ID}"
+export RELAYCAST_PVC="<from kubectl get pvc>"
+export RELAYAUTH_PVC="<from kubectl get pvc>"
+export RETENTION_DAYS=35 RPO_MINUTES=15 RTO_HOURS=4
+# Writers that must be scaled to zero; defaults to the release's instance label.
+export WRITER_SELECTOR="app.kubernetes.io/instance=${HELM_RELEASE}"
+# Fail instead of recording a crash-consistent capture.
+export REQUIRE_WRITES_QUIESCED=true
+export EVIDENCE_DIR="./evidence/$(date -u +%Y%m%dT%H%M%SZ)"
 
 mkdir -p "$EVIDENCE_DIR"
 gcloud config set project "$PROJECT_ID"
 gcloud container clusters get-credentials "$CLUSTER" --region "$REGION"
+```
+
+Discover the PVC names; do not infer them from the release name:
+
+```bash
+kubectl -n "$KUBERNETES_NAMESPACE" get pvc \
+  -o custom-columns=NAME:.metadata.name,APP:.metadata.labels.app\\.kubernetes\\.io/name
 ```
 
 Record Helm state and inventory without exporting credential values. Raw
@@ -92,21 +156,21 @@ before writing anything to the evidence directory, and prefer
 `relayflows.credentials.existingSecret` in any install that produces evidence:
 
 ```bash
-helm history "$RELEASE" -n "$PROD_NS" -o json \
+helm history "$HELM_RELEASE" -n "$KUBERNETES_NAMESPACE" -o json \
   > "$EVIDENCE_DIR/helm-history.json"
-helm get values "$RELEASE" -n "$PROD_NS" -a -o yaml |
+helm get values "$HELM_RELEASE" -n "$KUBERNETES_NAMESPACE" -a -o yaml |
   yq 'del(.relayflows.credentials.enrollmentToken)' \
   > "$EVIDENCE_DIR/helm-values.yaml"
-helm get manifest "$RELEASE" -n "$PROD_NS" |
+helm get manifest "$HELM_RELEASE" -n "$KUBERNETES_NAMESPACE" |
   yq 'select(.kind != "Secret")' \
   > "$EVIDENCE_DIR/helm-manifest.yaml"
-helm get manifest "$RELEASE" -n "$PROD_NS" | sha256sum \
+helm get manifest "$HELM_RELEASE" -n "$KUBERNETES_NAMESPACE" | sha256sum \
   > "$EVIDENCE_DIR/helm-manifest.sha256"
-kubectl -n "$PROD_NS" get deploy,statefulset,job,cronjob,pvc -o wide \
+kubectl -n "$KUBERNETES_NAMESPACE" get deploy,statefulset,job,cronjob,pvc -o wide \
   > "$EVIDENCE_DIR/kubernetes-inventory.txt"
-gcloud sql instances describe "$SQL_SOURCE" --format=json \
+gcloud sql instances describe "$CLOUDSQL_INSTANCE" --format=json \
   > "$EVIDENCE_DIR/cloudsql-source.json"
-gcloud storage buckets describe "gs://${GCS_SOURCE}" --format=json \
+gcloud storage buckets describe "gs://${GCS_SOURCE_BUCKET}" --format=json \
   > "$EVIDENCE_DIR/gcs-source.json"
 ```
 
@@ -117,96 +181,57 @@ check fails, delete the file and stop. Because the redacted values omit inline
 credentials, a restore from `recorded-values.yaml` must supply them through an
 `existingSecret` in the target namespace.
 
-Confirm that no migration or backup Job is running; the three database URLs
-select dedicated databases; both Relaycast and RelayAuth PVCs are `Bound`; the
-snapshot class uses `deletionPolicy: Retain`; and GCS versioning and retention
-match policy.
-
-Capture non-secret canaries: workspace, agent, message, and session IDs;
-per-database table counts; and GCS object count and bytes.
+Confirm that no migration or backup Job is running and that the three database
+URLs select dedicated databases. Capture non-secret canaries: workspace,
+agent, message, and session IDs; per-database table counts; and GCS object
+count and bytes.
 
 ### 1. Quiesce writes
 
-Enable maintenance mode at the public edge. Record replica counts, scale all
-suite Deployments to zero, and confirm no writer remains:
+`WRITER_SELECTOR` (default `app.kubernetes.io/instance=<release>`) selects the
+Deployments and StatefulSets the script treats as writers. It records
+`writesQuiesced: true` only when at least one controller matches and every
+match has zero desired and zero running replicas, both before and after the
+capture. Otherwise the capture is recorded as crash-consistent with
+`writesQuiesced: false`, which the pre-upgrade gate rejects. With
+`REQUIRE_WRITES_QUIESCED=true` the script fails instead.
+
+Enable maintenance mode at the public edge. Record replica counts, then scale
+every writer to zero:
 
 ```bash
-kubectl -n "$PROD_NS" get deploy \
-  -l "app.kubernetes.io/instance=${RELEASE}" -o json \
-  > "$EVIDENCE_DIR/deployments-before.json"
-kubectl -n "$PROD_NS" scale deploy \
-  -l "app.kubernetes.io/instance=${RELEASE}" --replicas=0
+kubectl -n "$KUBERNETES_NAMESPACE" get deploy,statefulset \
+  -l "$WRITER_SELECTOR" -o json \
+  > "$EVIDENCE_DIR/writers-before.json"
+kubectl -n "$KUBERNETES_NAMESPACE" scale deploy,statefulset \
+  -l "$WRITER_SELECTOR" --replicas=0
 ```
 
-### 2. Capture Cloud SQL
+### 2. Run the capture
 
 ```bash
-gcloud sql backups create \
-  --instance="$SQL_SOURCE" \
-  --description="$RECOVERY_ID"
-gcloud sql backups list \
-  --instance="$SQL_SOURCE" \
-  --filter="description:${RECOVERY_ID}" \
-  --sort-by="~endTime" --format=json \
-  > "$EVIDENCE_DIR/cloudsql-backup.json"
+charts/agent-relay/scripts/gcp-recovery-backup.sh
 ```
 
-Require a successful result and record the numeric backup ID.
-
-### 3. Snapshot both retained PVCs
-
-Discover claim names; do not infer them from the release name:
+The script snapshots both PVCs, creates the Cloud SQL backup and per-database
+exports, copies the source bucket to `gcs/`, writes `evidence/backup.json`,
+and finally writes `COMPLETE`. It prints the recovery ID and evidence URI.
+Record the ID, then copy the evidence locally for the pre-upgrade gate:
 
 ```bash
-kubectl -n "$PROD_NS" get pvc \
-  -o custom-columns=NAME:.metadata.name,APP:.metadata.labels.app\\.kubernetes\\.io/name
+export RECOVERY_ID="<printed recovery ID>"
+export RECOVERY_URI="gs://${GCS_ARCHIVE_BUCKET}/recovery/${RECOVERY_ID}"
+test "$(gcloud storage cat "${RECOVERY_URI}/COMPLETE")" = "$RECOVERY_ID"
+gcloud storage cp "${RECOVERY_URI}/evidence/backup.json" \
+  "$EVIDENCE_DIR/backup.json"
+jq -e '.writesQuiesced == true and .artifactsComplete == true' \
+  "$EVIDENCE_DIR/backup.json"
 ```
-
-Create one retained `VolumeSnapshot` for Relaycast and one for RelayAuth:
-
-```yaml
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshot
-metadata:
-  # VolumeSnapshot names must be lowercase DNS-1123; the recovery-id label
-  # carries the mixed-case RECOVERY_ID used in GCS paths and evidence.
-  name: vs-RECOVERY_ID_LOWER-relaycast
-  namespace: PROD_NAMESPACE
-  labels:
-    recovery-id: RECOVERY_ID
-    managed-by: agent-relay-recovery
-spec:
-  volumeSnapshotClassName: RETAIN_SNAPSHOT_CLASS
-  source:
-    persistentVolumeClaimName: RELAYCAST_PVC
-```
-
-Repeat for `RECOVERY_ID-relayauth` with the RelayAuth claim. Wait until both
-have `status.readyToUse: true`, then record each bound
-`VolumeSnapshotContent`, `snapshotHandle`, driver, and retention policy.
 
 If Relaycast chart backups are enabled, retain a completed online backup as a
 second recovery path. Only backup directories containing `COMPLETE` are valid.
 
-### 4. Copy GCS
-
-The backup bucket must use uniform access, public-access prevention, and the
-approved retention policy.
-
-```bash
-gcloud storage rsync --recursive \
-  "gs://${GCS_SOURCE}" \
-  "gs://${GCS_BACKUP}/${RECOVERY_ID}/locker"
-gcloud storage rsync --recursive --checksums-only --dry-run \
-  "gs://${GCS_SOURCE}" \
-  "gs://${GCS_BACKUP}/${RECOVERY_ID}/locker" \
-  > "$EVIDENCE_DIR/gcs-rsync-verification.txt"
-```
-
-The dry run must require no copy or replacement. Preserve object names,
-generations, sizes, and CRC32C values when required by policy.
-
-### 5. Resume production
+### 3. Resume production
 
 Restore recorded replica counts. Remove maintenance mode only after readiness,
 ingress, messaging, ingest, search, and replay checks pass.
@@ -217,7 +242,7 @@ Create uniquely named target resources labeled with the recovery ID:
 
 - separate namespace and Helm release;
 - separate Cloud SQL instance restored from the selected backup;
-- separate GCS bucket populated from the selected recovery prefix;
+- separate GCS bucket populated from `gs://<archive>/recovery/<recovery ID>/gcs/`;
 - separate Relaycast and RelayAuth PVCs created from imported snapshots;
 - separate Kubernetes Secret objects populated through approved secret
   delivery.
@@ -324,7 +349,7 @@ compatibility evidence proves the previous application can safely run against
 the post-migration data. Even then, the database remains migrated.
 
 For a forward-only or uncertain migration, restore the pre-upgrade Cloud SQL
-backup, both matching PVC snapshots, and the matching GCS recovery prefix into
+backup, both matching PVC snapshots, and the matching `recovery/<recovery ID>/gcs/` copy into
 isolated resources. Install the recorded chart and immutable image versions,
 verify them, and cut over only after approval. Never restore only one data
 store from a recovery set.
