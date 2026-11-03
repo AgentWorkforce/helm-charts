@@ -123,14 +123,18 @@ credentials are refused; keep the SQLite release for existing workspaces.
 
 ## Relayfile env contract v1 (`runtime.backend: durable-actors`)
 
-All wiring is in `charts/relayfile/templates/actors/_helpers.tpl`. One image
-`relayfile-actors` with three commands.
+All wiring is in `charts/relayfile/templates/actors/_helpers.tpl`. Two images
+from the relayfile repo: `relayfile-actors` (`docker/actors.Dockerfile`;
+commands `gateway`, `session-broker`) and `relayfile-actors-workspace`
+(`docker/actors-workspace.Dockerfile`: the Workspace actor project plus the
+durable-actors SDK compiler; commands `deploy` and, for kind/CI, `dev`).
 
 | Process | Variables |
 | --- | --- |
 | `gateway` (Deployment `<fullname>-server`, port `server.port`) | `PORT`, `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `RELAYFILE_ACTORS_BROKER_URL`, `RELAYFILE_ACTORS_BROKER_TOKEN`, `RELAYFILE_JWT_SECRET` and/or `RELAYAUTH_JWKS_URL`, optional `RELAYFILE_INTERNAL_HMAC_SECRET`, `RELAYFILE_BLOB_STORE` gcs\|s3\|inline, `RELAYFILE_BLOB_BUCKET`, `RELAYFILE_BLOB_PREFIX`, `RELAYFILE_BLOB_INLINE_MAX_BYTES`, `RELAYFILE_S3_ENDPOINT`,`_REGION`,`_FORCE_PATH_STYLE` + `AWS_*`; devRuntime only: `DURABLE_ACTORS_SECRET`, `RELAYFILE_ACTORS_ALLOW_ADMIN_KEY=true` |
 | `session-broker` (internal Deployment + Service, port 8090) | `PORT`, `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_SECRET` (admin), `RELAYFILE_ACTORS_BROKER_TOKEN` |
-| `deploy` (Job) | `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_SECRET` (admin), `DURABLE_ACTORS_ORGANIZATION_ID`, `DURABLE_ACTORS_ARTIFACT_BUCKET` |
+| `deploy` (Job, workspace image) | `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_SECRET` (admin), `DURABLE_ACTORS_ORGANIZATION_ID`, `DURABLE_ACTORS_ARTIFACT_BUCKET`, optional `DURABLE_ACTORS_SECRET_REFS` |
+| `dev` (kind sidecar, workspace image) | `DURABLE_ACTORS_SECRET`, `DURABLE_ACTORS_PORT`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_DATA_DIR` |
 | Workspace actor | none (no secrets in actors; bytes stay in the gateway's object store) |
 
 - Least privilege without an upstream scoped key: the session broker is the only
@@ -209,7 +213,9 @@ pool), release `REL` in namespace `NS` (sandbox namespace `NS-REL`).
    (the managed certificate gains both domains).
 8. Images (by digest): `relaycast-actors-gateway`, `relaycast-actors-deployer`
    (relaycast repo `docker/actors-gateway.Dockerfile`,
-   `docker/actors-deployer.Dockerfile`), `relayfile-actors` (relayfile repo).
+   `docker/actors-deployer.Dockerfile`), `relayfile-actors` and
+   `relayfile-actors-workspace` (relayfile repo `docker/actors.Dockerfile`,
+   `docker/actors-workspace.Dockerfile`).
    The durable-actors images are pinned by the vendored chart.
 
 ## kind / local proof

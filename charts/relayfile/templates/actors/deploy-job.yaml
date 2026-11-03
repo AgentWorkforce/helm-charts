@@ -56,8 +56,8 @@ spec:
   {{- end }}
   containers:
     - name: deploy
-      image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.image "path" "runtime.durableActors.image") | quote }}
-      imagePullPolicy: {{ $ta.image.pullPolicy }}
+      image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.workspaceImage "path" "runtime.durableActors.workspaceImage") | quote }}
+      imagePullPolicy: {{ $ta.workspaceImage.pullPolicy }}
       args: [deploy]
       {{- with .Values.containerSecurityContext }}
       securityContext:

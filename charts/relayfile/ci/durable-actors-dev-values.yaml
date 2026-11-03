@@ -6,6 +6,9 @@ runtime:
     image:
       tag: kind
       pullPolicy: Never
+    workspaceImage:
+      tag: kind
+      pullPolicy: Never
     existingSecret: relayfile-actors
     blobStore:
       driver: s3
@@ -17,6 +20,3 @@ runtime:
     devRuntime:
       enabled: true
       acknowledgeNonProduction: true
-      image:
-        tag: kind
-        pullPolicy: Never

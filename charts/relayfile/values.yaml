@@ -13,10 +13,19 @@
 runtime:
   backend: go
   durableActors:
-    # One image, three commands: gateway | session-broker | deploy.
+    # Gateway image, two commands: gateway | session-broker
+    # (relayfile repo, docker/actors.Dockerfile).
     image:
       repository: ghcr.io/agentworkforce/relayfile-actors
       # Pin a digest (sha256:<64 hex>) or, for local proofs only, a tag.
+      digest: ""
+      tag: ""
+      pullPolicy: IfNotPresent
+    # Workspace actor image: the actor project plus the durable-actors SDK
+    # compiler (relayfile repo, docker/actors-workspace.Dockerfile). Runs
+    # `deploy` in the deploy Job and `dev` in the devRuntime sidecar.
+    workspaceImage:
+      repository: ghcr.io/agentworkforce/relayfile-actors-workspace
       digest: ""
       tag: ""
       pullPolicy: IfNotPresent
@@ -92,11 +101,7 @@ runtime:
     devRuntime:
       enabled: false
       acknowledgeNonProduction: false
-      image:
-        repository: ghcr.io/agentworkforce/relayfile-actors-dev
-        digest: ""
-        tag: ""
-        pullPolicy: IfNotPresent
+      # Image: runtime.durableActors.workspaceImage (command `dev`).
       port: 7100
       # Key in runtime.durableActors.existingSecret holding the dev runtime's
       # DURABLE_ACTORS_SECRET (shared by the sidecar and the gateway).

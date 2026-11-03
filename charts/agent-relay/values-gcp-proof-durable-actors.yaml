@@ -7,7 +7,8 @@
 #     -f values-gcp-proof-durable-actors.yaml \
 #     --set relaycast.runtime.durableActors.gateway.image.digest=sha256:<gateway> \
 #     --set relaycast.runtime.durableActors.deployer.image.digest=sha256:<deployer> \
-#     --set relayfile.runtime.durableActors.image.digest=sha256:<relayfile-actors>
+#     --set relayfile.runtime.durableActors.image.digest=sha256:<relayfile-actors> \
+#     --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<relayfile-actors-workspace>
 #
 # It switches Relaycast to runtime.backend=durable-actors (a FRESH-INSTALL
 # backend: SQLite workspaces are not migrated, and only ar_ credentials work),
@@ -111,6 +112,8 @@ relayfile:
     durableActors:
       image:
         repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors
+      workspaceImage:
+        repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayfile-actors-workspace
       existingSecret: relayfile-actors
       adminKeySecret:
         name: actors-credentials

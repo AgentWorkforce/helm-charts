@@ -68,6 +68,10 @@ relayfile:
         repository: relayfile-actors
         tag: kind
         pullPolicy: Never
+      workspaceImage:
+        repository: relayfile-actors-workspace
+        tag: kind
+        pullPolicy: Never
       existingSecret: relayfile-actors
       blobStore:
         driver: s3
@@ -79,7 +83,3 @@ relayfile:
       devRuntime:
         enabled: true
         acknowledgeNonProduction: true
-        image:
-          repository: relayfile-actors-dev
-          tag: kind
-          pullPolicy: Never

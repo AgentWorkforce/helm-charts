@@ -5,6 +5,8 @@ runtime:
   durableActors:
     image:
       digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    workspaceImage:
+      digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
     existingSecret: relayfile-actors
     deployer:
       artifactBucket: example-actor-state

@@ -426,7 +426,8 @@ da_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/value
   -f charts/agent-relay/values-gcp-proof-durable-actors.yaml
   --set "relaycast.runtime.durableActors.gateway.image.digest=$(da_digest a)"
   --set "relaycast.runtime.durableActors.deployer.image.digest=$(da_digest b)"
-  --set "relayfile.runtime.durableActors.image.digest=$(da_digest c)")
+  --set "relayfile.runtime.durableActors.image.digest=$(da_digest c)"
+  --set "relayfile.runtime.durableActors.workspaceImage.digest=$(da_digest d)")
 da_out=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}")
 da_fail() { echo "durable-actors overlay: $*" >&2; exit 1; }
 # Capture yq output before grep -q: with pipefail an early grep exit is a SIGPIPE failure.

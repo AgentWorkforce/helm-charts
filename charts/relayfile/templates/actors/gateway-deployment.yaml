@@ -86,8 +86,9 @@ spec:
         # kind/CI only: `durable-actors dev` binds 127.0.0.1 and hands out
         # loopback routes, so it must share the gateway's network namespace.
         - name: durable-actors-dev
-          image: {{ include "relayfile.actors.imageRef" (dict "image" $dr.image "path" "runtime.durableActors.devRuntime.image") | quote }}
-          imagePullPolicy: {{ $dr.image.pullPolicy }}
+          image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.workspaceImage "path" "runtime.durableActors.workspaceImage") | quote }}
+          imagePullPolicy: {{ $ta.workspaceImage.pullPolicy }}
+          args: [dev]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
