@@ -675,9 +675,9 @@ chart `relayfile` · values [`ci/durable-actors-values.yaml`](../charts/relayfil
 
 ### Profile: agent-relay-durable-actors
 
-**GCP proof suite with the durable-actors control plane, Relaycast and Relayfile in actor mode.** components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer.
+**GCP proof suite with the durable-actors control plane, Relaycast and Relayfile in actor mode.** components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer. All proof image digests are pinned in the overlays (no --set).
 
-chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`values-gcp-proof-durable-actors.yaml`](../charts/agent-relay/values-gcp-proof-durable-actors.yaml), [`values-gcp-proof-relayfile.yaml`](../charts/agent-relay/values-gcp-proof-relayfile.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml (all proof image digests are pinned in the overlays)`
+chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`values-gcp-proof-durable-actors.yaml`](../charts/agent-relay/values-gcp-proof-durable-actors.yaml), [`values-gcp-proof-relayfile.yaml`](../charts/agent-relay/values-gcp-proof-relayfile.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml`
 
 **Requirements (provide these)**
 
@@ -1902,7 +1902,7 @@ telemetry.egressTo is added only when networkPolicy.enabled=true,
 allowAllEgress=false, the level is not off and the transport is https.
 
 - Default: `errors`
-- Choices: `errors`; `full`; `off`
+- Choices: `errors`: default; scrubbed error metadata and health only, effective once the install is registered; `full`: adds usage counts; `off`: disabled
 - Provided by: operator
 - Values: `telemetry.*`, `secretKeys.telemetryInstallKey`
 - Env: `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`
@@ -2007,7 +2007,7 @@ timeoutSec (gkeIngress.backends.cast.timeoutSec, default 3600) keeps
 Relaycast WebSockets open (opt.agent-relay.gke-ingress).
 
 - Default: `empty`
-- Choices: `empty`; `<gkeIngress.name>-cast`
+- Choices: `empty`: no backend-config annotation; `<gkeIngress.name>-cast`: required behind the agent-relay GKE ingress
 - Provided by: operator
 - Values: `service.backendConfig`
 - Verify: kubectl get svc <relaycast Service> -o jsonpath='{.metadata.annotations.cloud\.google\.com/backend-config}'

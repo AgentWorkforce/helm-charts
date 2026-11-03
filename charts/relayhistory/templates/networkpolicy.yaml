@@ -61,7 +61,7 @@ spec:
     # drainForWriteHold: the init container lists History pods via the API.
     - to: {{ toYaml .Values.migrations.drainWaitApiServerEgress | nindent 8 }}
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: {{ .Values.migrations.drainWaitApiServerPort | int }} }
     {{- end }}
     {{- end }}
 {{- end }}

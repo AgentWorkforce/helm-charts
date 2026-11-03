@@ -182,8 +182,12 @@ B=http://127.0.0.1:28587 KEY="$API_KEY" node --input-type=module -e '
   if (read.s !== 200 || !JSON.stringify(read.d).includes(marker)) fail(`receive (status ${read.s}): the other agent did not read the message`);
   console.log("PASS relaycast agent received the message (send/receive round trip)");
 '
-invocations=$("${K[@]}" logs deploy/relaycast -c durable-actors-dev --tail=500 2>/dev/null | { grep -c "invoke" || true; })
-echo "relaycast actor invocations logged: ${invocations:-0}"
+# Informational only: report a log read failure instead of aborting.
+if dev_logs=$("${K[@]}" logs deploy/relaycast -c durable-actors-dev --tail=500 2>&1); then
+  echo "relaycast actor invocations logged: $(grep -c "invoke" <<<"$dev_logs" || true)"
+else
+  echo "WARN could not read the relaycast durable-actors-dev logs: $dev_logs"
+fi
 
 echo
 echo "KIND PROOF PASS"

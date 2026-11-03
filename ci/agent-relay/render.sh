@@ -277,6 +277,16 @@ expect_leaf_failure relay-cloud-api "flows.gcsBucket is required" --set flows.st
 expect_leaf_failure relay-cloud-api "flows.storage must be postgres or gcs" --set flows.storage=s3
 expect_leaf_failure relay-cloud-api "flows.queuePingMs must be an integer from 1000 to 120000" --set flows.queuePingMs=500
 expect_leaf_failure relay-cloud-api "telemetry.level must be off, errors, or full" --set telemetry.level=verbose
+# The standalone Ingress denies /internal when the internal token is set; the
+# deny Service name fits 63 characters and carries one component label.
+deny_host=$(yq '.publicUrl' charts/relay-cloud-api/ci/default-values.yaml | sed 's#https://##;s#/.*##')
+deny_out=$(helm template agent-relay-with-a-very-long-release-name-for-ci-test charts/relay-cloud-api -n ci --no-hooks \
+  -f charts/relay-cloud-api/ci/default-values.yaml --set ingress.enabled=true --set-json "ingress.hosts=[\"$deny_host\"]" \
+  --set-json 'ingress.tls=[{"hosts":["x"],"secretName":"t"}]' --set secretKeys.internalToken=selfhost-internal-token)
+deny_name=$(yq 'select(.kind == "Service" and .metadata.labels["app.kubernetes.io/component"] == "internal-deny") | .metadata.name' <<<"$deny_out" | grep .)
+test "${#deny_name}" -le 63 || { echo "relay-cloud-api: internal-deny Service name over 63 characters" >&2; exit 1; }
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[0].http.paths[] | select(.path == "/internal") | .backend.service.name' <<<"$deny_out" | grep .)" = "$deny_name" \
+  || { echo "relay-cloud-api: /internal is not routed to the deny Service" >&2; exit 1; }
 # Default level errors arms only once the install is registered: the default
 # render works and sends nothing; a partial registration fails closed.
 tele_default=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml |
@@ -595,6 +605,7 @@ helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_arg
 zero_bound=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" --set durable-actors.actors.bounds.minCpuMillis=0 |
   yq 'select(.kind == "Deployment" and .metadata.name == "agent-relay-durable-actors") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SANDBOX_MIN_CPU_MILLIS") | .value')
 test "$zero_bound" = 0 || da_fail "actors.bounds.minCpuMillis=0 was dropped"
+expect_da_umbrella_failure "gkeIngress.hosts.files requires components.relayfile=true" --set components.relayfile=false
 expect_da_umbrella_failure "dnsCidrs/0" --set-json 'durable-actors.networkPolicy.dnsCidrs=["169.254.20.10"]'
 expect_da_umbrella_failure "invokeApiKeySecretKey" --set durable-actors.invokeApiKeySecretKey=bad/key
 

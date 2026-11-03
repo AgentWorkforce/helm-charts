@@ -32,7 +32,7 @@ whatever the API would refuse at startup:
 | --- | --- | --- |
 | `encryption.keyId` (required) | `SELFHOST_ENCRYPTION_KEY_ID` | Non-secret id of `secretKeys.encryptionKey`, 1-64 URL-safe characters. |
 | `encryption.previousKeyId` + `secretKeys.previousEncryptionKey` | `SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID`, `SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE` | Key rotation; both or neither, and the id must differ from `keyId`. |
-| `secretKeys.internalToken` | `SELFHOST_INTERNAL_TOKEN_FILE` | Optional service bearer for `/internal/v1` (flows env delivery, telemetry issue reports). Never expose `/internal` publicly: with `ingress.enabled` this chart routes `/internal` to a selector-less deny Service, and the agent-relay GKE ingress denies it at the edge. |
+| `secretKeys.internalToken` | `SELFHOST_INTERNAL_TOKEN_FILE` | Optional service bearer for `/internal/v1` (flows env delivery, telemetry issue reports). Never expose `/internal` publicly: when this is set and `ingress.enabled=true`, this chart routes `/internal` to a selector-less deny Service; the agent-relay GKE ingress denies it at the edge. |
 | `dashboardUrl` | `SELFHOST_DASHBOARD_URL` | Where OAuth callback pages and flow `runUrl`s point. Defaults to `publicUrl` + `/` in the API. |
 | `flows.storage`, `flows.gcsBucket`, `flows.gcsPrefix` | `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX` | `postgres` (default) or `gcs` (Workload Identity; bucket required). |
 | `flows.workerRelaycastUrl` | `SELFHOST_FLOWS_WORKER_RELAYCAST_URL` | Optional Relaycast origin handed to workers. |

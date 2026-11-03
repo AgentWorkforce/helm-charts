@@ -70,6 +70,9 @@ migrations:
   # policy while draining. Required with networkPolicy.enabled and
   # allowAllEgress=false, e.g. [{ ipBlock: { cidr: <control-plane IP>/32 } }].
   drainWaitApiServerEgress: []
+  # Port of that API server endpoint (443 on GKE; often 6443 on kubeadm,
+  # kind or k3s).
+  drainWaitApiServerPort: 443
   rolloutBudgetSeconds: 600
   backoffLimit: 1
   activeDeadlineSeconds: 3600

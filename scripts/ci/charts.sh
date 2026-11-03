@@ -411,6 +411,10 @@ for chart in "${charts[@]}"; do
           || err "$chart: drain-wait Role must only list pods"
         expect_render_failure "$chart" "$v" "drain without API egress" "requires migrations.drainWaitApiServerEgress" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set networkPolicy.allowAllEgress=false --set-json 'networkPolicy.additionalEgress=[{"to":[{"ipBlock":{"cidr":"10.0.0.5/32"}}]}]'
         expect_render_failure "$chart" "$v" "fractional drain wait" "migrations.drainWaitSeconds must be a positive integer" --set migrations.drainWaitSeconds=1.5
+        expect_render_failure "$chart" "$v" "drain wait over the Job deadline" "migrations.drainWaitSeconds must be below migrations.activeDeadlineSeconds" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set migrations.drainWaitSeconds=3600
+        expect_render_failure "$chart" "$v" "drain wait on the default ServiceAccount" "requires serviceAccount.name" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set serviceAccount.create=false
+        [ "$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v" --set migrations.allowWriteHold=true --set migrations.drainForWriteHold=true --set networkPolicy.allowAllEgress=false --set-json 'networkPolicy.additionalEgress=[{"to":[{"ipBlock":{"cidr":"10.0.0.5/32"}}]}]' --set-json 'migrations.drainWaitApiServerEgress=[{"ipBlock":{"cidr":"10.0.0.1/32"}}]' --set migrations.drainWaitApiServerPort=6443 | yq 'select(.kind == "NetworkPolicy" and (.metadata.name | test("migration$"))) | .spec.egress[-1].ports[0].port')" = 6443 ] \
+          || err "$chart: drainWaitApiServerPort is not rendered in the migration policy"
         dflt=$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v") || err "$chart: default render failed"
         [ "$(yq 'select(.kind == "Role") | .metadata.name' <<<"$dflt")" = "" ] || err "$chart: default render must not grant pod list"
         [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$dflt")" = 1 ] || err "$chart: default render is not one replica"

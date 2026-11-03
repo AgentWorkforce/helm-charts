@@ -1,4 +1,4 @@
-]7;file://SF-Mac-Mini/Volumes/T7/Projects/AgentWorkforce/durable-actorsMIT License
+MIT License
 
 Copyright (c) 2026 Terse
 

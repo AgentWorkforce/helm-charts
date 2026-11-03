@@ -28,7 +28,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "relay-cloud-api.fullname" $ | trunc 50 | trimSuffix "-" }}-internal-deny
+                name: {{ include "relay-cloud-api.fullname" $ | trunc 49 | trimSuffix "-" }}-internal-deny
                 port: { number: 80 }
           {{- end }}
           - path: /
@@ -45,10 +45,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "relay-cloud-api.fullname" . | trunc 50 | trimSuffix "-" }}-internal-deny
+  name: {{ include "relay-cloud-api.fullname" . | trunc 49 | trimSuffix "-" }}-internal-deny
   namespace: {{ .Release.Namespace | quote }}
-  labels: {{ include "relay-cloud-api.labels" . | nindent 4 }}
-    app.kubernetes.io/component: internal-deny
+  labels: {{ include "relay-cloud-api.labels" . | fromYaml | merge (dict "app.kubernetes.io/component" "internal-deny") | toYaml | nindent 4 }}
 spec:
   type: ClusterIP
   ports:

@@ -170,8 +170,8 @@ profiles:
     title: GCP proof suite with the durable-actors control plane, Relaycast and Relayfile in actor mode
     chart: agent-relay
     values_file: [values-gcp-proof.yaml, values-gcp-proof-live.yaml, values-gcp-proof-durable-actors.yaml, values-gcp-proof-relayfile.yaml, ci/gcp-proof-values.yaml]
-    install: helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml (all proof image digests are pinned in the overlays)
-    summary: components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer.
+    install: helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml
+    summary: components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer. All proof image digests are pinned in the overlays (no --set).
 # charts/96bulls/ci/*-values.yaml rendered by ci/96bulls-profiles/matrix.sh that are
 # test variants of a profile above, not install shapes of their own.
 ci_only_values:
@@ -1608,9 +1608,9 @@ entries:
     provided_by: operator
     default: errors
     choices:
-      - { value: errors, notes: default; scrubbed error metadata and health only, effective once the install is registered }
-      - { value: full, notes: adds usage counts }
-      - { value: "off", notes: disabled }
+      - { value: errors, note: "default; scrubbed error metadata and health only, effective once the install is registered" }
+      - { value: full, note: "adds usage counts" }
+      - { value: "off", note: "disabled" }
     secrets:
       - name: "<existingSecret>"
         name_paths: [existingSecret]
@@ -1817,8 +1817,8 @@ entries:
     provided_by: operator
     default: empty
     choices:
-      - { value: empty, notes: no backend-config annotation }
-      - { value: <gkeIngress.name>-cast, notes: required behind the agent-relay GKE ingress }
+      - { value: empty, note: "no backend-config annotation" }
+      - { value: "<gkeIngress.name>-cast", note: "required behind the agent-relay GKE ingress" }
     verify: kubectl get svc <relaycast Service> -o jsonpath='{.metadata.annotations.cloud\.google\.com/backend-config}'
     sources:
       - "charts/relaycast/templates/service.yaml:10"
