@@ -97,8 +97,11 @@ relayauth:
     # workspace keys into the internal admin API. Set both or neither.
     # relaycastCredentialKeyring: relaycast-credential-keyring
     # relaycastInternalSecret: relaycast-internal-secret
-  # relaycast:
-  #   url: http://relaycast:8787
+  # Relaycast internal admin API, used only with the model B keyring above.
+  # relaycast.fullnameOverride=relaycast in this namespace makes the short
+  # Service name resolve.
+  relaycast:
+    url: http://relaycast:8787
   jwksIngress:
     enabled: false
   networkPolicy:

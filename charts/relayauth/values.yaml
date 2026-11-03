@@ -44,9 +44,12 @@ relayhistory:
 # which verifies tags through RelayAuth's remote CredentialTagger. The wiring
 # is off unless secretKeys.relaycastCredentialKeyring and
 # secretKeys.relaycastInternalSecret are set together; url is where RelayAuth
-# reaches Relaycast's internal admin API (RELAYAUTH_RELAYCAST_URL).
+# reaches Relaycast's internal admin API (RELAYAUTH_RELAYCAST_URL). It has no
+# default and is required with the keyring: the Relaycast Service name
+# depends on its release and namespace, e.g. http://relaycast.<ns>.svc:8787
+# (or http://<release>-relaycast.<ns>.svc:8787 without a fullnameOverride).
 relaycast:
-  url: http://relaycast:8787
+  url: ""
 
 # Required pre-created Kubernetes Secret. The chart never renders secret or
 # key material. Each entry names one key in this Secret.

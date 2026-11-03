@@ -211,4 +211,14 @@ test "$(yq 'select(.kind == "CronJob" and .metadata.name == "relaycast-backup") 
 test "$(yq 'select(.kind == "PersistentVolumeClaim" and .metadata.name == "relaycast-backup") | .spec.resources.requests.storage' <<<"$s100")" = 100Gi \
   || { echo "supported-100 overlay backup PVC is not 100Gi" >&2; exit 1; }
 
+# relayauth model B has no default Relaycast URL: the keyring requires one.
+if rauth_fail=$(helm template ci charts/relayauth -n ci --no-hooks -f charts/relayauth/ci/default-values.yaml \
+  --set secretKeys.relaycastCredentialKeyring=relaycast-credential-keyring \
+  --set secretKeys.relaycastInternalSecret=relaycast-internal-secret 2>&1); then
+  echo "relayauth model B rendered without relaycast.url" >&2
+  exit 1
+fi
+grep -q 'relaycast.url is required' <<<"$rauth_fail" \
+  || { echo "relayauth model B failed without the relaycast.url error" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"
