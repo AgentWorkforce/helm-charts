@@ -12,9 +12,9 @@ The deployment is `portable-single`, not highly available.
 - PostgreSQL 17 with `vector` and `pg_trgm`
 - separate runtime and migration-owner database roles
 - a dedicated RelayHistory database (never reuse the 96Bulls `hoopdb`)
-- a GCS bucket for Sessions objects, reached through the S3-compatible
-  endpoint `https://storage.googleapis.com` with an HMAC key held in an
-  existing Kubernetes Secret
+- GKE Workload Identity and a GCS bucket for Sessions objects; the 96Bulls
+  worker and AlleyOop service accounts need object access to it (native GCS,
+  `locker.provider: gcs`; no storage key)
 - Artifact Registry, a global static address, and authoritative DNS
 - `gcloud`, `kubectl`, `helm`, `kubeconform`, `jq`, `yq`, Node, and OpenSSL
 - approved immutable images in a registry the customer GKE nodes can pull
