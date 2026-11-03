@@ -129,6 +129,27 @@ metadata:
 spec:
   timeoutSec: {{ $apiTimeout }}
 ---
+{{- /* Relaycast WebSockets (/v1/ws, /v1/node/ws) through the cast backend are
+cut at GCE's 30 s default backend timeout, so the relaycast Service gets its
+own BackendConfig, bound by relaycast.service.backendConfig (both the sqlite
+and durable-actors backends serve sockets on that Service). */ -}}
+{{- $castBackendConfig := printf "%s-cast" ($gkeName | trunc 58 | trimSuffix "-") -}}
+{{- $castTimeout := int (dig "backends" "cast" "timeoutSec" 3600 $gke) -}}
+{{- if lt $castTimeout 60 }}{{ fail "gkeIngress.backends.cast.timeoutSec must be at least 60: relaycast WebSockets need a backend timeout above GCE's 30s default" }}{{ end -}}
+{{- if gt $castTimeout 86400 }}{{ fail "gkeIngress.backends.cast.timeoutSec must be at most 86400" }}{{ end -}}
+{{- $haveCastBackendConfig := dig "service" "backendConfig" "" $relaycast | toString -}}
+{{- if ne $haveCastBackendConfig $castBackendConfig }}{{ fail (printf "gkeIngress requires relaycast.service.backendConfig=%s (<gkeIngress.name>-cast) so relaycast WebSockets get the BackendConfig timeout" $castBackendConfig) }}{{ end }}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ $castBackendConfig }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  timeoutSec: {{ $castTimeout }}
+---
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:

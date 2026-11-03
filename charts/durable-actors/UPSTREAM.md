@@ -74,3 +74,9 @@ sha256 and digests above.
    `selfhost/scoped-credentials`, 7a7e9349) reads it; upstream 0.14.6 ignores
    the variable. Default empty: renders are byte-identical to upstream. Drop
    when upstream ships an invocation-scoped key.
+3. `actors.hostIdleTimeoutMs` (`values.yaml`, `values.schema.json`,
+   `templates/control-plane.yaml`): when set, the control plane gets
+   `DURABLE_ACTORS_HOST_IDLE_TIMEOUT_MS` (how long an idle actor host stays
+   up; upstream default 10000, max 86400000). Upstream reads the variable but
+   the chart does not expose it. Default null: renders are byte-identical to
+   upstream. Report upstream as a missing chart value.

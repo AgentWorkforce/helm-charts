@@ -210,6 +210,11 @@ service:
   type: ClusterIP
   port: 8787
   annotations: {}
+  # GKE: name of a BackendConfig in this namespace (e.g. the agent-relay
+  # umbrella's <gkeIngress.name>-cast); the chart renders the
+  # cloud.google.com/backend-config annotation ({"default": "<name>"}) from
+  # it. Its timeoutSec keeps WebSockets open past GCE's 30 s default.
+  backendConfig: ""
 
 # Optional public edge. Requires publicWorkspaceCreate=false and an HTTPS
 # baseUrl whose host is listed in hosts. Every host routes Prefix "/" to

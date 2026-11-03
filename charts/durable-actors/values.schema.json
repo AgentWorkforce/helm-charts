@@ -143,6 +143,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "hostIdleTimeoutMs": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 86400000
+        },
         "warm": {
           "type": "integer",
           "minimum": 0,

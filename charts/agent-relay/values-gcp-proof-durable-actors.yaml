@@ -51,6 +51,10 @@ durable-actors:
     enabled: false
   replicaCount: 1
   actors:
+    # Keep idle actor hosts for 2 minutes (upstream default 10 s is shorter
+    # than relaycast's 15 s maintenance alarm, so idle workspaces would sleep
+    # and close every socket with 4012 on each wake).
+    hostIdleTimeoutMs: 120000
     # Sized for the single e2-standard-4 gvisor-pool node.
     warm: 2
     maxStarting: 4

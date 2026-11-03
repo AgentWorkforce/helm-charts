@@ -100,6 +100,16 @@ expect_umbrella_failure() { # expected-error helm-args...
     || { echo "agent-relay: failed without expected error: $expected" >&2; echo "$output" >&2; exit 1; }
 }
 expect_umbrella_failure "gkeIngress.backends.api.timeoutSec must be at least 60" --set gkeIngress.backends.api.timeoutSec=30
+expect_umbrella_failure "gkeIngress.backends.cast.timeoutSec must be at least 60" --set gkeIngress.backends.cast.timeoutSec=30
+expect_umbrella_failure "relaycast.service.backendConfig=agent-relay-gcp-proof-cast" --set relaycast.service.backendConfig=null
+expect_umbrella_failure "relaycast.service.backendConfig=agent-relay-gcp-proof-cast" --set relaycast.service.backendConfig=other-cast
+# The relaycast Service carries the cast BackendConfig (WebSocket timeout).
+cast_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml)
+test "$(yq 'select(.kind == "BackendConfig" and .metadata.name == "agent-relay-gcp-proof-cast") | .spec.timeoutSec' <<<"$cast_out")" = 3600 \
+  || { echo "cast BackendConfig missing or timeout not 3600" >&2; exit 1; }
+test "$(yq 'select(.kind == "Service" and .metadata.name == "relaycast") | .metadata.annotations["cloud.google.com/backend-config"]' <<<"$cast_out")" = '{"default":"agent-relay-gcp-proof-cast"}' \
+  || { echo "relaycast Service is not bound to the cast BackendConfig" >&2; exit 1; }
 expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api" \
   --set relay-cloud-api.service.backendConfig=null
 expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api" \
@@ -107,14 +117,17 @@ expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-p
 # Long names keep the -api suffix: truncate to 59, then append.
 long_name=$(printf 'n%.0s' $(seq 70))
 long_bc="$(printf 'n%.0s' $(seq 59))-api"
+long_cast="$(printf 'n%.0s' $(seq 58))-cast"
 long_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
   -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml \
-  --set "gkeIngress.name=$long_name" --set "relay-cloud-api.service.backendConfig=$long_bc")
-test "$(yq 'select(.kind == "BackendConfig") | .metadata.name' <<<"$long_out")" = "$long_bc" \
+  --set "gkeIngress.name=$long_name" --set "relay-cloud-api.service.backendConfig=$long_bc" \
+  --set "relaycast.service.backendConfig=$long_cast")
+test "$(yq 'select(.kind == "BackendConfig" and (.metadata.name | test("-api$"))) | .metadata.name' <<<"$long_out")" = "$long_bc" \
   || { echo "long gkeIngress.name lost the -api BackendConfig suffix" >&2; exit 1; }
 # A customer name in the GCP profile renders once service.backendConfig follows it.
 helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
-  --set gkeIngress.name=acme-relay --set relay-cloud-api.service.backendConfig=acme-relay-api >/dev/null \
+  --set gkeIngress.name=acme-relay --set relay-cloud-api.service.backendConfig=acme-relay-api \
+  --set relaycast.service.backendConfig=acme-relay-cast >/dev/null \
   || { echo "values-gcp.yaml: customer gkeIngress.name with matching backendConfig failed to render" >&2; exit 1; }
 if acme_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
   --set gkeIngress.name=acme-relay 2>&1); then
