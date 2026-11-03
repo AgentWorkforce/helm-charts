@@ -97,6 +97,9 @@ async function verify() {
     if (!ok) failed += 1;
   };
   try {
+    // `kinds` is "long:<status>,short:<status>" (string_agg of kind:status).
+    const summaryStatus = (kinds: string | null, kind: string) =>
+      (kinds ?? "").split(",").find((entry) => entry.startsWith(`${kind}:`))?.slice(kind.length + 1);
     type Row = { state: string; manifest_key: string; kinds: string | null; su: string | null; trace: string | null };
     let row: Row | undefined;
     while (Date.now() < deadline) {
@@ -112,20 +115,29 @@ async function verify() {
         [ORG, sessionId],
       );
       row = rows[0];
-      if (row && row.state !== "unknown" && row.su && row.kinds && !/pending/.test(row.kinds)) break;
+      // Every summary status (ready, disabled, quarantined, empty, unsupported)
+      // is terminal, so stop once both kinds exist and the referee has
+      // classified the session; whether they succeeded is checked below.
+      if (row && row.state !== "unknown" && row.su && summaryStatus(row.kinds, "long") && summaryStatus(row.kinds, "short")) break;
       await new Promise((r) => setTimeout(r, 5000));
     }
     check(!!row?.su, "pipeline.hoopdb_indexer", `session=${sessionId} session_uuid=${row?.su ?? "none"} trace=${row?.trace ?? "none"}`);
     if (!row?.su) return;
     check(row.state !== "unknown", "pipeline.referee_state", `state=${row.state}`);
     const verdicts = await db.query<{ state: string; rule: string }>(
-      "SELECT state, rule FROM sessions.session_verdicts WHERE session_uuid = $1::uuid", [row.su]);
-    check(verdicts.rows.length > 0, "pipeline.referee_verdict", `verdicts=${verdicts.rows.length} ${verdicts.rows[0] ? `${verdicts.rows[0].state}/${verdicts.rows[0].rule}` : ""}`);
-    check(!!row.kinds && /long/.test(row.kinds) && /short/.test(row.kinds), "pipeline.bob_costas_summaries", `summaries=${row.kinds ?? "none"}`);
+      "SELECT state, rule FROM sessions.session_verdicts WHERE session_uuid = $1::uuid ORDER BY revision DESC, classified_at DESC, id DESC", [row.su]);
+    // The latest verdict is a successful classification only when it names a
+    // real lifecycle state; `unknown` is the referee's could-not-classify result.
+    check(["active", "done", "abandoned"].includes(verdicts.rows[0]?.state ?? ""), "pipeline.referee_verdict", `verdicts=${verdicts.rows.length} ${verdicts.rows[0] ? `${verdicts.rows[0].state}/${verdicts.rows[0].rule}` : ""}`);
+    // Bob Costas succeeded only when both summaries are `ready` (a pointer to
+    // an encrypted Locker object); disabled/quarantined/empty/unsupported are
+    // terminal non-success outcomes.
+    check(summaryStatus(row.kinds, "long") === "ready" && summaryStatus(row.kinds, "short") === "ready",
+      "pipeline.bob_costas_summaries", `summaries=${row.kinds ?? "none"}`);
     const events = await db.query<{ stage: string; status: string }>(
       "SELECT DISTINCT stage, status FROM sessions.pipeline_events WHERE org_id = $1 AND trace_id = $2::uuid ORDER BY stage", [ORG, row.trace]);
     const ok = events.rows.filter((e) => e.status === "ok").map((e) => e.stage);
-    check(["object-landed", "session-indexed"].every((s) => ok.includes(s)), "pipeline.events", `ok_stages=${ok.join(",")} other=${events.rows.filter((e) => e.status !== "ok").map((e) => `${e.stage}:${e.status}`).join(",") || "none"}`);
+    check(["object-landed", "session-indexed", "status-classify", "summary-short", "summary-long"].every((s) => ok.includes(s)), "pipeline.events", `ok_stages=${ok.join(",")} other=${events.rows.filter((e) => e.status !== "ok").map((e) => `${e.stage}:${e.status}`).join(",") || "none"}`);
     const dlq = await db.query<{ c: string }>(
       "SELECT count(*)::text AS c FROM sessions.pipeline_dead_letters WHERE org_id = $1 AND trace_id = $2::uuid", [ORG, row.trace]).catch(() => ({ rows: [{ c: "n/a" }] }));
     check(dlq.rows[0]?.c === "0", "pipeline.no_dead_letters", `dead_letters_for_trace=${dlq.rows[0]?.c}`);
@@ -137,7 +149,7 @@ async function verify() {
     for (const obj of listing.items) text += zstdDecompressSync(Buffer.from(await readAll(await raw.store.get(obj.key)))).toString("utf8");
     const head = await raw.store.head(objectKey(row.manifest_key));
     const summaryObjects = await raw.store.list(objectKey(row.manifest_key.replace(/\/manifest\.json$/, "/summary")));
-    check(listing.items.length > 0 && text.includes(marker!), "pipeline.bucket_objects",
+    check(listing.items.length > 0 && text.includes(marker!) && summaryObjects.items.length >= 2 && head?.metadata?.["session-uuid"] === row.su, "pipeline.bucket_objects",
       `provider=${raw.provider} raw_chunks=${listing.items.length} summary_objects=${summaryObjects.items.length} manifest_meta_session_uuid_matches=${head?.metadata?.["session-uuid"] === row.su}`);
     check(!text.includes(FAKE_SECRET), "pipeline.technical_foul_scrub", `fake_secret_in_stored_chunks=${text.includes(FAKE_SECRET)}`);
     console.log(`TRACE_ID=${row.trace}`);

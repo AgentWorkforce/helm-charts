@@ -360,6 +360,35 @@ function markerEvents(events) {
   return (events ?? []).filter((event) => JSON.stringify(event).includes(state.marker));
 }
 
+// The event content RelayHistory projects from each record kind (the delivery
+// projection: history -> prompt, session_event -> text, tool_call -> "name
+// target"). The `session` record updates the catalogue and projects no event.
+function expectedProjection() {
+  const content = ({ kind, payload }) => {
+    if (kind === "history") return payload.prompt;
+    if (kind === "session_event") return payload.text;
+    if (kind === "tool_call") return [payload.name, payload.target].filter(Boolean).join(" ");
+    return null;
+  };
+  return buildBatch().batch.records.map(content).filter((text) => text !== null).sort();
+}
+
+function projectionMatches(events) {
+  const actual = events.map((event) => event.content ?? "").sort();
+  return JSON.stringify(actual) === JSON.stringify(expectedProjection());
+}
+
+// A read that must not return the given session's events passes only on a
+// successful response without them or an explicit denial/not-found; a server
+// error, a redirect or an unparseable body proves nothing.
+function absentOrDenied(response, extract, denied = [403, 404]) {
+  if (denied.includes(response.status)) return { ok: true, leaked: 0 };
+  if (response.status !== 200 || !response.json) return { ok: false, leaked: null };
+  const leaked = extract(response.json);
+  return { ok: leaked === 0, leaked };
+}
+const eventLeaks = (json) => markerEvents(json.events).length;
+
 async function phaseDelivery() {
   state.session = {
     sessionId: `e2e-${state.marker}-session`,
@@ -414,11 +443,15 @@ async function phaseDelivery() {
   const projected = markerEvents(events.json.events);
   const ids = projected.map((event) => event.eventId);
   must(new Set(ids).size === ids.length, "duplicate projected events after retry");
-  must(projected.length > 0, "no projected events for the session");
+  const expected = expectedProjection();
+  must(
+    projected.length === expected.length && projectionMatches(projected),
+    `projected events=${projected.length} expected=${expected.length} content_matches=${projectionMatches(projected)}`,
+  );
   state.session.projectedEvents = projected.length;
   pass(
     "delivery.single_projection",
-    `projected_events=${projected.length} unique=${new Set(ids).size} retained_records=${recordCount}`,
+    `projected_events=${projected.length} expected=${expected.length} content_matches=true unique=${new Set(ids).size} retained_records=${recordCount}`,
   );
 }
 
@@ -449,7 +482,10 @@ async function readsPresent(prefix) {
   const replay = await dashboardEvents(state.a, state.a.workspaceId, sessionId);
   must(replay.status === 200, `dashboard replay status=${replay.status} error=${errorCode(replay)}`);
   const replayed = markerEvents(replay.json.events);
-  must(replayed.length === state.session.projectedEvents, `dashboard replay events=${replayed.length} expected=${state.session.projectedEvents}`);
+  must(
+    replayed.length === state.session.projectedEvents && projectionMatches(replayed),
+    `dashboard replay events=${replayed.length} expected=${state.session.projectedEvents} content_matches=${projectionMatches(replayed)}`,
+  );
   pass(`${prefix}.dashboard_replay`, `events=${replayed.length}`);
 
   const search = await dashboardList(state.a, state.a.workspaceId, state.marker);
@@ -466,8 +502,9 @@ async function readsPresent(prefix) {
   must(direct.status === 200, `relayhistory search status=${direct.status}`);
   must(direct.json.sessions.some((item) => item.sessionId === sessionId), "relayhistory search does not find the marker");
   const directEvents = await eventsDirect(read.accessToken, state.a, sessionId);
-  must(directEvents.status === 200 && markerEvents(directEvents.json.events).length === state.session.projectedEvents,
-    `relayhistory replay status=${directEvents.status}`);
+  const directReplayed = directEvents.status === 200 ? markerEvents(directEvents.json?.events) : [];
+  must(directReplayed.length === state.session.projectedEvents && projectionMatches(directReplayed),
+    `relayhistory replay status=${directEvents.status} events=${directReplayed.length} expected=${state.session.projectedEvents}`);
   pass(`${prefix}.relayhistory_direct`, `search_matches=${direct.json.sessions.length} replay_events=${state.session.projectedEvents}`);
 }
 
@@ -489,8 +526,8 @@ async function phaseIsolation() {
   must(ownSearch.status === 200, `B own search status=${ownSearch.status}`);
   must(!ownSearch.json.items.some((item) => item.sessionId === sessionId), "B's own workspace search returned A's session");
   const ownReplay = await dashboardEvents(state.b, state.b.workspaceId, sessionId);
-  const leaked = ownReplay.status === 200 ? markerEvents(ownReplay.json.events).length : 0;
-  must(leaked === 0, "B's own workspace replay returned A's events");
+  const own = absentOrDenied(ownReplay, eventLeaks, [404]);
+  must(own.ok, `B's own workspace replay of A's session status=${ownReplay.status} leaked_events=${own.leaked ?? "unknown"}`);
   pass("isolation.b_workspace_views", `search_matches=${ownSearch.json.items.length} replay_status=${ownReplay.status} leaked_events=0`);
 
   const bRead = await historySession(state.b, "sync");
@@ -499,11 +536,11 @@ async function phaseIsolation() {
     `${HISTORY}/v1/sessions?${new URLSearchParams({ workspace: state.a.workspaceId, q: state.marker })}`,
     { token: bRead.accessToken },
   );
-  const forgedLeak = forged.status === 200 && (forged.json.sessions ?? []).some((item) => item.sessionId === sessionId);
-  must(!forgedLeak, "B's RelayHistory token listed A's session by naming A's workspace");
+  const forgedList = absentOrDenied(forged, (json) => (json.sessions ?? []).filter((item) => item.sessionId === sessionId).length);
+  must(forgedList.ok, `B's RelayHistory token listing A's workspace status=${forged.status} leaked_sessions=${forgedList.leaked ?? "unknown"}`);
   const forgedEvents = await eventsDirect(bRead.accessToken, state.a, sessionId);
-  const forgedEventLeak = forgedEvents.status === 200 && markerEvents(forgedEvents.json.events).length > 0;
-  must(!forgedEventLeak, "B's RelayHistory token replayed A's session");
+  const forgedReplay = absentOrDenied(forgedEvents, eventLeaks);
+  must(forgedReplay.ok, `B's RelayHistory token replaying A's session status=${forgedEvents.status} leaked_events=${forgedReplay.leaked ?? "unknown"}`);
   const forgedDelivery = await call("POST", `${HISTORY}/v1/delivery/batches`, {
     token: bRead.accessToken,
     body: buildBatch(),
@@ -520,13 +557,13 @@ async function phaseIsolation() {
   must(!bRoster.some((name) => name.includes(state.marker)), "B's roster contains A's agents");
   const bAgent = await registerAgent(state.b, `e2e-${state.marker}-gamma`);
   const crossDm = await call("GET", `${RELAYCAST}/v1/dm/${state.dm.conversationId}/messages`, { token: bAgent.token });
-  const crossDmLeak = crossDm.status === 200 && JSON.stringify(crossDm.json).includes(state.marker);
-  must(!crossDmLeak, "B's agent read A's DM conversation");
+  const crossDmRead = absentOrDenied(crossDm, (json) => (JSON.stringify(json).includes(state.marker) ? 1 : 0));
+  must(crossDmRead.ok, `B's agent reading A's DM conversation status=${crossDm.status} leaked=${crossDmRead.leaked ?? "unknown"}`);
   const crossSend = await call("POST", `${RELAYCAST}/v1/dm`, {
     token: bAgent.token,
     body: { to: state.agents.alpha.name, text: `${state.marker} cross-tenant` },
   });
-  must(crossSend.status >= 400, `B's agent DMed A's agent status=${crossSend.status}`);
+  must(crossSend.status >= 400 && crossSend.status < 500, `B's agent DMed A's agent status=${crossSend.status}`);
   pass("isolation.relaycast", `b_roster_size=${bRoster.length} b_read_a_dm=${crossDm.status} b_dm_a_agent=${crossSend.status}`);
 }
 
@@ -676,16 +713,17 @@ async function phaseErasure() {
   const search = await dashboardList(state.a, state.a.workspaceId, state.marker);
   must(search.status === 200 && !search.json.items.some((item) => item.sessionId === sessionId), "search still returns the erased session");
   const replay = await dashboardEvents(state.a, state.a.workspaceId, sessionId);
-  const remaining = replay.status === 200 ? markerEvents(replay.json.events).length : 0;
-  must(remaining === 0, `replay still returns ${remaining} events`);
+  const replayAbsent = absentOrDenied(replay, eventLeaks, [404]);
+  must(replayAbsent.ok, `replay after erasure status=${replay.status} events=${replayAbsent.leaked ?? "unknown"}`);
   const read = await historySession(state.a, "read");
   const direct = await call(
     "GET",
     `${HISTORY}/v1/sessions?${new URLSearchParams({ workspace: state.a.workspaceId, q: state.marker })}`,
     { token: read.accessToken },
   );
-  must(direct.status === 200 && !direct.json.sessions.some((item) => item.sessionId === sessionId), "relayhistory search still returns it");
-  pass("erasure.verified", `list_absent=true search_absent=true replay_status=${replay.status} replay_events=0 relayhistory_absent=true`);
+  must(direct.status === 200 && Array.isArray(direct.json?.sessions), `relayhistory search after erasure status=${direct.status}`);
+  must(!direct.json.sessions.some((item) => item.sessionId === sessionId), "relayhistory search still returns it");
+  pass("erasure.verified", `list_absent=true search_absent=true replay_status=${replay.status} replay_events=0 relayhistory_status=${direct.status} relayhistory_absent=true`);
 
   // The receipt survives erasure, so a stale client retry of the original
   // batch must replay that receipt without resurrecting the session.
@@ -693,11 +731,12 @@ async function phaseErasure() {
   must(stale.status === 200 && stale.json?.receiptId === state.session.receiptId,
     `stale retry status=${stale.status} same_receipt=${stale.json?.receiptId === state.session.receiptId}`);
   const after = await eventsDirect(read.accessToken, state.a, sessionId);
-  const resurrected = after.status === 200 ? markerEvents(after.json.events).length : 0;
+  const afterAbsent = absentOrDenied(after, eventLeaks, [404]);
+  must(afterAbsent.ok, `replay after stale retry status=${after.status} events=${afterAbsent.leaked ?? "unknown"}`);
   const afterList = await dashboardList(state.a, state.a.workspaceId, state.marker);
-  must(resurrected === 0 && !afterList.json.items.some((item) => item.sessionId === sessionId),
-    `stale retry resurrected ${resurrected} events`);
-  pass("erasure.stale_retry_no_resurrection", `receipt=${stale.json.receiptId} events_after=0 search_absent=true`);
+  must(afterList.status === 200 && Array.isArray(afterList.json?.items), `search after stale retry status=${afterList.status}`);
+  must(!afterList.json.items.some((item) => item.sessionId === sessionId), "stale retry resurrected the session in search");
+  pass("erasure.stale_retry_no_resurrection", `receipt=${stale.json.receiptId} replay_status=${after.status} events_after=0 search_absent=true`);
   state.session.erased = true;
 }
 

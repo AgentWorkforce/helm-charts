@@ -62,6 +62,7 @@ Options:
       --cert-wait SECONDS     wait up to this long for the ManagedCertificate
       --pipeline-timeout SEC  how long to wait for 96bulls workers (default 300)
       --cleanup               delete the two test Relaycast workspaces at the end
+                              (case 11; a failed deletion fails the run)
   -h, --help                  show this help
 
 Exit status: 0 when every case passes or is skipped, 1 on any failure,
@@ -74,19 +75,30 @@ die_usage() {
   exit 2
 }
 
+# need_value <option> <argc>: a value-taking option must have a following
+# argument; without this check `shift 2` fails, leaves $# unchanged and the
+# loop never ends.
+need_value() {
+  (($2 >= 2)) || die_usage "$1 requires a value"
+}
+
 while (($#)); do
   case "$1" in
-    --context) CONTEXT="${2:-}"; shift 2 ;;
-    -n|--namespace) NAMESPACE="${2:-}"; shift 2 ;;
-    --bulls-namespace) BULLS_NAMESPACE="${2:-}"; shift 2 ;;
-    --secret) SECRET_NAME="${2:-}"; shift 2 ;;
-    --base-domain) BASE_DOMAIN="${2:-}"; shift 2 ;;
+    --context|-n|--namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout)
+      need_value "$1" "$#" ;;
+  esac
+  case "$1" in
+    --context) CONTEXT="$2"; shift 2 ;;
+    -n|--namespace) NAMESPACE="$2"; shift 2 ;;
+    --bulls-namespace) BULLS_NAMESPACE="$2"; shift 2 ;;
+    --secret) SECRET_NAME="$2"; shift 2 ;;
+    --base-domain) BASE_DOMAIN="$2"; shift 2 ;;
     --skip-restart) SKIP_RESTART=true; shift ;;
     --skip-96bulls) SKIP_96BULLS=true; shift ;;
     --skip-public) SKIP_PUBLIC=true; shift ;;
     --require-public) REQUIRE_PUBLIC=true; shift ;;
-    --cert-wait) CERT_WAIT="${2:-}"; shift 2 ;;
-    --pipeline-timeout) PIPELINE_TIMEOUT="${2:-}"; shift 2 ;;
+    --cert-wait) CERT_WAIT="$2"; shift 2 ;;
+    --pipeline-timeout) PIPELINE_TIMEOUT="$2"; shift 2 ;;
     --cleanup) CLEANUP=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die_usage "unknown option: $1" ;;
@@ -94,6 +106,7 @@ while (($#)); do
 done
 
 [[ -n "$CONTEXT" ]] || die_usage "--context is required"
+[[ -n "$NAMESPACE" && -n "$BULLS_NAMESPACE" && -n "$SECRET_NAME" ]] || die_usage "namespace and secret options must not be empty"
 [[ "$CERT_WAIT" =~ ^[0-9]+$ ]] || die_usage "--cert-wait must be a non-negative integer"
 [[ "$PIPELINE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die_usage "--pipeline-timeout must be a positive integer"
 for f in "$DRIVER" "$BULLS_PROBE"; do
@@ -179,6 +192,7 @@ run_phase() {
     emit FAIL "$phase.driver" "relay-cloud-api pod unavailable"
     return 1
   fi
+  local exec_rc
   python3 - "$STATE" "$RCS" <<'PY' | "${KN[@]}" exec -i "$API_POD" -- node /tmp/e2e-gcp-proof-driver.mjs "$phase" >"$out" 2>/dev/null
 import json, sys
 text = open(sys.argv[1]).read().strip()
@@ -190,16 +204,21 @@ except FileNotFoundError:
 state["secrets"] = {"relaycastInternalSecret": secret}
 sys.stdout.write(json.dumps(state))
 PY
+  exec_rc=$?
   local parsed
   parsed="$(python3 - "$out" "$STATE" <<'PY'
 import json, sys
 try:
     result = json.load(open(sys.argv[1]))
+    state, proofs = result["state"], result["proofs"]
+    assert isinstance(state, dict) and isinstance(proofs, list)
 except Exception:
     print("FAIL\tdriver.output\tunparseable driver output")
     raise SystemExit(0)
-json.dump(result["state"], open(sys.argv[2], "w"))
-for p in result["proofs"]:
+json.dump(state, open(sys.argv[2], "w"))
+if not proofs:
+    print("FAIL\tdriver.output\tdriver returned no proof records")
+for p in proofs:
     print(f'{p["result"]}\t{p["check"]}\t{p["detail"]}')
 PY
 )"
@@ -208,6 +227,28 @@ PY
   while IFS=$'\t' read -r result check detail; do
     [[ -n "$result" ]] && emit "$result" "$check" "$detail"
   done <<<"$parsed"
+  # The pipeline's status is the kubectl exec's (pipefail). The driver always
+  # exits 0 after writing its result, so a non-zero status means the exec or
+  # the node process itself failed.
+  if ((exec_rc != 0)); then
+    emit FAIL "$phase.exec" "kubectl exec rc=$exec_rc"
+  fi
+}
+
+# emit_probe_output <label> <exec rc> <output> <required check>...
+# Re-emits the probe's PROOF lines, then fails when the exec failed or any
+# required check did not report PASS, so an empty or truncated output can
+# never pass.
+emit_probe_output() {
+  local label="$1" rc="$2" out="$3" required
+  shift 3
+  while IFS='|' read -r _ result check detail; do emit "$result" "$check" "$detail"; done \
+    < <(grep '^PROOF|' <<<"$out")
+  ((rc == 0)) || emit FAIL "pipeline.${label}_exec" "kubectl exec rc=$rc"
+  for required in "$@"; do
+    grep -q "^PROOF|PASS|$required|" <<<"$out" ||
+      emit FAIL "$required" "no PASS record from the $label probe"
+  done
 }
 
 state_get() { # dotted.path -> value (non-secret fields only)
@@ -338,22 +379,29 @@ else
     state_set_json bulls "$(python3 -c 'import json,sys; print(json.dumps(dict(orgId=sys.argv[1], workspaceId=sys.argv[2] or "default", origin=sys.argv[3], machineId=sys.argv[4])))' \
       "$(env_of TENANT_ORG_ID)" "$(env_of WORKSPACE_ID)" "$(env_of RELAYHISTORY_ORIGIN)" "$machine")"
     [[ -n "$(state_get marker)" ]] || state_set_json marker "\"$marker\""
-    "${KB[@]}" exec -i "$BULLS_POD" -- sh -c 'umask 077; cat > /tmp/e2e-gcp-proof-96bulls.ts' <"$BULLS_PROBE"
+    if ! "${KB[@]}" exec -i "$BULLS_POD" -- sh -c 'umask 077; cat > /tmp/e2e-gcp-proof-96bulls.ts' <"$BULLS_PROBE"; then
+      emit FAIL pipeline.install_probe "could not copy the probe into $BULLS_POD"
+    fi
     pushed_at="$(date -u +%FT%TZ)"
     run_phase mint-96bulls
     state_pop_to_file bullsAssertion "$WORK/assertion"
     push_out="$("${KB[@]}" exec -i "$BULLS_POD" -- sh -c "cd /app && bun run /tmp/e2e-gcp-proof-96bulls.ts push '$marker' '$machine'" \
       <"$WORK/assertion" 2>/dev/null)"
+    push_rc=$?
     rm -f "$WORK/assertion"
-    while IFS='|' read -r _ result check detail; do emit "$result" "$check" "$detail"; done \
-      < <(grep '^PROOF|' <<<"$push_out")
+    emit_probe_output push "$push_rc" "$push_out" pipeline.courier_push
     bulls_session="$(sed -n 's/^SESSION_ID=//p' <<<"$push_out")"
     if [[ -n "$bulls_session" ]]; then
       verify_out="$("${KB[@]}" exec "$BULLS_POD" -- sh -c "cd /app && bun run /tmp/e2e-gcp-proof-96bulls.ts verify '$marker' '$bulls_session' '$PIPELINE_TIMEOUT'" 2>/dev/null)"
-      while IFS='|' read -r _ result check detail; do emit "$result" "$check" "$detail"; done \
-        < <(grep '^PROOF|' <<<"$verify_out")
+      verify_rc=$?
+      emit_probe_output verify "$verify_rc" "$verify_out" \
+        pipeline.hoopdb_indexer pipeline.referee_state pipeline.referee_verdict \
+        pipeline.bob_costas_summaries pipeline.events pipeline.no_dead_letters \
+        pipeline.bucket_objects pipeline.technical_foul_scrub
       trace="$(sed -n 's/^TRACE_ID=//p' <<<"$verify_out")"
-      if [[ -n "$trace" ]]; then
+      if [[ -z "$trace" ]]; then
+        emit FAIL pipeline.trace "verify returned no trace id; worker logs not checked"
+      else
         for worker in hoopdb-indexer referee bob-costas; do
           lines="$("${KB[@]}" logs "deploy/bulls96-worker-$worker" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$trace")"
           leaks="$("${KB[@]}" logs "deploy/bulls96-worker-$worker" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$marker")"
@@ -390,8 +438,10 @@ else
   waited=0
   status="$(cert_status)"
   while [[ "$status" != "Active " ]] && ((waited < CERT_WAIT)); do
-    sleep 30
-    waited=$((waited + 30))
+    step=$((CERT_WAIT - waited))
+    ((step > 30)) && step=30
+    sleep "$step"
+    waited=$((waited + step))
     status="$(cert_status)"
   done
   if [[ "$status" != "Active " ]]; then
@@ -465,9 +515,11 @@ case_end 10 "public: verify-public.sh and authenticated calls through the HTTPS 
 
 # ---------------------------------------------------------------- cleanup
 
+# Cleanup is its own case so a failed deletion fails the run.
 if $CLEANUP; then
-  printf '\n== cleanup (%s)\n' "$(ts)"
+  case_begin 11 "cleanup"
   run_phase cleanup
+  case_end 11 "cleanup: delete the two test Relaycast workspaces"
 fi
 
 printf '\n== summary (%s)\n' "$(ts)"
