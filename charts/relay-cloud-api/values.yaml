@@ -68,8 +68,13 @@ flows:
 
 # Self-host telemetry (relaycontrol docs/telemetry.md).
 telemetry:
-  # off | errors | full. Default off, the same as the API's default when unset.
-  level: "off"
+  # errors (default): scrubbed error metadata and health only, never
+  # content. full adds usage counts. off disables telemetry.
+  # The level takes effect once the install is registered: until installId,
+  # secretKeys.telemetryInstallKey and (for transport https) endpoint are set
+  # the chart renders SELFHOST_TELEMETRY_LEVEL=off. Setting only some of them
+  # fails the render.
+  level: errors
   # https sends to endpoint. file never sends: reports wait in the outbox for
   # an operator to download a signed export (air-gapped installs).
   transport: https

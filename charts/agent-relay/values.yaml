@@ -69,7 +69,8 @@ relayhistory: {}
 # relay-cloud-api: see charts/relay-cloud-api/values.yaml. encryption.keyId is
 # required; optional: encryption.previousKeyId, secretKeys.previousEncryptionKey,
 # secretKeys.internalToken, secretKeys.telemetryInstallKey, dashboardUrl,
-# flows.*, telemetry.* (telemetry.level defaults to off, pending decision).
+# flows.*, telemetry.* (telemetry.level defaults to errors, effective once the
+# install is registered with installId, install key and endpoint).
 relay-cloud-api: {}
 relay-dashboard: {}
 # Opt-in only: enabling components.relayflows without configuring this block

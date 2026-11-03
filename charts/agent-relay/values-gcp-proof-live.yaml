@@ -48,6 +48,9 @@ relay-cloud-api:
   # delivery). The api host denies /internal at the edge.
   secretKeys:
     internalToken: selfhost-internal-token
+  # The proof has no telemetry install key: keep telemetry off explicitly.
+  telemetry:
+    level: "off"
   # The proof cluster's shared Cloud SQL database grants runtime access to the
   # role the Sessions stack created; control_api_runtime does not exist there.
   database:

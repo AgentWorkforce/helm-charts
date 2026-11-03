@@ -37,10 +37,10 @@ whatever the API would refuse at startup:
 | `flows.storage`, `flows.gcsBucket`, `flows.gcsPrefix` | `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX` | `postgres` (default) or `gcs` (Workload Identity; bucket required). |
 | `flows.workerRelaycastUrl` | `SELFHOST_FLOWS_WORKER_RELAYCAST_URL` | Optional Relaycast origin handed to workers. |
 | `flows.queuePingMs` | `SELFHOST_FLOWS_QUEUE_PING_MS` | SSE keepalive, 1000-120000 ms; keep it below proxy timeouts. |
-| `telemetry.level` | `SELFHOST_TELEMETRY_LEVEL` | `off` (chart default, the same as the API default), `errors` or `full`. |
+| `telemetry.level` | `SELFHOST_TELEMETRY_LEVEL` | `errors` (chart default: scrubbed error metadata and health only, never content), `full` (adds usage counts) or `off` (disabled). The level takes effect once the install is registered; until `telemetry.installId`, `secretKeys.telemetryInstallKey` and (transport `https`) `telemetry.endpoint` are set, the chart renders `off`, so a default install renders and sends nothing. Setting only some of them fails the render. |
 | `telemetry.transport` | `SELFHOST_TELEMETRY_TRANSPORT` | Optional; `https` (default) or `file` (reports stay in the outbox for a signed export). |
-| `telemetry.installId`, `secretKeys.telemetryInstallKey` | `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE` | Both required unless the level is `off`. |
-| `telemetry.endpoint` | `SELFHOST_TELEMETRY_ENDPOINT` | Required only when the level is not `off` and the transport is `https`; optional with `file`. Must be an https URL. |
+| `telemetry.installId`, `secretKeys.telemetryInstallKey` | `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE` | Issued by Agent Relay when the install is registered. Setting either (or the endpoint) registers the install, and then both are required unless the level is `off`. |
+| `telemetry.endpoint` | `SELFHOST_TELEMETRY_ENDPOINT` | Required for a registered install when the level is not `off` and the transport is `https`; optional with `file`. Must be an https URL. No default: the hosted ingest URL comes with the registration. |
 | `telemetry.egressTo` | (NetworkPolicy) | Destinations of the telemetry egress rule; empty by default. It must not be empty when the level is not `off`, the transport is `https`, `networkPolicy.enabled=true` and `networkPolicy.allowAllEgress=false`, and is unused otherwise. |
 | `telemetry.probes` | `SELFHOST_TELEMETRY_PROBES` | Up to 20 extra health probes; `name` is a string of lowercase letters, digits and dashes (quote numeric names). |
 | `telemetry.deployment` | `SELFHOST_TELEMETRY_DEPLOYMENT` | Extra flat deployment-shape keys (at most 32): string, number or boolean values only, version-like strings without `//`; the chart-rendered keys (`chart`, `chartVersion`, `appVersion`, `replicas`, `flowsStorage`, `networkPolicy`, `ingress`) cannot be overridden. |
@@ -51,7 +51,7 @@ chart refuses collisions, so the migration credential
 
 The chart adds a TCP 443 egress rule to `telemetry.egressTo` only when all of
 these hold: `networkPolicy.enabled=true`, `networkPolicy.allowAllEgress=false`,
-the level is not `off`, and the transport is `https`. With NetworkPolicy
+the effective level is not `off` (a registered install), and the transport is `https`. With NetworkPolicy
 disabled, or with `allowAllEgress=true`, egress is not restricted and no rule
 is rendered. The migration Job's NetworkPolicy never gets this rule.
 

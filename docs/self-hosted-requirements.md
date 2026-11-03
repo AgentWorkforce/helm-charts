@@ -62,7 +62,7 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 | relayauth-0.1.2 | unreleased | relayauth 0.1.2 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | License-annotation patch bump of 0.1.1. |
 | relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2. |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
-| agent-relay-0.2.0 | unreleased | agent-relay 0.2.0<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.0, relayauth 0.1.2, 96bulls 0.5.4, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. |
+| agent-relay-0.2.0 | unreleased | agent-relay 0.2.0<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.0, relayauth 0.1.2, 96bulls 0.5.4, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.level defaults to errors (scrubbed error metadata and health only; it takes effect once the install is registered with installId, install key and endpoint, so a default render stays off and a partial registration fails), telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. |
 | relayfile-0.2.0 | unreleased | relayfile 0.2.0 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker: ghcr.io/agentworkforce/relayfile-actors by digest; deploy Job and dev sidecar: relayfile-actors-workspace by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged. |
 | durable-actors-0.14.6 | unreleased | durable-actors 0.14.6 |  |  |  | Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee) with the local patches listed in charts/durable-actors/UPSTREAM.md (root global, invoke-only key, host idle timeout, pool-manager name length, zero-valued bounds, lowercase ingress host, schema patterns, README links). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md). |
 | relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. Superseded by 0.2.0. |
@@ -548,7 +548,7 @@ chart `relay-cloud-api` · values [`ci/default-values.yaml`](../charts/relay-clo
 | shipped | [Internal service token for /internal/v1](#opt-relay-cloud-api-internal-token) | `disabled`, `enabled` | `disabled` | values `secretKeys.internalToken`; env `SELFHOST_INTERNAL_TOKEN_FILE`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
 | shipped | [Dashboard URL for OAuth callbacks and flow run links](#opt-relay-cloud-api-dashboard-url) | `publicUrl + "/"`, `dashboard origin` | `publicUrl + "/"` | values `dashboardUrl`; env `SELFHOST_DASHBOARD_URL` |
 | shipped | [Relayflows control-plane storage and worker queue](#opt-relay-cloud-api-flows) | `postgres`, `gcs` | `postgres` | values `flows.*`; env `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX`, `SELFHOST_FLOWS_WORKER_RELAYCAST_URL`, `SELFHOST_FLOWS_QUEUE_PING_MS` |
-| shipped | [Self-host telemetry level and transport](#opt-relay-cloud-api-telemetry) | `off`, `errors`, `full` | `off` | values `telemetry.*`, `secretKeys.telemetryInstallKey`; env `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
+| shipped | [Self-host telemetry level and transport](#opt-relay-cloud-api-telemetry) | `errors`, `full`, `off` | `errors` | values `telemetry.*`, `secretKeys.telemetryInstallKey`; env `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
 
 ### Profile: relay-dashboard
 
@@ -1887,24 +1887,27 @@ must stay below every proxy timeout in front of the API.
 
 **Self-host telemetry level and transport** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
 
-telemetry.level (SELFHOST_TELEMETRY_LEVEL) is off, errors or full. The
-chart default is off, the same as the API default; the product default
-is a pending decision. Any level other than off needs telemetry.installId
-and secretKeys.telemetryInstallKey (issued by Agent Relay), and with
-transport https also telemetry.endpoint. transport file never sends
+telemetry.level (SELFHOST_TELEMETRY_LEVEL) is errors (the chart default:
+scrubbed error metadata and health only, never content), full (adds
+usage counts) or off (disabled). The level takes effect once the install
+is registered: until telemetry.installId and
+secretKeys.telemetryInstallKey (issued by Agent Relay) and, with
+transport https, telemetry.endpoint are set, the chart renders off, so a
+default install renders and sends nothing; setting only some of them
+fails the render. transport file never sends
 (air-gapped signed export). telemetry.probes and telemetry.deployment add
 health probes and flat deployment-shape keys (scalar values only; the
 chart-rendered keys cannot be overridden). A TCP 443 egress rule to
 telemetry.egressTo is added only when networkPolicy.enabled=true,
 allowAllEgress=false, the level is not off and the transport is https.
 
-- Default: `off`
-- Choices: `off`; `errors`; `full`
+- Default: `errors`
+- Choices: `errors`; `full`; `off`
 - Provided by: operator
 - Values: `telemetry.*`, `secretKeys.telemetryInstallKey`
 - Env: `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`
-- Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.telemetryInstallKey` (optional: required unless telemetry.level is off)
-- Verify: helm template fails for a level other than off without installId, install key, or (https) endpoint; ci/agent-relay/render.sh checks the egress rule renders only when telemetry is sent over https
+- Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.telemetryInstallKey` (optional: required once the install is registered unless telemetry.level is off)
+- Verify: the default render sets SELFHOST_TELEMETRY_LEVEL=off until installId, install key and (https) endpoint are set; helm template fails when only some of them are set; ci/agent-relay/render.sh checks both and that the egress rule renders only when telemetry is sent over https
 - Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl), [`charts/relay-cloud-api/templates/networkpolicy.yaml`](../charts/relay-cloud-api/templates/networkpolicy.yaml)
 
 #### opt.relay-dashboard.ingress

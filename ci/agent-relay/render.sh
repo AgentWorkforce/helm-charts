@@ -277,11 +277,22 @@ expect_leaf_failure relay-cloud-api "flows.gcsBucket is required" --set flows.st
 expect_leaf_failure relay-cloud-api "flows.storage must be postgres or gcs" --set flows.storage=s3
 expect_leaf_failure relay-cloud-api "flows.queuePingMs must be an integer from 1000 to 120000" --set flows.queuePingMs=500
 expect_leaf_failure relay-cloud-api "telemetry.level must be off, errors, or full" --set telemetry.level=verbose
-expect_leaf_failure relay-cloud-api "telemetry.installId is required" --set telemetry.level=errors
-expect_leaf_failure relay-cloud-api "secretKeys.telemetryInstallKey is required" \
-  --set telemetry.level=errors --set telemetry.installId=inst_abcdefgh12
+# Default level errors arms only once the install is registered: the default
+# render works and sends nothing; a partial registration fails closed.
+tele_default=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "SELFHOST_TELEMETRY_LEVEL") | .value')
+test "$tele_default" = off || { echo "relay-cloud-api: unregistered default telemetry must render off (got $tele_default)" >&2; exit 1; }
+test "$(yq '.telemetry.level' charts/relay-cloud-api/values.yaml)" = errors || { echo "relay-cloud-api: telemetry.level default must be errors" >&2; exit 1; }
+expect_leaf_failure relay-cloud-api "secretKeys.telemetryInstallKey is required" --set telemetry.installId=inst_abcdefgh12
+expect_leaf_failure relay-cloud-api "telemetry.installId is required" --set secretKeys.telemetryInstallKey=telemetry-install-key
+expect_leaf_failure relay-cloud-api "telemetry.installId is required" --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry
 expect_leaf_failure relay-cloud-api "telemetry.endpoint is required" \
-  --set telemetry.level=errors --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key
+  --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key
+tele_reg=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
+  --set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key \
+  --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "SELFHOST_TELEMETRY_LEVEL") | .value')
+test "$tele_reg" = errors || { echo "relay-cloud-api: a registered install must default to errors (got $tele_reg)" >&2; exit 1; }
 expect_leaf_failure relay-cloud-api "telemetry.endpoint must be an https URL" --set telemetry.endpoint=http://ingest.example.org/
 rotation_items=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
   --set encryption.previousKeyId=ci-0 --set secretKeys.previousEncryptionKey=old-key |
@@ -327,7 +338,8 @@ if egress_out=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f char
 fi
 grep -Fq "telemetry.egressTo must not be empty" <<<"$egress_out" \
   || { echo "relay-cloud-api: empty telemetry.egressTo failed without the expected error" >&2; exit 1; }
-expect_rules 0 "telemetry egress rendered with level off"
+expect_rules 0 "telemetry egress rendered for an unregistered install"
+expect_rules 0 "telemetry egress rendered with level off" --set telemetry.level=off "${telemetry_on[@]}"
 expect_rules 0 "telemetry egress rendered for transport=file" \
   --set telemetry.level=errors --set telemetry.transport=file "${telemetry_on[@]}"
 expect_rules 1 "no telemetry egress rule with level errors over https" --set telemetry.level=errors "${telemetry_on[@]}"
