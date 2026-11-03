@@ -279,6 +279,23 @@ if [ "$mode" = static ]; then
   for n in HOOPDB_DB_MODE HOOPDB_SUPABASE_SHIM HOOPDB_RUNTIME_ROLE HOOPDB_RUNTIME_ROLE_LOGIN HOOPDB_FUNCTION_BOUNDARY_MODE HOOPDB_FUNCTION_BOUNDARY_APPROVED HOOPDB_ROLE_BOOTSTRAP; do
     expect_fail "extraEnv must not set $n" "${GCP[@]}" --set "worker.extraEnv[0].name=$n" --set "worker.extraEnv[0].value=x"
   done
+  # GCS Locker: the services refuse HMAC keys on GCS and the S3 client against
+  # storage.googleapis.com, and locker.provider=gcs arms their data-path
+  # readiness check. The GCP Cloud SQL file renders the native GCS shape.
+  out=$(render "${GCP[@]}") || err "gcp-cloudsql did not render"
+  for w in worker-referee worker-bob-costas worker-hoopdb-indexer alleyoop-ingest; do
+    gcs_env=$(yq "select(.kind == \"Deployment\" and .metadata.name == \"ci-$w\") | .spec.template.spec.containers[0].env[] | select(.name == \"LOCKER_PROVIDER\" or .name == \"PIPELINE_RAW_PROVIDER\") | .name + \"=\" + .value" <<<"$out" | sort | tr '\n' ' ')
+    [ "$gcs_env" = "LOCKER_PROVIDER=gcs PIPELINE_RAW_PROVIDER=gcs " ] || err "gcp-cloudsql: $w lacks LOCKER_PROVIDER=gcs/PIPELINE_RAW_PROVIDER=gcs (got: $gcs_env)"
+  done
+  grep -Eq 'name: "?LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)"?$' <<<"$out" && err "gcp-cloudsql: GCS Locker renders a static HMAC credential"
+  expect_fail "locker.provider=gcs requires locker.credentials.mode=podIdentity" "${GCP[@]}" --set worker.locker.credentials.mode=secret --set worker.locker.endpoint=https://storage.googleapis.com
+  expect_fail "locker.provider=gcs requires locker.endpoint to be empty or https://storage.googleapis.com" "${GCP[@]}" --set worker.locker.endpoint=https://gcs.example.com
+  expect_fail "needs CLOUD_SQL_CONNECTION_NAME in extraEnv" "${GCP[@]}" --set worker.extraEnv=null
+  expect_fail "needs PUBSUB_SUBSCRIPTION in extraEnv" "${GCP[@]}" --set-json 'alleyoop.extraEnv=[{"name":"CLOUD_SQL_CONNECTION_NAME","value":"p:r:i"},{"name":"REDIS_HOST","value":"10.0.0.3"},{"name":"REDIS_PORT","value":"6378"},{"name":"REDIS_AUTH_ENABLED","value":"false"},{"name":"REDIS_TRANSIT_ENCRYPTION","value":"SERVER_AUTHENTICATION"},{"name":"REDIS_TLS_CA_PEM","value":"ca"},{"name":"PUBSUB_TOPIC","value":"t"}]'
+  expect_fail "lockerInit.enabled must be false with locker.provider=gcs" "${GCP[@]}" --set worker.lockerInit.enabled=true
+  expect_fail "locker.endpoint is a Google Cloud Storage endpoint: set locker.provider=gcs" "${SB[@]}" --set worker.locker.endpoint=https://storage.googleapis.com
+  expect_fail "locker.provider must be s3 or gcs" "${SB[@]}" --set alleyoop.locker.provider=azure
+  expect_fail "extraEnv must not set LOCKER_PROVIDER: use locker.provider" "${SB[@]}" --set 'worker.extraEnv[0].name=LOCKER_PROVIDER' --set 'worker.extraEnv[0].value=gcs'
   # Worker NetworkPolicy: an empty `to` matches every destination, so a
   # required rule without destinations must refuse to render, and a rendered
   # egress rule must never carry an empty or missing `to`.

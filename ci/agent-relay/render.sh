@@ -203,6 +203,19 @@ fi
 grep -q 'gkeIngress.backends.history.serviceName=history does not match' <<<"$mismatch" \
   || { echo "backend mismatch failed without the expected error" >&2; exit 1; }
 
+# The customer GCP profile stores Sessions objects in GCS through the native
+# adapter (Workload Identity), never AWS S3 or HMAC keys.
+gcp_out=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml)
+for w in ar-worker-referee ar-worker-bob-costas ar-worker-hoopdb-indexer ar-alleyoop-ingest; do
+  test "$(yq "select(.kind == \"Deployment\" and .metadata.name == \"$w\") |
+    .spec.template.spec.containers[0].env[] | select(.name == \"LOCKER_PROVIDER\") | .value" <<<"$gcp_out")" = gcs \
+    || { echo "values-gcp.yaml: $w does not select the GCS Locker" >&2; exit 1; }
+done
+if grep -Eq 'name: "?LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)"?$' <<<"$gcp_out"; then
+  echo "values-gcp.yaml renders static Locker HMAC credentials" >&2
+  exit 1
+fi
+
 # The supported-100 overlay sizes Relaycast backups, so it must enable them.
 s100=$(helm template ar charts/agent-relay -n agent-relay --no-hooks \
   -f charts/agent-relay/values-gcp.yaml -f charts/agent-relay/values-gcp-supported-100.yaml)

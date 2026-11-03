@@ -1112,6 +1112,40 @@ entries:
       - "charts/96bulls-worker/values.yaml:63"
       - "charts/96bulls-worker/templates/_env.tpl:15"
 
+  - id: opt.96bulls.locker-provider
+    kind: option
+    title: Locker provider (S3-compatible or native GCS)
+    description: |
+      s3 (default) leaves LOCKER_PROVIDER unset: MinIO, AWS S3 or another
+      S3-compatible store. gcs renders LOCKER_PROVIDER=gcs and
+      PIPELINE_RAW_PROVIDER=gcs so the services use their native GCS adapter with a
+      GKE Workload Identity token. It requires locker.credentials.mode=podIdentity,
+      an empty (or https://storage.googleapis.com) endpoint and
+      worker.lockerInit.enabled=false. The services refuse HMAC keys on GCS and the S3
+      client against storage.googleapis.com, so the charts refuse both. gcs also arms
+      the services' GCS data-path readiness check: worker.extraEnv and
+      alleyoop.extraEnv must carry CLOUD_SQL_CONNECTION_NAME, REDIS_HOST, REDIS_PORT,
+      REDIS_AUTH_ENABLED=false, REDIS_TRANSIT_ENCRYPTION=SERVER_AUTHENTICATION,
+      REDIS_TLS_CA_PEM (public CA bundle), PUBSUB_TOPIC and PUBSUB_SUBSCRIPTION, or the
+      render fails.
+    chart: 96bulls
+    values: [worker.locker.provider, alleyoop.locker.provider, worker.extraEnv, alleyoop.extraEnv]
+    env: [LOCKER_PROVIDER, PIPELINE_RAW_PROVIDER, CLOUD_SQL_CONNECTION_NAME, REDIS_HOST, REDIS_PORT, REDIS_AUTH_ENABLED, REDIS_TRANSIT_ENCRYPTION, REDIS_TLS_CA_PEM, PUBSUB_TOPIC, PUBSUB_SUBSCRIPTION]
+    profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
+    status: shipped
+    provided_by: operator
+    default: s3
+    profile_default: { default: s3, gcp-cloudsql: gcs }
+    choices:
+      - { value: s3 }
+      - { value: gcs, note: GKE Workload Identity; Cloud SQL, Memorystore and Pub/Sub readiness settings in extraEnv }
+    verify: with gcs, the worker and Alleyoop /readyz return 200 and /datapathz reports ok
+    sources:
+      - "charts/96bulls-worker/values.yaml:64"
+      - "charts/96bulls-worker/templates/_env.tpl:63"
+      - "charts/96bulls-worker/templates/_env.tpl:108"
+      - "charts/alleyoop/templates/_env.tpl:95"
+
   - id: opt.96bulls.services-image
     kind: option
     title: Services image registry

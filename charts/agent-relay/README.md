@@ -38,6 +38,7 @@ before installing. The required value overrides are:
 | All `existingSecret` values set to `example-agent-relay-secrets` | Name of a pre-created Secret in the release namespace. Update every occurrence if separate Secrets are used. |
 | `96bulls.{worker,alleyoop}.locker.bucket` | Existing customer-owned GCS bucket used for session objects. Both values must match. |
 | `96bulls.{worker,alleyoop}.locker.region` | Region of that bucket. Both values must match. |
+| `96bulls.worker.extraEnv` (shared with `alleyoop.extraEnv` through a YAML anchor) | Cloud SQL connection name, Memorystore host/port/server CA bundle, and Pub/Sub topic and subscription. `locker.provider=gcs` arms the Sessions services' GCS data-path readiness check, which requires them; the chart refuses to render without them. |
 | `relaycast.baseUrl` | `https://` plus `gkeIngress.hosts.cast`. |
 | `relayhistory.relayauth.historyOrigin` | `https://` plus `gkeIngress.hosts.history`. |
 | `relay-cloud-api.publicUrl` | `https://` plus `gkeIngress.hosts.api`. |
@@ -92,8 +93,12 @@ least-privilege role named in the values (`sessions_runtime` or
 migration-owner roles. Relay History must have its own database and migration
 ledger.
 
-Grant the rendered Sessions worker and Alleyoop Kubernetes service accounts
-GCS access through GKE Workload Identity, and grant GKE nodes or configured
+Sessions objects use the services' native GCS adapter
+(`locker.provider=gcs`, `LOCKER_PROVIDER=gcs`) with an empty endpoint, which
+means the official `https://storage.googleapis.com` API. The services refuse
+HMAC keys on GCS and refuse the S3 client against a GCS endpoint, so there is
+no S3-interoperability mode. Grant the rendered Sessions worker and Alleyoop
+Kubernetes service accounts GCS access through GKE Workload Identity, and grant GKE nodes or configured
 image pull identities read access to every Artifact Registry repository. No
 cloud credential belongs in this values file.
 
