@@ -176,4 +176,12 @@ for child in relay-dashboard relay-cloud-api relayhistory; do
     --set 'podLabels.app\.kubernetes\.io/name=custom'
 done
 
+# The authority gate applies only when Relaycast itself is deployed.
+helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  --set components.relaycast=false --set components.relayauth=false \
+  --set components.sessionsPipeline=false --set components.relayhistory=false \
+  --set components.cloudApi=false --set components.dashboard=false \
+  --set relaycast.credentials.authority=relayauth >/dev/null \
+  || { echo "authority=relayauth gate fired with components.relaycast=false" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"
