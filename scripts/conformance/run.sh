@@ -25,6 +25,7 @@ CONFORMANCE_HEALTH_PATH="${CONFORMANCE_HEALTH_PATH:-/readyz}"
 MIGRATION_FAILURE_VALUES="${CONFORMANCE_MIGRATION_FAILURE_VALUES:-}"
 WRONG_DATABASE_VALUES="${CONFORMANCE_WRONG_DATABASE_VALUES:-}"
 DB_OUTAGE_HOOK="${CONFORMANCE_DB_OUTAGE_HOOK:-}"
+DB_DEPENDENT_SELECTOR="${CONFORMANCE_DB_DEPENDENT_SELECTOR:-}"
 BACKUP_HOOK="${CONFORMANCE_BACKUP_HOOK:-}"
 RESTORE_HOOK="${CONFORMANCE_RESTORE_HOOK:-}"
 ROLLBACK_BASE_URL="${CONFORMANCE_ROLLBACK_BASE_URL:-}"
@@ -65,6 +66,10 @@ Failure and recovery fixtures:
   --migration-failure-values FILE Values that force a migration failure
   --wrong-database-values FILE    Values that configure a known-wrong database
   --db-outage-hook FILE           Executable supporting begin/end actions
+  --db-dependent-selector SEL     Pods that must go unready during the DB
+                                  outage (default: the release's api and
+                                  history components; Job pods are always
+                                  excluded)
   --backup-hook FILE              Executable supporting create action
   --restore-hook FILE             Executable supporting restore/verify actions
   --rollback-base-url HTTPS_URL   Side-by-side previous-version service URL
@@ -97,6 +102,7 @@ while (($#)); do
     --migration-failure-values) MIGRATION_FAILURE_VALUES="${2:?missing value for --migration-failure-values}"; shift 2 ;;
     --wrong-database-values) WRONG_DATABASE_VALUES="${2:?missing value for --wrong-database-values}"; shift 2 ;;
     --db-outage-hook) DB_OUTAGE_HOOK="${2:?missing value for --db-outage-hook}"; shift 2 ;;
+    --db-dependent-selector) DB_DEPENDENT_SELECTOR="${2:?missing value for --db-dependent-selector}"; shift 2 ;;
     --backup-hook) BACKUP_HOOK="${2:?missing value for --backup-hook}"; shift 2 ;;
     --restore-hook) RESTORE_HOOK="${2:?missing value for --restore-hook}"; shift 2 ;;
     --rollback-base-url) ROLLBACK_BASE_URL="${2:?missing value for --rollback-base-url}"; shift 2 ;;
@@ -537,10 +543,16 @@ scenario_db_outage() {
     return
   fi
 
+  # Only PostgreSQL-dependent workloads are expected to fail readiness. The
+  # dashboard and SQLite-backed services stay ready, and completed migration
+  # Job pods never become ready, so both are excluded.
+  local selector="${DB_DEPENDENT_SELECTOR:-app.kubernetes.io/instance=${ACTIVE_RELEASE},app.kubernetes.io/component in (api,history)}"
+  selector="${selector},!job-name"
+
   local stayed_ready=false
   if ! run_quiet safe_kubectl wait --for=condition=Ready=false pod \
     --namespace "${ACTIVE_NAMESPACE}" \
-    --selector "app.kubernetes.io/instance=${ACTIVE_RELEASE}" --timeout=30s; then
+    --selector "${selector}" --timeout=30s; then
     stayed_ready=true
   fi
 
@@ -554,7 +566,7 @@ scenario_db_outage() {
     emit_evidence "${scenario}" "FAIL" "pods remained ready during database outage"
   elif run_quiet safe_kubectl wait --for=condition=Ready pod \
     --namespace "${ACTIVE_NAMESPACE}" \
-    --selector "app.kubernetes.io/instance=${ACTIVE_RELEASE}" --timeout="${TIMEOUT}"; then
+    --selector "${selector}" --timeout="${TIMEOUT}"; then
     emit_evidence "${scenario}" "PASS" "readiness failed closed and recovered after database restoration"
   else
     emit_evidence "${scenario}" "FAIL" "readiness did not recover after database restoration"

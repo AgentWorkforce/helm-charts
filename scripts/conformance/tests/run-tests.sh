@@ -371,6 +371,21 @@ jq -e '.scenarios[] | select(.scenario == "db-outage-readiness") | .status == "F
   fail "failed outage begin was not reported"
 pass "database outage end runs even when begin fails"
 
+# The full apply run above used the default DB-dependent selector.
+: >"${command_log}"
+"${TEST_BASH}" "${HARNESS}" --apply --approval APPLY --chart ./umbrella \
+  --namespace aw-select --release aw-select --db-outage-hook "${hook}" \
+  --evidence-dir "${tmp_root}/outage-select" >/dev/null 2>&1 || true
+assert_contains "${command_log}" 'Ready=false pod .*instance=aw-select\\?,app.kubernetes.io/component\\? in\\? \\\(api\\?,history\\\)\\?,\\?!job-name'
+assert_contains "${command_log}" 'condition=Ready pod .*\\?,\\?!job-name'
+: >"${command_log}"
+"${TEST_BASH}" "${HARNESS}" --apply --approval APPLY --chart ./umbrella \
+  --namespace aw-select --release aw-select --db-outage-hook "${hook}" \
+  --db-dependent-selector 'app.kubernetes.io/name=relay-cloud-api' \
+  --evidence-dir "${tmp_root}/outage-select-custom" >/dev/null 2>&1 || true
+assert_contains "${command_log}" 'Ready=false pod .*name=relay-cloud-api\\?,\\?!job-name'
+pass "DB outage waits only on PostgreSQL-dependent, non-Job pods"
+
 # expect_wrapper RC MODE COMMAND... runs a wrapper in an isolated subshell
 # under TEST_BASH and asserts both the exit code and that a blocked command
 # never reached the mocked binary.
