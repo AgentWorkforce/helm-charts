@@ -34,13 +34,13 @@
       },
       {
         "decision": "approved",
-        "evidence": "Owner decision (Khaliq, 2026-11-03): Apache-2.0. Canonical LICENSE and package.json license added by https://github.com/AgentWorkforce/sessions-pipeline/pull/172; present at the image source revision recorded in self-hosted/customer-images.yaml",
+        "evidence": "Owner decision (Khaliq, 2026-11-03): Apache-2.0. The canonical LICENSE and package.json license landed on sessions-pipeline main in https://github.com/AgentWorkforce/sessions-pipeline/pull/172 (merge 51b38ff). The release image will be built from main at or after that commit; the older revision recorded in customer-images.yaml predates the LICENSE file.",
         "id": "sessions-services",
         "spdx": "Apache-2.0"
       },
       {
         "decision": "approved",
-        "evidence": "Owner decision (Khaliq, 2026-11-03): Apache-2.0. Canonical LICENSE and package.json license added by https://github.com/AgentWorkforce/relayhistory-cloud/pull/279; present at the image source revision recorded in self-hosted/customer-images.yaml",
+        "evidence": "Owner decision (Khaliq, 2026-11-03): Apache-2.0. The canonical LICENSE and package.json license are in https://github.com/AgentWorkforce/relayhistory-cloud/pull/279 (open, held with the RelayHistory release image). The proof revision recorded in customer-images.yaml predates it.",
         "id": "relayhistory",
         "spdx": "Apache-2.0"
       },
