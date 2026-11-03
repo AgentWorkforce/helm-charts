@@ -26,6 +26,7 @@ NS=agent-relay
 K=(kubectl --context "$CTX" -n "$NS")
 MINIO_IMAGE=${MINIO_IMAGE:-bitnamilegacy/minio:2025.4.22}
 WORK=${WORK_DIR:-$(mktemp -d)}
+mkdir -p "$WORK"
 log() { printf '\n=== %s\n' "$*"; }
 
 log "load images into kind/$CLUSTER"
@@ -37,8 +38,11 @@ done
 log "namespace, MinIO, secrets"
 kubectl --context "$CTX" create namespace "$NS" --dry-run=client -o yaml | kubectl --context "$CTX" apply -f - >/dev/null
 rand() { openssl rand -hex "${1:-24}"; }
+# Reuse a value already in the cluster so re-runs match what running pods loaded.
+existing() { "${K[@]}" get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null | base64 -d 2>/dev/null || true; }
+keep() { local v; v=$(existing "$1" "$2"); [ -n "$v" ] && printf '%s' "$v" || rand "${3:-24}"; }
 MINIO_USER=relayfile-proof
-MINIO_PASS=$(rand)
+MINIO_PASS=$(keep minio-root password)
 "${K[@]}" create secret generic minio-root --from-literal=user="$MINIO_USER" --from-literal=password="$MINIO_PASS" \
   --dry-run=client -o yaml | "${K[@]}" apply -f - >/dev/null
 "${K[@]}" apply -f - >/dev/null <<EOF
@@ -73,18 +77,18 @@ for name in relaycast-minio relayfile-minio; do
   "${K[@]}" create secret generic "$name" --from-literal=AWS_ACCESS_KEY_ID="$MINIO_USER" \
     --from-literal=AWS_SECRET_ACCESS_KEY="$MINIO_PASS" --dry-run=client -o yaml | "${K[@]}" apply -f - >/dev/null
 done
-RELAYCAST_INTERNAL=$(rand 32)
+RELAYCAST_INTERNAL=$(keep relaycast-secrets internal-secret 32)
 "${K[@]}" create secret generic relaycast-secrets \
   --from-literal=internal-secret="$RELAYCAST_INTERNAL" \
-  --from-literal=workspace-bootstrap-secret="$(rand)" \
-  --from-literal=credential-keyring="{\"current\":\"a\",\"keys\":{\"a\":\"$(rand)\"}}" \
-  --from-literal=file-signing-secret="$(rand)" \
-  --from-literal=durable-actors-dev-secret="$(rand)" \
+  --from-literal=workspace-bootstrap-secret="$(keep relaycast-secrets workspace-bootstrap-secret)" \
+  --from-literal=credential-keyring="$(v=$(existing relaycast-secrets credential-keyring); [ -n "$v" ] && printf '%s' "$v" || printf '{"current":"a","keys":{"a":"%s"}}' "$(rand)")" \
+  --from-literal=file-signing-secret="$(keep relaycast-secrets file-signing-secret)" \
+  --from-literal=durable-actors-dev-secret="$(keep relaycast-secrets durable-actors-dev-secret)" \
   --dry-run=client -o yaml | "${K[@]}" apply -f - >/dev/null
-RELAYFILE_JWT=$(rand 32)
+RELAYFILE_JWT=$(keep relayfile-actors RELAYFILE_JWT_SECRET 32)
 "${K[@]}" create secret generic relayfile-actors \
   --from-literal=RELAYFILE_JWT_SECRET="$RELAYFILE_JWT" \
-  --from-literal=DURABLE_ACTORS_SECRET="$(rand)" \
+  --from-literal=DURABLE_ACTORS_SECRET="$(keep relayfile-actors DURABLE_ACTORS_SECRET)" \
   --dry-run=client -o yaml | "${K[@]}" apply -f - >/dev/null
 "${K[@]}" rollout status deploy/minio --timeout=180s
 
