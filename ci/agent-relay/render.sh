@@ -184,4 +184,23 @@ helm template proof charts/agent-relay -n agent-relay --no-hooks \
   --set relaycast.credentials.authority=relayauth >/dev/null \
   || { echo "authority=relayauth gate fired with components.relaycast=false" >&2; exit 1; }
 
+# Umbrella Ingress backends must name Services the children render, also
+# without the profile's fullnameOverrides.
+no_override=$(helm template ar charts/agent-relay -n agent-relay --no-hooks "${proof_args[@]}" \
+  --set relaycast.fullnameOverride=null --set relayhistory.fullnameOverride=null \
+  --set relay-cloud-api.fullnameOverride=null --set relay-dashboard.fullnameOverride=null \
+  --set relay-dashboard.api.serviceName=null)
+rendered_services=$(yq 'select(.kind == "Service") | .metadata.name' <<<"$no_override" | grep -v '^---$' | sort -u)
+for backend in $(yq 'select(.kind == "Ingress") | .spec.rules[].http.paths[].backend.service.name' <<<"$no_override" | grep -v '^---$' | sort -u); do
+  grep -qx "$backend" <<<"$rendered_services" \
+    || { echo "umbrella Ingress backend $backend has no rendered Service" >&2; exit 1; }
+done
+if mismatch=$(helm template proof charts/agent-relay -n agent-relay --no-hooks "${proof_args[@]}" \
+  --set gkeIngress.backends.history.serviceName=history 2>&1); then
+  echo "mismatched gkeIngress backend serviceName rendered successfully" >&2
+  exit 1
+fi
+grep -q 'gkeIngress.backends.history.serviceName=history does not match' <<<"$mismatch" \
+  || { echo "backend mismatch failed without the expected error" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"
