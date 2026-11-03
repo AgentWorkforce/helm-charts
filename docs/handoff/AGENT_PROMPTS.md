@@ -61,7 +61,7 @@ approval.
 Register two uniquely named test agents, list the roster, send a marked direct
 message, and require a reply in the same conversation. Do not claim
 bidirectional messaging until the reply is observed. Return only non-secret
-agent names and proof IDs.
+agent names and message IDs.
 ```
 
 ## Prompt 4: prove Sessions end to end
@@ -75,9 +75,19 @@ receipt with one projection. Verify Dashboard list, search, and replay,
 cross-workspace denial, persistence after a RelayHistory restart, and public
 TLS health.
 
-Run an idempotent Helm upgrade. Verify a current backup and restore it into an
-isolated target before claiming the installation is ready. Return non-secret
-proof IDs and any remaining blockers.
+Before any Helm upgrade, run the pre-upgrade recovery gate from
+docs/selfhost-backup-restore.md: review migration compatibility to the exact
+target versions, capture a complete recovery set from the currently deployed
+revision while writes are quiesced, restore it into an isolated target and pass
+every verification gate, then run the read-only
+scripts/selfhost/pre-upgrade-check.sh with the backup, restore, and
+compatibility evidence. Stop and ask for explicit approval with that evidence.
+Do not run helm upgrade until approval is given; a passing gate does not
+authorize the upgrade or make a migration reversible.
+
+After approval, run the Helm upgrade without --atomic, verify the migration
+Jobs and all workloads, and repeat the session checks above. Return non-secret
+IDs and any remaining blockers.
 ```
 
 ## Prompt 5: audit or recover an installation
