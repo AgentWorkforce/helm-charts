@@ -489,4 +489,20 @@ if find "${gcs}" -name COMPLETE | grep -q .; then
 fi
 pass "backup evidence records sourceRevision and verified writesQuiesced"
 
+# ---------------------------------------------------------------------------
+# Restore-drill request, record, and audit
+# ---------------------------------------------------------------------------
+run_drill_request() {
+  env POD_UID="${1:-req1}" GCS_ARCHIVE_BUCKET=relay-archive HELM_RELEASE=relay \
+    "${TEST_BASH}" "${RECOVERY_DIR}/gcp-restore-drill-request.sh" >"${tmp_root}/request.out" 2>&1
+}
+
+reset_fixtures
+write_backup_fixtures
+run_backup 7777aaaa || { cat "${tmp_root}/backup.out" >&2; fail "backup for drill tests failed"; }
+run_drill_request || { cat "${tmp_root}/request.out" >&2; fail "drill request failed"; }
+grep -q '^gcloud storage cp --if-generation-match=0 .*/request.json' "${command_log}" ||
+  fail "drill request upload is not create-only"
+pass "drill request upload uses --if-generation-match=0"
+
 printf 'All self-hosted script tests passed.\n'

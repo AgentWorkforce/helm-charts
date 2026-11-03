@@ -71,6 +71,9 @@ with open(path, "w", encoding="utf-8") as stream:
     stream.write("\n")
 PY
 
-gcloud storage cp "$workdir/request.json" "$request_uri" >/dev/null
+# Create-only: the request is the immutable identity record-restore-drill.sh
+# checks, so never replace an existing one (for example two manual runs in
+# the same second), even on a bucket without a locked retention policy.
+gcloud storage cp --if-generation-match=0 "$workdir/request.json" "$request_uri" >/dev/null
 printf 'RESTORE_DRILL_REQUEST=PASS drill_id=%s recovery_id=%s request=%s\n' \
   "$drill_id" "$recovery_id" "$request_uri"
