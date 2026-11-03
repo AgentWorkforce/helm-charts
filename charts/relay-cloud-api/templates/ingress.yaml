@@ -21,6 +21,16 @@ spec:
     - host: {{ . | quote }}
       http:
         paths:
+          {{- if $.Values.secretKeys.internalToken }}
+          # /internal/v1 is for in-cluster callers only: route it to a Service
+          # with no endpoints so the controller answers with an error.
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "relay-cloud-api.fullname" $ | trunc 50 | trimSuffix "-" }}-internal-deny
+                port: { number: 80 }
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
@@ -28,4 +38,20 @@ spec:
                 name: {{ include "relay-cloud-api.fullname" $ }}
                 port: { name: http }
     {{- end }}
+{{- if .Values.secretKeys.internalToken }}
+---
+# Deliberately has no selector (and so no endpoints): the Ingress sends
+# /internal here so it is never forwarded to the API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "relay-cloud-api.fullname" . | trunc 50 | trimSuffix "-" }}-internal-deny
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{ include "relay-cloud-api.labels" . | nindent 4 }}
+    app.kubernetes.io/component: internal-deny
+spec:
+  type: ClusterIP
+  ports:
+    - { name: http, port: 80, protocol: TCP }
+{{- end }}
 {{- end }}

@@ -173,7 +173,7 @@ at startup is refused at render time instead of crash-looping. */ -}}
 {{- if not .Values.telemetry.installId }}{{ fail "telemetry.installId is required unless telemetry.level is off" }}{{ end -}}
 {{- if not .Values.secretKeys.telemetryInstallKey }}{{ fail "secretKeys.telemetryInstallKey is required unless telemetry.level is off" }}{{ end -}}
 {{- if and (eq $transport "https") (not .Values.telemetry.endpoint) }}{{ fail "telemetry.endpoint is required for telemetry.transport=https unless telemetry.level is off" }}{{ end -}}
-{{- if and (eq $transport "https") .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.telemetry.egressTo) }}{{ fail "telemetry.egressTo must not be empty: restricted egress would block the telemetry endpoint" }}{{ end -}}
+{{- if and (eq $transport "https") .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.telemetry.egressTo) }}{{ fail "telemetry.egressTo must not be empty: restricted egress would block the telemetry endpoint (list the ingest endpoint's addresses)" }}{{ end -}}
 {{- end -}}
 {{- $probeNames := list -}}
 {{- range .Values.telemetry.probes }}

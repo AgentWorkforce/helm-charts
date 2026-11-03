@@ -68,9 +68,7 @@ flows:
 
 # Self-host telemetry (relaycontrol docs/telemetry.md).
 telemetry:
-  # off | errors | full.
-  # DECISION PENDING (Khaliq): the chart default level is not decided yet.
-  # It stays off, the same as the API's default when unset, until it is.
+  # off | errors | full. Default off, the same as the API's default when unset.
   level: "off"
   # https sends to endpoint. file never sends: reports wait in the outbox for
   # an operator to download a signed export (air-gapped installs).
@@ -90,13 +88,13 @@ telemetry:
   deployment: {}
   # Destinations of the egress rule (TCP 443) the NetworkPolicy adds when
   # networkPolicy.enabled, allowAllEgress=false, level != off and
-  # transport=https. NetworkPolicy
-  # cannot match a hostname, so the default is any public address; narrow it
-  # to the ingest endpoint's addresses if they are stable.
-  egressTo:
-    - ipBlock:
-        cidr: 0.0.0.0/0
-        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+  # transport=https. NetworkPolicy cannot match a hostname, so list the
+  # ingest endpoint's addresses; the render fails while this is empty under
+  # those conditions. To allow any public address instead:
+  #   - ipBlock:
+  #       cidr: 0.0.0.0/0
+  #       except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+  egressTo: []
 database:
   # Non-secret PostgreSQL role used by the long-running API. The migration
   # owner grants this role only the runtime privileges after every migration.

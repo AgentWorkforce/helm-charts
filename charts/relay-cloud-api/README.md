@@ -18,25 +18,30 @@ runs `node node_modules/@cloud/selfhost-api/dist/server.js`; migrations run
 their `*PublicUrl` counterparts must be public HTTPS origins and are returned
 to clients or used as the externally stable RelayHistory assertion audience.
 
+Requires Helm 3.10 or newer (templates use `{{ continue }}`).
+
 ## relaycontrol runtime settings
 
-The chart renders the relaycontrol env contract and refuses at render time
+The authoritative contract is the requirements registry
+(`self-hosted/requirements.yaml`, rendered to
+[docs/self-hosted-requirements.md](../../docs/self-hosted-requirements.md));
+this table summarizes it. The chart renders the relaycontrol env contract and refuses at render time
 whatever the API would refuse at startup:
 
 | Value | Env | Notes |
 | --- | --- | --- |
 | `encryption.keyId` (required) | `SELFHOST_ENCRYPTION_KEY_ID` | Non-secret id of `secretKeys.encryptionKey`, 1-64 URL-safe characters. |
 | `encryption.previousKeyId` + `secretKeys.previousEncryptionKey` | `SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID`, `SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE` | Key rotation; both or neither, and the id must differ from `keyId`. |
-| `secretKeys.internalToken` | `SELFHOST_INTERNAL_TOKEN_FILE` | Optional service bearer for `/internal/v1` (flows env delivery, telemetry issue reports). Never expose `/internal` publicly; the agent-relay GKE ingress denies it at the edge. |
+| `secretKeys.internalToken` | `SELFHOST_INTERNAL_TOKEN_FILE` | Optional service bearer for `/internal/v1` (flows env delivery, telemetry issue reports). Never expose `/internal` publicly: with `ingress.enabled` this chart routes `/internal` to a selector-less deny Service, and the agent-relay GKE ingress denies it at the edge. |
 | `dashboardUrl` | `SELFHOST_DASHBOARD_URL` | Where OAuth callback pages and flow `runUrl`s point. Defaults to `publicUrl` + `/` in the API. |
 | `flows.storage`, `flows.gcsBucket`, `flows.gcsPrefix` | `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX` | `postgres` (default) or `gcs` (Workload Identity; bucket required). |
 | `flows.workerRelaycastUrl` | `SELFHOST_FLOWS_WORKER_RELAYCAST_URL` | Optional Relaycast origin handed to workers. |
 | `flows.queuePingMs` | `SELFHOST_FLOWS_QUEUE_PING_MS` | SSE keepalive, 1000-120000 ms; keep it below proxy timeouts. |
-| `telemetry.level` | `SELFHOST_TELEMETRY_LEVEL` | `off` (default; the chart default is a pending decision), `errors` or `full`. |
+| `telemetry.level` | `SELFHOST_TELEMETRY_LEVEL` | `off` (chart default, the same as the API default), `errors` or `full`. |
 | `telemetry.transport` | `SELFHOST_TELEMETRY_TRANSPORT` | Optional; `https` (default) or `file` (reports stay in the outbox for a signed export). |
 | `telemetry.installId`, `secretKeys.telemetryInstallKey` | `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE` | Both required unless the level is `off`. |
 | `telemetry.endpoint` | `SELFHOST_TELEMETRY_ENDPOINT` | Required only when the level is not `off` and the transport is `https`; optional with `file`. Must be an https URL. |
-| `telemetry.egressTo` | (NetworkPolicy) | Destinations of the telemetry egress rule; defaults to any public address. It must not be empty when the level is not `off`, the transport is `https`, `networkPolicy.enabled=true` and `networkPolicy.allowAllEgress=false`, and is unused otherwise. |
+| `telemetry.egressTo` | (NetworkPolicy) | Destinations of the telemetry egress rule; empty by default. It must not be empty when the level is not `off`, the transport is `https`, `networkPolicy.enabled=true` and `networkPolicy.allowAllEgress=false`, and is unused otherwise. |
 | `telemetry.probes` | `SELFHOST_TELEMETRY_PROBES` | Up to 20 extra health probes; `name` is a string of lowercase letters, digits and dashes (quote numeric names). |
 | `telemetry.deployment` | `SELFHOST_TELEMETRY_DEPLOYMENT` | Extra flat deployment-shape keys (at most 32): string, number or boolean values only, version-like strings without `//`; the chart-rendered keys (`chart`, `chartVersion`, `appVersion`, `replicas`, `flowsStorage`, `networkPolicy`, `ingress`) cannot be overridden. |
 
