@@ -39,19 +39,27 @@ expect_render_failure() { # chart valuesfile label expected-error [extra helm ar
   fi
 }
 
+# helm dependency build only resolves https repositories that are added.
+add_repos() { # Chart.yaml
+  local repo
+  for repo in $(sed -n 's/^ *repository: *\(https:.*\)/\1/p' "$1" | sort -u); do
+    helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
+  done
+}
+
 for chart in "${charts[@]}"; do
   [ -f "charts/$chart/Chart.yaml" ] || { err "$chart: no Chart.yaml"; continue; }
   if [ -f "charts/$chart/Chart.lock" ] || grep -q '^dependencies:' "charts/$chart/Chart.yaml"; then
     # Helm does not recursively vendor dependencies of a file:// dependency.
     # Build the sessions umbrella first so agent-relay always contains its
     # sessions-pipeline-worker/alleyoop/third-party children, even in an isolated check.
+    # (charts sort alphabetically, so agent-relay runs before sessions-pipeline
+    # has added its https repositories: add them here too.)
     if [ "$chart" = agent-relay ]; then
+      add_repos charts/sessions-pipeline/Chart.yaml
       helm dependency build charts/sessions-pipeline >/dev/null || { err "$chart: nested sessions-pipeline dependency build failed"; continue; }
     fi
-    # helm dependency build only resolves https repositories that are added.
-    for repo in $(sed -n 's/^ *repository: *\(https:.*\)/\1/p' "charts/$chart/Chart.yaml" | sort -u); do
-      helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
-    done
+    add_repos "charts/$chart/Chart.yaml"
     helm dependency build "charts/$chart" >/dev/null || { err "$chart: helm dependency build failed"; continue; }
   fi
   values=(charts/"$chart"/ci/*-values.yaml)
