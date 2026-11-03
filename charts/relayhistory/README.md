@@ -27,20 +27,32 @@ migrate Job refuses while any runtime-role session is connected, so it cannot
 succeed while the History Deployment is running, and `replicaCount` must stay 1.
 Drain through values instead of scaling by hand:
 
-1. Upgrade with both flags set. The Deployment renders with `replicas: 0` and
-   the migrate Job runs against an idle database:
+1. Upgrade with both flags set. The Deployment renders with `replicas: 0`.
+   Scaling down is asynchronous (the old pod keeps its database session for
+   up to `terminationGracePeriodSeconds`), so the migrate Job has an init
+   container, `wait-for-history-drain`, that lists this release's History pods
+   through the Kubernetes API and starts the migration only once none exist,
+   terminating pods included. It fails after `migrations.drainWaitSeconds`
+   (default 600). For that step only the chart renders a Role (`pods: list` in
+   the release namespace) bound to the chart's ServiceAccount, and only the
+   init container mounts a token. With `networkPolicy.enabled` and
+   `allowAllEgress: false`, set `migrations.drainWaitApiServerEgress` to the
+   API server address (the render fails otherwise).
 
    ```sh
    helm upgrade <release> <chart> -n <ns> -f <your values> \
      --set relayhistory.migrations.allowWriteHold=true \
      --set relayhistory.migrations.drainForWriteHold=true
-   kubectl -n <ns> wait --for=delete pod -l app.kubernetes.io/component=history --timeout=5m
-   kubectl -n <ns> wait --for=condition=complete job -l app.kubernetes.io/component=migration --timeout=60m
+   kubectl -n <ns> wait --for=condition=complete job \
+     -l app.kubernetes.io/instance=<release>,app.kubernetes.io/component=migration --timeout=60m
    ```
 
-   (Drop the `relayhistory.` prefix when installing this chart directly. Check
-   your release's labels with `kubectl get job --show-labels`.) If the Job
-   fails, stop: inspect its log before retrying, and do not run step 2.
+   (Drop the `relayhistory.` prefix when installing this chart directly. The
+   selectors are release-scoped so another relayhistory release in the same
+   namespace is never matched; check labels with `kubectl get job
+   --show-labels`.) If the Job fails, stop: inspect its log (`kubectl logs
+   job/<name> -c wait-for-history-drain` and `-c migrate`) before retrying, and
+   do not run step 2.
 2. Upgrade again with both flags back to `false` (the defaults). The Deployment
    returns to `replicaCount`. The migrate Job's pod template changes
    (`ALLOW_WRITE_HOLD=no`), so a new Job runs; it finds nothing to apply.

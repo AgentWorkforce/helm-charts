@@ -62,6 +62,14 @@ migrations:
   # allowWriteHold. Step 2 is the same upgrade with both set back to false,
   # which restores replicaCount. History is unavailable between the steps.
   drainForWriteHold: false
+  # With drainForWriteHold the migrate Job's init container polls the
+  # Kubernetes API (a Role allowing pods list in this namespace) until no
+  # History pod of this release exists, and fails after this many seconds.
+  drainWaitSeconds: 600
+  # NetworkPolicy peers for the API server (TCP 443), added to the migration
+  # policy while draining. Required with networkPolicy.enabled and
+  # allowAllEgress=false, e.g. [{ ipBlock: { cidr: <control-plane IP>/32 } }].
+  drainWaitApiServerEgress: []
   rolloutBudgetSeconds: 600
   backoffLimit: 1
   activeDeadlineSeconds: 3600

@@ -82,8 +82,12 @@ the Job may still be running). Use the two-step upgrade in
 
 1. `helm upgrade` with `relayhistory.migrations.allowWriteHold=true` and
    `relayhistory.migrations.drainForWriteHold=true`. History renders with zero
-   replicas. Wait for its pods to be deleted, then for the migrate Job to
-   complete. On failure, stop and follow the safety rules above.
+   replicas, and the migrate Job's init container waits until no History pod
+   of the release exists (terminating pods included) before migrating; it
+   needs API access (a chart-rendered Role that lists pods, plus
+   `relayhistory.migrations.drainWaitApiServerEgress` under restricted
+   egress). Wait for the migrate Job to complete. On failure, stop and follow
+   the safety rules above.
 2. `helm upgrade` with both flags back to `false`. History returns to one
    replica.
 
