@@ -84,13 +84,24 @@ gcloud config set project "$PROJECT_ID"
 gcloud container clusters get-credentials "$CLUSTER" --region "$REGION"
 ```
 
-Record Helm state and inventory without exporting Kubernetes Secret data:
+Record Helm state and inventory without exporting credential values. Raw
+`helm get values -a` and `helm get manifest` output is not safe evidence: an
+inline `relayflows.credentials.enrollmentToken` appears in the computed values,
+and the chart-managed Secret it renders appears in the manifest. Redact both
+before writing anything to the evidence directory, and prefer
+`relayflows.credentials.existingSecret` in any install that produces evidence:
 
 ```bash
-helm get values "$RELEASE" -n "$PROD_NS" -a \
+helm history "$RELEASE" -n "$PROD_NS" -o json \
+  > "$EVIDENCE_DIR/helm-history.json"
+helm get values "$RELEASE" -n "$PROD_NS" -a -o yaml |
+  yq 'del(.relayflows.credentials.enrollmentToken)' \
   > "$EVIDENCE_DIR/helm-values.yaml"
-helm get manifest "$RELEASE" -n "$PROD_NS" \
+helm get manifest "$RELEASE" -n "$PROD_NS" |
+  yq 'select(.kind != "Secret")' \
   > "$EVIDENCE_DIR/helm-manifest.yaml"
+helm get manifest "$RELEASE" -n "$PROD_NS" | sha256sum \
+  > "$EVIDENCE_DIR/helm-manifest.sha256"
 kubectl -n "$PROD_NS" get deploy,statefulset,job,cronjob,pvc -o wide \
   > "$EVIDENCE_DIR/kubernetes-inventory.txt"
 gcloud sql instances describe "$SQL_SOURCE" --format=json \
@@ -98,6 +109,13 @@ gcloud sql instances describe "$SQL_SOURCE" --format=json \
 gcloud storage buckets describe "gs://${GCS_SOURCE}" --format=json \
   > "$EVIDENCE_DIR/gcs-source.json"
 ```
+
+Before keeping the evidence, confirm the redaction held:
+`grep -n enrollmentToken "$EVIDENCE_DIR/helm-values.yaml"` must print nothing,
+and the redacted manifest must contain no `kind: Secret` document. If either
+check fails, delete the file and stop. Because the redacted values omit inline
+credentials, a restore from `recorded-values.yaml` must supply them through an
+`existingSecret` in the target namespace.
 
 Confirm that no migration or backup Job is running; the three database URLs
 select dedicated databases; both Relaycast and RelayAuth PVCs are `Bound`; the
@@ -213,8 +231,17 @@ them into target-namespace `VolumeSnapshot` objects, then create RWO PVCs.
 Requested sizes must be at least the source sizes. Never bind source PVs or
 PVCs into the target.
 
-Install with an isolated overlay:
+Install with an isolated overlay. The migration and Locker initialization Jobs
+are plain Kubernetes Jobs, not Helm hooks, so `--no-hooks` does not stop them;
+the overlay must disable them explicitly. The restored databases already carry
+the recorded schema, and the restored bucket already exists:
 
+- `relayhistory.migrations.enabled=false`;
+- `relay-cloud-api.migrations.enabled=false`;
+- `96bulls.worker.migrations.enabled=false`;
+- `96bulls.worker.lockerInit.enabled=false`;
+- `relaycast.backup.enabled=false`, so no backup CronJob writes during the
+  drill;
 - `gkeIngress.enabled=false` and all leaf ingresses disabled;
 - `relaycast.persistence.existingClaim` set to the restored Relaycast PVC;
 - `relayauth.persistence.existingClaim` set to the restored RelayAuth PVC;
@@ -222,12 +249,44 @@ Install with an isolated overlay:
 - Locker bucket pointing only to the restored bucket;
 - the recorded chart version and immutable image digests.
 
+For example, `isolated-restore-overlay.yaml` starts with:
+
+```yaml
+gkeIngress:
+  enabled: false
+relayhistory:
+  migrations:
+    enabled: false
+relay-cloud-api:
+  migrations:
+    enabled: false
+96bulls:
+  worker:
+    migrations:
+      enabled: false
+    lockerInit:
+      enabled: false
+relaycast:
+  backup:
+    enabled: false
+```
+
+Render first and confirm the target manifest contains no `Job` objects before
+installing:
+
 ```bash
+helm template "$TARGET_RELEASE" ./charts/agent-relay \
+  --namespace "$TARGET_NS" --no-hooks \
+  -f recorded-values.yaml \
+  -f isolated-restore-overlay.yaml |
+  yq 'select(.kind == "Job" or .kind == "CronJob") | .metadata.name'
+# must print nothing
+
 helm install "$TARGET_RELEASE" ./charts/agent-relay \
   --namespace "$TARGET_NS" --create-namespace --no-hooks \
   -f recorded-values.yaml \
   -f isolated-restore-overlay.yaml \
-  --wait --wait-for-jobs --timeout 30m
+  --wait --timeout 30m
 ```
 
 ## Verification gates
