@@ -4,7 +4,7 @@ Summary of the internal end-to-end run on the Agent Relay GKE reference
 deployment, 2026-11-03. Internal identifiers (project, cluster, workspace and
 pod IDs, addresses, keys) are removed. The harness is
 `scripts/selfhost/e2e-gcp-proof.sh` (with `e2e-gcp-proof-driver.mjs` and
-`e2e-gcp-proof-96bulls.ts`) in this archive. It needs a kube context for the install (it execs into the control-plane and Sessions pods)
+`e2e-gcp-proof-sessions-pipeline.ts`) in this archive. It needs a kube context for the install (it execs into the control-plane and Sessions pods)
 and the install's public origins.
 
 ## Topology under test

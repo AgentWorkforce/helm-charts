@@ -80,7 +80,7 @@ EXCLUDED_NAME_FRAGMENTS = (
 INCLUDED_DESPITE_NAME = frozenset((
     "scripts/selfhost/e2e-gcp-proof.sh",
     "scripts/selfhost/e2e-gcp-proof-driver.mjs",
-    "scripts/selfhost/e2e-gcp-proof-96bulls.ts",
+    "scripts/selfhost/e2e-gcp-proof-sessions-pipeline.ts",
 ))
 
 # A complete handoff must contain these exact tracked inputs. The development
