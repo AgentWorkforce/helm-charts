@@ -163,4 +163,7 @@ last_env_from=$(helm template ci charts/relayhistory -n ci --no-hooks -f charts/
 test "$last_env_from" = ci-relayhistory \
   || { echo "relayhistory: extraEnvFrom can override the chart ConfigMap (last envFrom is $last_env_from)" >&2; exit 1; }
 
+expect_leaf_failure relay-cloud-api "ingress.hosts must include the publicUrl host" \
+  --set-json 'ingress.hosts=["other.gcp-proof.agentrelay.com"]'
+
 echo "agent-relay GCP proof render contract: ok"
