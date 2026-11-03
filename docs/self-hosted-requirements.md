@@ -1189,10 +1189,13 @@ issuer/audience are the expected token claims.
 **Plain http to in-cluster Service FQDNs** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 allowInClusterHttp renders ALLOW_IN_CLUSTER_HTTP for alleyoop and every
-worker component. false (default) keeps every service URL https (or
-loopback). true allows plain http only to <svc>.<ns>.svc or
+worker component. false (default) keeps the validated destination URLs
+(RelayAuth, Cloud, ingest, JWKS, history origin, model endpoint) https
+(or loopback). true allows plain http only to <svc>.<ns>.svc or
 <svc>.<ns>.svc.cluster.local, never public hosts, IPs or short names; for
 example alleyoop.auth.jwksUrl=http://relayauth.relayauth.svc:8787/.well-known/jwks.json.
+LOCKER_ENDPOINT and the OTLP endpoint are outside this policy, so the
+bundled MinIO at http://locker:9000 works with the default false.
 
 - Default: `false`
 - Choices: `false`; `true`
@@ -1610,7 +1613,7 @@ ingress denies /internal on the api host.
 - Values: `secretKeys.internalToken`
 - Env: `SELFHOST_INTERNAL_TOKEN_FILE`
 - Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.internalToken` (optional: enables /internal/v1 (flows env delivery, telemetry issue reports))
-- Verify: kubectl exec deploy/relay-cloud-api -- test -s "$SELFHOST_INTERNAL_TOKEN_FILE"; curl https://<api host>/internal/v1/... is refused at the edge
+- Verify: kubectl exec deploy/relay-cloud-api -- sh -c 'test -s "$SELFHOST_INTERNAL_TOKEN_FILE"' (expanded inside the pod); curl https://<api host>/internal/v1/... is refused at the edge
 - Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl), [`charts/agent-relay/templates/gke-ingress.yaml`](../charts/agent-relay/templates/gke-ingress.yaml)
 
 #### opt.relay-cloud-api.dashboard-url
@@ -1666,9 +1669,10 @@ is a pending decision. Any level other than off needs telemetry.installId
 and secretKeys.telemetryInstallKey (issued by Agent Relay), and with
 transport https also telemetry.endpoint. transport file never sends
 (air-gapped signed export). telemetry.probes and telemetry.deployment add
-health probes and deployment-shape keys. With allowAllEgress=false a TCP
-443 egress rule to telemetry.egressTo is added only when the level is not
-off and the transport is https.
+health probes and flat deployment-shape keys (scalar values only; the
+chart-rendered keys cannot be overridden). A TCP 443 egress rule to
+telemetry.egressTo is added only when networkPolicy.enabled=true,
+allowAllEgress=false, the level is not off and the transport is https.
 
 - Default: `off`
 - Choices: `off`; `errors`; `full`
@@ -1711,7 +1715,11 @@ are disabled and all ClusterIP backends use standalone NEGs. /internal is
 denied at the edge on the cast and api hosts. The api Service is bound
 (cloud.google.com/backend-config) to a BackendConfig whose timeoutSec
 (gkeIngress.backends.api.timeoutSec, at least 60, default 3600) keeps the
-flows worker queue SSE stream open past GCE's 30s default.
+flows worker queue SSE stream open past GCE's 30s default. The
+BackendConfig is named <gkeIngress.name>-api (the name truncated to 59
+characters first); relay-cloud-api renders the annotation from
+relay-cloud-api.service.backendConfig, which must equal that name (the
+render fails with the expected name otherwise).
 
 - Default: `disabled`
 - Choices: `enabled`; `disabled`
