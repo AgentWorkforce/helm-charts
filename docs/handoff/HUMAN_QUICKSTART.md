@@ -1,6 +1,6 @@
 # Human quick start: self-hosted Agent Relay on GCP
 
-This handoff installs Relaycast, RelayAuth, 96Bulls Sessions, RelayHistory, the
+This handoff installs Relaycast, RelayAuth, Sessions pipeline, RelayHistory, the
 headless control-plane API, and Relay Dashboard. It intentionally excludes
 Flows, Relayfile, billing, hosted fleet, and provider integrations.
 
@@ -11,8 +11,8 @@ The deployment is `portable-single`, not highly available.
 - GKE 1.28+
 - PostgreSQL 17 with `vector` and `pg_trgm`
 - separate runtime and migration-owner database roles
-- a dedicated RelayHistory database (never reuse the 96Bulls `hoopdb`)
-- GKE Workload Identity and a GCS bucket for Sessions objects; the 96Bulls
+- a dedicated RelayHistory database (never reuse the Sessions pipeline `hoopdb`)
+- GKE Workload Identity and a GCS bucket for Sessions objects; the Sessions pipeline
   worker and AlleyOop service accounts need object access to it (native GCS,
   `locker.provider: gcs`; no storage key)
 - Artifact Registry, a global static address, and authoritative DNS
@@ -34,19 +34,19 @@ tar -xzf agent-relay-customer-handoff-<rev12>.tar.gz
 cd agent-relay-customer-handoff
 sha256sum -c SHA256SUMS
 
-# The charts ship as source. Build the nested 96Bulls chart first: Helm does
+# The charts ship as source. Build the nested Sessions pipeline chart first: Helm does
 # not vendor the dependencies of a file:// dependency recursively.
 helm repo add cnpg https://cloudnative-pg.github.io/charts
 helm repo add minio https://charts.min.io/
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-helm dependency build charts/96bulls
+helm dependency build charts/sessions-pipeline
 helm dependency build charts/agent-relay
 
 cp charts/agent-relay/values-gcp.yaml customer-values.yaml
 ```
 
 Install the skill by copying
-`.cursor/skills/setting-up-self-hosted-agent-relay-gcp/` into the agent’s
+`.agents/skills/setting-up-self-hosted-agent-relay-gcp/` into the agent’s
 skills directory, or give its `SKILL.md` to the deployment agent as the
 operating procedure.
 

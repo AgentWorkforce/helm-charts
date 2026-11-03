@@ -31,7 +31,7 @@ diff -r "$work/tar" "$work/zip" >/dev/null \
 root="$work/tar/agent-relay-customer-handoff"
 
 # The umbrella resolves every file:// dependency inside the archive.
-helm dependency build "$root/charts/96bulls" >/dev/null
+helm dependency build "$root/charts/sessions-pipeline" >/dev/null
 helm dependency build "$root/charts/agent-relay" >/dev/null
 helm template agent-relay "$root/charts/agent-relay" \
   --namespace agent-relay -f "$root/charts/agent-relay/values-gcp.yaml" >"$work/rendered.yaml"
@@ -42,7 +42,7 @@ test -s "$work/rendered.yaml"
   cd "$root"
   unset HANDOFF_ROOT
   # shellcheck disable=SC1091
-  . .cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/resolve-layout.sh
+  . .agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/resolve-layout.sh
   resolve_agent_relay_layout
   test "$AGENT_RELAY_BASE_VALUES_FILE" -ef "$root/charts/agent-relay/values-gcp.yaml"
 )

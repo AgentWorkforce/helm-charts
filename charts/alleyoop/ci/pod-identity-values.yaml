@@ -3,7 +3,7 @@ hoopdb:
   key: uri
 locker:
   endpoint: ""
-  bucket: 96bulls-ci
+  bucket: sessions-pipeline-ci
   region: us-west-2
   credentials:
     mode: podIdentity

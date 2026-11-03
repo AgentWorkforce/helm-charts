@@ -1,0 +1,19 @@
+hoopdb:
+  existingSecret: hoopdb-app
+  key: uri
+summaryEncryption:
+  existingSecret: sessions-pipeline-summary
+locker:
+  endpoint: ""
+  bucket: sessions-pipeline-ci
+  region: us-west-2
+  credentials:
+    mode: podIdentity
+tenant:
+  orgId: org_ci
+migrations:
+  databaseMode: selfhosted
+  supabaseShim: true
+  runtimeRole: sessions_pipeline_runtime
+  runtimeRoleLogin: true
+  functionBoundaryMode: global-default-revoke

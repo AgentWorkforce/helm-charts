@@ -23,9 +23,9 @@ scope:
   activeUniqueImages: 7
   excludedConditionalImages:
     - image: cgr.dev/chainguard/minio
-      reason: 96bulls.locker.enabled=false in the GCP profile
+      reason: sessions-pipeline.locker.enabled=false in the GCP profile
     - image: otel/opentelemetry-collector-contrib
-      reason: 96bulls.otel.enabled=false
+      reason: sessions-pipeline.otel.enabled=false
     - image: docker.io/alpine/k8s
       reason: all three privileged SQL bootstrap Jobs are disabled
     - image: ghcr.io/cloudnative-pg/postgresql
@@ -130,7 +130,7 @@ images:
   - id: sessions-services
     active: true
     firstParty: true
-    component: 96bulls
+    component: sessions-pipeline
     workloads:
       - Deployment/*-alleyoop-ingest:ingest
       - Deployment/*-worker-hoopdb-indexer:hoopdb-indexer
@@ -178,7 +178,7 @@ images:
   - id: sessions-migration-postgresql
     active: true
     firstParty: false
-    component: 96bulls
+    component: sessions-pipeline
     workloads:
       - Job/*-worker-migrate-*:wait-for-role
     current:

@@ -110,7 +110,7 @@ relayauth:
   networkPolicy:
     enabled: true
 
-96bulls:
+sessions-pipeline:
   worker:
     image:
       # REQUIRED OVERRIDE: repository path under global.imageRegistry and digest.

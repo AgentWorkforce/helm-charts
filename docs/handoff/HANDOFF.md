@@ -19,8 +19,8 @@ Both archives unpack to one `agent-relay-customer-handoff/` directory:
 | Path | Contents |
 | --- | --- |
 | `charts/agent-relay/` | Umbrella chart source, with `values.yaml` and the structural `values-gcp.yaml` example |
-| `charts/relaycast/`, `charts/relayauth/`, `charts/96bulls/`, `charts/96bulls-worker/`, `charts/alleyoop/`, `charts/relayhistory/`, `charts/relay-cloud-api/`, `charts/relay-dashboard/` | Leaf chart sources the umbrella depends on |
-| `.cursor/skills/setting-up-self-hosted-agent-relay-gcp/` | Setup, safety, preflight, deployment, Desktop, pre-upgrade, and public-verification skill |
+| `charts/relaycast/`, `charts/relayauth/`, `charts/sessions-pipeline/`, `charts/sessions-pipeline-worker/`, `charts/alleyoop/`, `charts/relayhistory/`, `charts/relay-cloud-api/`, `charts/relay-dashboard/` | Leaf chart sources the umbrella depends on |
+| `.agents/skills/setting-up-self-hosted-agent-relay-gcp/` | Setup, safety, preflight, deployment, Desktop, pre-upgrade, and public-verification skill |
 | `docs/` | Reference architecture, image supply chain, backup/restore runbook, conformance contract, and licenses |
 | `scripts/selfhost/`, `scripts/release/`, `scripts/conformance/` | Read-only verification, pre-upgrade gate, release validator, and conformance tests |
 | `self-hosted/` | Customer image manifest and release evidence |

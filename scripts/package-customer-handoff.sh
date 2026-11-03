@@ -41,7 +41,7 @@ CHECKSUMS_NAME = "SHA256SUMS"
 # a new umbrella dependency (e.g. charts/relayflows) can never be left out.
 UMBRELLA_CHART = "charts/agent-relay"
 INCLUDE_TREES = (
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp",
     "deps",
     "docs/conformance",
     "docs/diagrams",
@@ -76,18 +76,18 @@ EXCLUDED_NAME_FRAGMENTS = (
 # override can exercise packaging against an older revision, but the resulting
 # archive is marked incomplete and verification rejects it by default.
 REQUIRED_FILES = (
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/SKILL.md",
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/references/pre-upgrade-evidence.md",
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/pre-upgrade-check.sh",
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/preflight.sh",
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/resolve-layout.sh",
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/test-layout.sh",
-    ".cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/verify-public.sh",
-    "charts/96bulls-worker/Chart.yaml",
-    "charts/96bulls-worker/values.yaml",
-    "charts/96bulls/Chart.lock",
-    "charts/96bulls/Chart.yaml",
-    "charts/96bulls/values.yaml",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/SKILL.md",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/references/pre-upgrade-evidence.md",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/pre-upgrade-check.sh",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/preflight.sh",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/resolve-layout.sh",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/test-layout.sh",
+    ".agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/verify-public.sh",
+    "charts/sessions-pipeline-worker/Chart.yaml",
+    "charts/sessions-pipeline-worker/values.yaml",
+    "charts/sessions-pipeline/Chart.lock",
+    "charts/sessions-pipeline/Chart.yaml",
+    "charts/sessions-pipeline/values.yaml",
     "charts/alleyoop/Chart.yaml",
     "charts/alleyoop/values.yaml",
     "charts/agent-relay/Chart.lock",

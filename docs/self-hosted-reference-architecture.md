@@ -28,7 +28,7 @@ The self-hosted product is composed rather than monolithic.
 | Identity/control plane | Required for the complete product; naming and package boundary unresolved | Sign-in and tokens, organizations, workspaces, device enrollment, discovery, deployment bindings, and dashboard |
 | Relayflows | Off | Durable, resumable, or scheduled multi-step workflow execution |
 | Relayfile/providers | Off; inclusion in the self-host product is unresolved | GitHub, Slack, and other provider write-backs |
-| 96Bulls | Off | Session capture, durable storage, indexing, summaries, and evaluation |
+| Sessions pipeline | Off | Session capture, durable storage, indexing, summaries, and evaluation |
 | Observer/UI | Off | Human inspection and operations surfaces |
 
 An add-on may consume core APIs, but the core availability path must never
@@ -136,13 +136,13 @@ Selecting `clickhouse` keeps the Postgres path configured, so setting
 `search.backend` back to `postgres` is the single-switch rollback.
 
 Registry entries: the planned option
-[`opt.96bulls.search-backend`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#opt-96bulls-search-backend)
+[`opt.sessions-pipeline.search-backend`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#opt-sessions-pipeline-search-backend)
 (CI fails if any template reads a `search.*` value while it is planned), and
 the shipped requirement
 [`req.db.postgres-17-extensions`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#req-db-postgres-17-extensions)
 (`pg_trgm`, `btree_gin`) that the standard profile relies on.
 
-The 96Bulls chart notes in the [README](https://github.com/AgentWorkforce/helm-charts/blob/main/README.md#transcript-search-profiles)
+The Sessions pipeline chart notes in the [README](https://github.com/AgentWorkforce/helm-charts/blob/main/README.md#transcript-search-profiles)
 point back to this section.
 
 ## Proof and commit gates
@@ -167,7 +167,7 @@ AWS proof is complete only when evidence covers:
 - database, Redis, pod, and availability-zone failure/recovery exercises;
 - backup and restore with an explicit recovery point and recovery time;
 - metrics, logs, traces, alerts, and operator runbooks;
-- a 96Bulls session flowing through ingest, Locker, HoopDB, summaries, and
+- a session flowing through the Sessions pipeline: ingest, Locker, HoopDB, summaries, and
   verdicts when that add-on is enabled;
 - add-ons independently disabled without breaking the Relaycast core;
 - no AWS-specific branches in provider-neutral engine behavior.

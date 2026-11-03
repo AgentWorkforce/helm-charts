@@ -1,6 +1,6 @@
 name: Publish Agent Relay Chart
 
-# Leaf charts (relaycast, relayauth, 96bulls, ...) are published by
+# Leaf charts (relaycast, relayauth, sessions-pipeline, ...) are published by
 # release.yml on every push to main. This workflow publishes only the
 # agent-relay umbrella, from an agent-relay-X.Y.Z tag, with build provenance.
 on:
@@ -108,9 +108,9 @@ jobs:
         run: |
           set -euo pipefail
           # Helm does not recursively vendor file:// dependencies.
-          helm dependency build charts/96bulls
+          helm dependency build charts/sessions-pipeline
           helm dependency build "$CHART_DIR"
-          git diff --exit-code -- charts/96bulls/Chart.lock "$CHART_DIR/Chart.lock" \
+          git diff --exit-code -- charts/sessions-pipeline/Chart.lock "$CHART_DIR/Chart.lock" \
             || { echo "::error::Dependency build changed a lock file."; exit 1; }
 
       - name: Lint and render the umbrella chart
@@ -121,7 +121,7 @@ jobs:
             -f "$CHART_DIR/values-gcp-proof.yaml" \
             -f "$CHART_DIR/ci/gcp-proof-values.yaml"
           ci/agent-relay/render.sh
-          git diff --exit-code -- charts/96bulls/Chart.lock "$CHART_DIR/Chart.lock" \
+          git diff --exit-code -- charts/sessions-pipeline/Chart.lock "$CHART_DIR/Chart.lock" \
             || { echo "::error::Linting changed a lock file."; exit 1; }
 
       - name: Package and checksum the chart

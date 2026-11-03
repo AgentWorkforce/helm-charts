@@ -1,0 +1,73 @@
+# GKE + Cloud SQL (stacks/gcp/config.ts at sessions-pipeline 7d7229b): cloudsql
+# mode, the generic shim off, HOOPDB_ROLE_BOOTSTRAP false (no customer
+# superuser), global-default-revoke, the dedicated runtime role, and a separate
+# migration-owner URL (HOOPDB_MIGRATION_URL) for migrate only. The operator runs
+# cloudsql_migration_roles.sql, session_directory_search_worker.sql and
+# cloudsql_owner_function_default_revoke.sql as the migration owner, so there
+# are no in-cluster SQL Jobs. migrate still waits for the roles. The managed
+# bucket is GCS through the services' native adapter (locker.provider=gcs)
+# with Workload Identity (podIdentity mode). gcs arms the services' data-path
+# readiness check, so extraEnv carries the Cloud SQL, Memorystore and Pub/Sub
+# settings the GCP stack passes (render-only values).
+global:
+  tenant:
+    orgId: org_ci
+worker:
+  image:
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
+  existingSecret: sessions-pipeline-gcp
+  summaryEncryption:
+    existingSecret: sessions-pipeline-gcp
+    key: SUMMARY_MASTER_KEYS
+  hoopdb:
+    existingSecret: sessions-pipeline-gcp
+    key: HOOPDB_URL
+  locker:
+    provider: gcs
+    endpoint: ""
+    bucket: sessions-pipeline-ci
+    region: us-central1
+    credentials:
+      mode: podIdentity
+  lockerInit:
+    enabled: false
+  extraEnv: &gcsDataPath
+    - { name: CLOUD_SQL_CONNECTION_NAME, value: "ci-project:us-central1:ci-sessions" }
+    - { name: REDIS_HOST, value: "10.0.0.3" }
+    - { name: REDIS_PORT, value: "6378" }
+    - { name: REDIS_AUTH_ENABLED, value: "false" }
+    - { name: REDIS_TRANSIT_ENCRYPTION, value: SERVER_AUTHENTICATION }
+    - { name: REDIS_TLS_CA_PEM, value: "render-only CA bundle" }
+    - { name: PUBSUB_TOPIC, value: "projects/ci-project/topics/ci-sessions" }
+    - { name: PUBSUB_SUBSCRIPTION, value: "projects/ci-project/subscriptions/ci-sessions" }
+  migrations:
+    hoopdb:
+      existingSecret: sessions-pipeline-gcp
+      key: HOOPDB_MIGRATION_URL
+    databaseMode: cloudsql
+    supabaseShim: false
+    roleBootstrap: false
+    runtimeRole: sessions_pipeline_runtime
+    runtimeRoleLogin: true
+    functionBoundaryMode: global-default-revoke
+alleyoop:
+  image:
+    digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
+  existingSecret: sessions-pipeline-gcp
+  hoopdb:
+    existingSecret: sessions-pipeline-gcp
+    key: HOOPDB_URL
+  locker:
+    provider: gcs
+    endpoint: ""
+    bucket: sessions-pipeline-ci
+    region: us-central1
+    credentials:
+      mode: podIdentity
+  extraEnv: *gcsDataPath
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+hoopdb:
+  enabled: false
+locker:
+  enabled: false

@@ -6,16 +6,16 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 
 | Chart | Description |
 |-------|-------------|
-| [agent-relay](charts/agent-relay) | Self-hosted Agent Relay suite umbrella — relaycast, relayauth, 96bulls, relayhistory, control-plane API, dashboard (one GKE Ingress, no HA claim) |
+| [agent-relay](charts/agent-relay) | Self-hosted Agent Relay suite umbrella — relaycast, relayauth, sessions-pipeline, relayhistory, control-plane API, dashboard (one GKE Ingress, no HA claim) |
 | [relay-cloud-api](charts/relay-cloud-api) | Self-host control-plane API — organizations, workspaces, device auth; existing-Secret file mounts only, separate migration Job |
 | [relay-dashboard](charts/relay-dashboard) | Static self-host dashboard — nginx SPA calling same-origin `/cloud/api` |
 | [relayhistory](charts/relayhistory) | Relay History data plane — session delivery, search, replay on its own Postgres database (digest-pinned proof image) |
 | [relaycast](charts/relaycast) | Portable self-hosted Relaycast core — realtime agent communication with single-writer SQLite persistence |
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
-| [96bulls-worker](charts/96bulls-worker) | 96Bulls sessions pipeline: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
-| [96bulls](charts/96bulls) | The whole 96Bulls pipeline in one release: 96bulls-worker + alleyoop, with optional HoopDb (CloudNativePG), Locker (MinIO) and an OTel collector |
-| [alleyoop](charts/alleyoop) | 96Bulls ingest: receives session manifests and chunks and lands them in the Locker (S3) |
+| [sessions-pipeline-worker](charts/sessions-pipeline-worker) | Sessions pipeline workers: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
+| [sessions-pipeline](charts/sessions-pipeline) | The whole Sessions pipeline in one release: sessions-pipeline-worker + alleyoop, with optional HoopDb (CloudNativePG), Locker (MinIO) and an OTel collector |
+| [alleyoop](charts/alleyoop) | Sessions pipeline ingest: receives session manifests and chunks and lands them in the Locker (S3) |
 | [relayauth](charts/relayauth) | Self-hosted RelayAuth issuer: immutable image, externally managed keys, single-writer SQLite, and optional JWKS ingress |
 
 ## Self-hosted requirements registry
@@ -58,7 +58,7 @@ helm repo update
 
 ### Install the Relaycast core
 
-Relaycast is the minimal self-hosted core. Relayflows and 96Bulls are optional
+Relaycast is the minimal self-hosted core. Relayflows and the Sessions pipeline are optional
 add-ons and are not installed with it:
 
 ```bash
@@ -111,20 +111,20 @@ helm install relayflows agentworkforce/relayflows \
 See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
 flows, model credentials, resuming runs, and optional Cloud worker mode.
 
-### Install the 96Bulls pipeline (umbrella)
+### Install the Sessions pipeline (umbrella)
 
 One release runs everything. Prerequisite: the CloudNativePG operator (see
 [`deps/PINS.md`](deps/PINS.md)). Then create one Secret and install:
 
 ```bash
-kubectl create namespace 96bulls
+kubectl create namespace sessions-pipeline
 read -rsp 'SUMMARY_MASTER_KEYS (<key-id>:<64-hex>): ' SUMMARY_MASTER_KEYS; printf '\n'
-printf %s "$SUMMARY_MASTER_KEYS" | kubectl -n 96bulls create secret generic 96bulls-locker \
+printf %s "$SUMMARY_MASTER_KEYS" | kubectl -n sessions-pipeline create secret generic sessions-pipeline-locker \
   --from-literal=rootUser=<user> \
   --from-literal=rootPassword=<password> \
   --from-file=SUMMARY_MASTER_KEYS=/dev/stdin
 unset SUMMARY_MASTER_KEYS
-helm install bulls agentworkforce/96bulls -n 96bulls \
+helm install sessions-pipeline agentworkforce/sessions-pipeline -n sessions-pipeline \
   --set global.tenant.orgId=<org> \
   --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
 ```
@@ -166,11 +166,11 @@ restart the app Pods and recreate any failed locker-init Job. If the S3 bucket
 is already created and versioned, also set `worker.lockerInit.enabled=false`;
 otherwise the worker role needs permission to create the bucket and enable
 versioning.
-`ci/96bulls-umbrella/smoke.sh` runs the umbrella on kind.
+`ci/sessions-pipeline-umbrella/smoke.sh` runs the umbrella on kind.
 
 #### Profiles and the HoopDb migration contract
 
-`worker.migrations` carries the migrator's database profile: 96BullSessions
+`worker.migrations` carries the migrator's database profile: sessions-pipeline
 `src/hoopdb/migrate.ts` `migrationProfile()` at main
 `7d7229bb31c121ecb98cd4e35c248fc2cf5669ad` (#124 session list RPC, #125 the
 Supabase event-trigger function boundary, #139 its manifest sync, #137 the exact sessions function ACL check in every
@@ -190,7 +190,7 @@ Where the migrator has no default, neither does the chart:
 | `runtimeWorkloadRole` | `HOOPDB_RUNTIME_WORKLOAD_ROLE` | Optional. |
 | `functionBoundaryMode` | `HOOPDB_FUNCTION_BOUNDARY_MODE` | `global-default-revoke`, or `event-trigger` in supabase mode only (refused in local, selfhosted and cloudsql, as the migrator refuses it). Required in selfhosted and cloudsql. Optional in supabase; unset, migrate fails closed. |
 
-`charts/96bulls/profiles/` ships four render shapes:
+`charts/sessions-pipeline/profiles/` ships four render shapes:
 
 - `selfhost-postgres.yaml`: a new install on the in-cluster CNPG HoopDb, in
   selfhosted mode. initdb creates the search Worker role. Before migrate, two
@@ -212,19 +212,19 @@ Where the migrator has no default, neither does the chart:
   HoopDb (RDS, your own Postgres) in selfhosted mode. There are no in-cluster
   SQL Jobs, and migrate waits for the roles. The operator runs the three
   bootstrap files as a superuser. Google Cloud SQL uses `cloudsql` mode instead:
-  see `charts/96bulls/ci/gcp-cloudsql-values.yaml`. There the shim is off,
+  see `charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml`. There the shim is off,
   `roleBootstrap` is false, the migration-owner URL is separate, and the
   operator runs the Cloud SQL bootstrap files.
 - `external-supabase.yaml`: an external Supabase project in supabase mode. It
   has no shim, no wait-for-role and no in-cluster SQL Jobs, and the chart
   refuses each of those in supabase mode. Never run
   `hoopdb_function_default_revoke.sql` on Supabase. The runtime role is
-  `bulls96_runtime` with LOGIN and no workload role. Do not use the drifted
+  `sessions_pipeline_runtime` with LOGIN and no workload role. Do not use the drifted
   legacy `relayhistory_runtime`. The Worker role is
   `session_directory_search_worker`.
 
   The profile pins the 7d7229b GHCR image and selects
-  `functionBoundaryMode: event-trigger` (96BullSessions #125). It is still
+  `functionBoundaryMode: event-trigger` (sessions-pipeline #125). It is still
   **fail-closed**: `supabaseActivation.hold` stops it from rendering, and even
   rendered, migrate refuses (`function_boundary_unproven`) until the operator
   has installed `hoopdb_sessions_function_boundary_supabase.sql` and
@@ -234,18 +234,18 @@ Where the migrator has no default, neither does the chart:
   profile, including the Supabase-only bootstrap wrappers.
 
 Every profile, every CI values file, and the worker and alleyoop chart
-defaults pin the services image built from 96BullSessions main `7d7229b`, GHCR
+defaults pin the services image built from sessions-pipeline main `7d7229b`, GHCR
 `ghcr.io/agentworkforce/96bulls-services@sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2`
 (publish-image run 41375745173). Its migration generation is
 `eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b`. The AWS
-proof values (`charts/96bulls/ci/aws-cnpg-values.yaml`) pin the immutable ECR
+proof values (`charts/sessions-pipeline/ci/aws-cnpg-values.yaml`) pin the immutable ECR
 digest from the same source,
 `500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services@sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9`
 (publish-image-ecr run 41375747474). Every profile
 also needs `global.tenant.orgId` and `alleyoop.auth.jwksUrl`.
 
-`ci/96bulls-profiles/matrix.sh` renders every profile and every
-`charts/96bulls/ci/*-values.yaml`. Those include the AWS CNPG proof, AWS
+`ci/sessions-pipeline-profiles/matrix.sh` renders every profile and every
+`charts/sessions-pipeline/ci/*-values.yaml`. Those include the AWS CNPG proof, AWS
 external Supabase (`pod-identity`) and GCP Cloud SQL. For each one it asserts:
 - the workloads and migrate, with phase 2 verify;
 - the exact profile env, in migrate only;
@@ -256,7 +256,7 @@ external Supabase (`pod-identity`) and GCP Cloud SQL. For each one it asserts:
 
 It also checks every mode combination the chart must refuse. CI runs it
 offline (`static`) and as a server-side dry run on kind (`dryrun`).
-`ci/96bulls-search-worker-role/kind.sh` builds the services image from
+`ci/sessions-pipeline-search-worker-role/kind.sh` builds the services image from
 `services-commit` (7d7229b) and fails unless the image's generation equals
 `services-generation`.
 
@@ -266,7 +266,7 @@ HoopDb's session directory migration only *verifies* the role
 `session_directory_search_worker` (`NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER
 NOCREATEDB NOCREATEROLE NOREPLICATION`, exactly `statement_timeout=2s`, no
 memberships). Creating it needs a superuser on PostgreSQL 16+, so the chart
-provisions it (96BullSessions `runbooks/session-directory-search-worker-bootstrap.md`):
+provisions it (sessions-pipeline `runbooks/session-directory-search-worker-bootstrap.md`):
 
 - **New clusters:** two `hoopdb.cluster.initdb.postInitApplicationSQL` statements,
   run once by CNPG as `postgres`. Remove them to opt out.
@@ -295,10 +295,10 @@ provisions it (96BullSessions `runbooks/session-directory-search-worker-bootstra
 - **Disabling** the Job removes the Job and its RBAC; the role is never dropped
   (see the runbook's "Rollback and removal").
 
-`ci/96bulls-search-worker-role/render.sh` asserts the rendered objects;
-`ci/96bulls-search-worker-role/kind.sh` (required in CI) runs on the real
-services image, which CI builds from the 96BullSessions commit in
-`ci/96bulls-search-worker-role/services-commit` (the published image is
+`ci/sessions-pipeline-search-worker-role/render.sh` asserts the rendered objects;
+`ci/sessions-pipeline-search-worker-role/kind.sh` (required in CI) runs on the real
+services image, which CI builds from the sessions-pipeline commit in
+`ci/sessions-pipeline-search-worker-role/services-commit` (the published image is
 private; locally, pass `SERVICES_IMAGE`). It proves:
 - a fresh and an existing CNPG cluster converge to the same role;
 - a drifted role is refused with `55000` (exit 3);
@@ -321,9 +321,9 @@ depend on ClickHouse. `neon` is a hosted-provider name, not the self-hosted
 search backend. `HOOPDB_DB_MODE=selfhosted` is unchanged. The decision and
 the planned Secret boundary are in
 [Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles). The registry tracks it as the planned option
-[`opt.96bulls.search-backend`](docs/self-hosted-requirements.md#opt-96bulls-search-backend).
+[`opt.sessions-pipeline.search-backend`](docs/self-hosted-requirements.md#opt-sessions-pipeline-search-backend).
 
-### Install the 96Bulls app charts individually
+### Install the Sessions pipeline app charts individually
 
 Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a
@@ -344,18 +344,18 @@ native AWS S3 endpoint.
 
 
 ```bash
-helm install bulls agentworkforce/96bulls-worker -n 96bulls --create-namespace \
-  --set existingSecret=96bulls \
+helm install sessions-pipeline-worker agentworkforce/sessions-pipeline-worker -n sessions-pipeline --create-namespace \
+  --set existingSecret=sessions-pipeline \
   --set locker.endpoint=http://locker:9000 \
   --set tenant.orgId=<org>
-helm install alleyoop agentworkforce/alleyoop -n 96bulls \
-  --set existingSecret=96bulls \
+helm install alleyoop agentworkforce/alleyoop -n sessions-pipeline \
+  --set existingSecret=sessions-pipeline \
   --set locker.endpoint=http://locker:9000 \
   --set tenant.orgId=<org> \
   --set auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
 ```
 
-`ci/96bulls/smoke.sh` runs the whole pipeline on kind, with CloudNativePG
+`ci/sessions-pipeline/smoke.sh` runs the whole pipeline on kind, with CloudNativePG
 (Postgres 17), MinIO and an OpenTelemetry collector. Third-party charts and
 images are pinned once, in [`deps/`](deps/PINS.md).
 
@@ -376,7 +376,7 @@ Add new service charts under `charts/<service-name>/`. Open a PR against `main`.
 Every chart must install correctly through `helm template --no-hooks` plus server-side apply, which is how Alchemy's `Kubernetes.HelmChart` installs it. Pull requests run `.github/workflows/lint.yml`:
 
 - `helm lint --strict`, once per `charts/<chart>/ci/*-values.yaml` (or with defaults when there are none).
-- **No Helm hooks.** Hooks never run under `--no-hooks`; use a plain Job instead (see `96bulls-worker`).
+- **No Helm hooks.** Hooks never run under `--no-hooks`; use a plain Job instead (see `sessions-pipeline-worker`).
 - **Deterministic renders.** No `randAlphaNum`, `lookup` or `now`, or every render looks like drift.
 - `kubeconform`, plus a server-side dry-run apply on kind.
 - **A version bump** for any chart change outside `ci/`.

@@ -1,4 +1,4 @@
-existingSecret: 96bulls
+existingSecret: sessions-pipeline
 locker:
   endpoint: http://locker:9000
 tenant:

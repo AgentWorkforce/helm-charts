@@ -2,7 +2,7 @@ apiVersion: v2
 name: agent-relay
 description: Self-hosted Agent Relay messaging and sessions suite
 type: application
-version: 0.2.1
+version: 0.3.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.28.0-0"
 annotations:
@@ -17,16 +17,16 @@ maintainers:
     url: https://github.com/AgentWorkforce
 dependencies:
   - name: relaycast
-    version: 0.3.0
+    version: 0.3.1
     repository: file://../relaycast
     condition: components.relaycast
   - name: relayauth
     version: 0.1.2
     repository: file://../relayauth
     condition: components.relayauth
-  - name: 96bulls
-    version: 0.5.5
-    repository: file://../96bulls
+  - name: sessions-pipeline
+    version: 0.6.0
+    repository: file://../sessions-pipeline
     condition: components.sessionsPipeline
   - name: relayhistory
     version: 0.1.1

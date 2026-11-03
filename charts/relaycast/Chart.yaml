@@ -2,7 +2,7 @@ apiVersion: v2
 name: relaycast
 description: Portable Relaycast core for self-hosted Agent Relay deployments
 type: application
-version: 0.3.0
+version: 0.3.1
 appVersion: "12.2.1-selfhost.1"
 kubeVersion: ">=1.22.0-0"
 annotations:

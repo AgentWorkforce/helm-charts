@@ -1,0 +1,23 @@
+{{- /*
+The durable function boundary on the in-cluster CNPG HoopDb (selfhosted mode,
+sessions-pipeline supabase/bootstrap/hoopdb_function_default_revoke.sql, #99). In
+the HoopDb database it sets the global function default of the migration owner
+and of every superuser to exactly {<self>:EXECUTE}. It refuses a poisoned
+default (55000, nothing changed) and is idempotent. Runs as `postgres` before
+migrate, on every deploy. migrate waits for the result
+(worker.migrations.waitForRole.functionDefault), and the migrator's
+function-boundary gate (HOOPDB_FUNCTION_BOUNDARY_MODE=global-default-revoke)
+verifies it from the catalog. CNPG/selfhost only: it never runs for an
+external database, and never on Supabase.
+*/ -}}
+{{- $m := .Values.worker.migrations -}}
+{{- $job := .Values.functionDefaultRevoke.bootstrapJob -}}
+{{- if .Values.hoopdb.enabled }}
+{{- if ne $m.databaseMode "selfhosted" }}{{ fail (printf "the in-cluster HoopDb (hoopdb.enabled) is plain Postgres: worker.migrations.databaseMode must be selfhosted, not %q" $m.databaseMode) }}{{ end }}
+{{- if not $job.enabled }}{{ fail "functionDefaultRevoke.bootstrapJob.enabled must be true with the in-cluster HoopDb: nothing else installs the function boundary the migrator requires in selfhosted mode" }}{{ end }}
+{{- if ne ($m.functionBoundaryMode | default "") "global-default-revoke" }}{{ fail "the in-cluster HoopDb needs worker.migrations.functionBoundaryMode=global-default-revoke" }}{{ end }}
+{{- if not $m.waitForRole.functionDefault }}{{ fail "the in-cluster HoopDb needs worker.migrations.waitForRole.functionDefault=true: it orders migrate after functionDefaultRevoke.bootstrapJob" }}{{ end }}
+{{- $owner := .Values.hoopdb.cluster.initdb.owner }}
+{{- if not (regexMatch "^[A-Za-z_][A-Za-z0-9_$-]{0,62}$" $owner) }}{{ fail "hoopdb.cluster.initdb.owner must be a role name" }}{{ end }}
+{{- include "sessions-pipeline.privilegedSqlJob" (dict "c" $job "root" . "component" "hoopdb-function-default-revoke" "suffix" "function-default" "what" (printf "hoopdb function default for %s" $owner) "psqlVars" (list (printf "migration_owner=%s" $owner))) }}
+{{- else if $job.enabled }}{{ fail "functionDefaultRevoke.bootstrapJob is for the in-cluster CNPG HoopDb only (hoopdb.enabled): never an external database, never Supabase" }}{{ end }}

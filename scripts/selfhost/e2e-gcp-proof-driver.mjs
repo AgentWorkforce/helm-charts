@@ -1518,13 +1518,13 @@ async function phaseIssuePublic() {
   pass("public.issue_history_session", `base_url=${read.baseUrl}`);
 }
 
-async function phaseMint96bulls() {
-  // The 96bulls courier's RelayAuth mode only accepts an HTTPS or loopback
+async function phaseMintSessionsPipeline() {
+  // The sessions-pipeline courier's RelayAuth mode only accepts an HTTPS or loopback
   // RelayAuth URL, so mint the same origin-bound, machine-bound assertion here
   // (RelayAuth is reachable from this pod) and hand it to a fixed-token pass.
   // RelayAuth caps assertions at 60 seconds; the caller uses it immediately.
   const bulls = state.bulls;
-  must(bulls?.orgId && bulls?.workspaceId && bulls?.origin && bulls?.machineId, "missing 96bulls tenant parameters");
+  must(bulls?.orgId && bulls?.workspaceId && bulls?.origin && bulls?.machineId, "missing sessions-pipeline tenant parameters");
   const relayauthKey = readFileSync(RELAYAUTH_KEY_FILE, "utf8").trim();
   const minted = await call("POST", `${RELAYAUTH}/v1/tokens/relayhistory-assertion`, {
     headers: { "x-api-key": relayauthKey },
@@ -1538,7 +1538,7 @@ async function phaseMint96bulls() {
       historyOrigin: bulls.origin,
     },
   });
-  must(minted.status === 201 && typeof minted.json?.accessToken === "string", `96bulls assertion mint status=${minted.status}`);
+  must(minted.status === 201 && typeof minted.json?.accessToken === "string", `sessions-pipeline assertion mint status=${minted.status}`);
   state.bullsAssertion = minted.json.accessToken;
   pass("pipeline.mint_assertion", `org=${bulls.orgId} workspace=${bulls.workspaceId} machine=${bulls.machineId} aud=${bulls.origin} ttl=60s`);
 }
@@ -1676,7 +1676,7 @@ const phases = {
   auth: phaseAuth,
   erasure: phaseErasure,
   "issue-public": phaseIssuePublic,
-  "mint-96bulls": phaseMint96bulls,
+  "mint-sessions-pipeline": phaseMintSessionsPipeline,
   sessions: phaseSessions,
   admin: phaseAdmin,
   "admin-internal": phaseAdminInternal,

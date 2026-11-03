@@ -34,7 +34,7 @@ relayauth:
   persistence:
     size: 5Gi
 
-96bulls:
+sessions-pipeline:
   worker:
     migrations:
       resources:

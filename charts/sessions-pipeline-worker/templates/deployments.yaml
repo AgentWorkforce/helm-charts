@@ -1,0 +1,92 @@
+{{- include "sessions-pipeline-worker.validate" . -}}
+{{- range $component, $c := .Values.components }}
+{{- if $c.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sessions-pipeline-worker.componentName" (dict "context" $ "component" $component) }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "sessions-pipeline-worker.componentLabels" (dict "context" $ "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ $c.replicas }}
+  {{- if eq $component "hoopdb-indexer" }}
+  # Never two indexers at once: the reconcile loop is not leader-elected.
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sessions-pipeline-worker.componentSelectorLabels" (dict "context" $ "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sessions-pipeline-worker.componentSelectorLabels" (dict "context" $ "component" $component) | nindent 8 }}
+        {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      {{- include "sessions-pipeline-worker.podSpecCommon" (dict "context" $ "component" $component) | nindent 6 }}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "sessions-pipeline-worker.image" $ | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            {{- include "sessions-pipeline-worker.env" (dict "context" $ "service" $component) | nindent 12 }}
+            {{- with $.Values.workerHealth }}
+            {{- if .enabled }}
+            - name: WORKER_HEALTH_PORT
+              value: {{ .port | quote }}
+            - name: WORKER_UNHEALTHY_AFTER_FAILURES
+              value: {{ .unhealthyAfterFailures | quote }}
+            - name: WORKER_MAX_TICK_AGE_MS
+              value: {{ .maxTickAgeMs | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with $c.env }}
+            {{- include "sessions-pipeline-worker.renderEnv" . | nindent 12 }}
+            {{- end }}
+          {{- with $.Values.workerHealth }}
+          {{- if .enabled }}
+          ports:
+            - name: health
+              containerPort: {{ .port }}
+              protocol: TCP
+          {{- with .startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- with $.Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if eq $component "bob-costas" }}
+            - name: summary-master-keys
+              mountPath: {{ $.Values.summaryEncryption.mountPath }}
+              readOnly: true
+            {{- end }}
+{{- end }}
+{{- end }}

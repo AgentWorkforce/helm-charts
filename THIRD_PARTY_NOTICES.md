@@ -28,19 +28,19 @@ redistribution limits recorded below.
 
 The SHA-256 values are those of the archives fetched on 2026-11-02 and
 re-fetched unchanged on 2026-11-03, recorded so a rebuilt archive can be
-compared; they are not files in this repository. `charts/96bulls/Chart.lock`
+compared; they are not files in this repository. `charts/sessions-pipeline/Chart.lock`
 (digest
 `sha256:ade2941ed0a75a418ea51e873a57e645d16d3a9ea8e5810c71c07430b1f079a2`)
 pins the versions.
 
-| Component | Dependency archive (produced by `helm dependency build charts/96bulls`) | Upstream source | Upstream license evidence |
+| Component | Dependency archive (produced by `helm dependency build charts/sessions-pipeline`) | Upstream source | Upstream license evidence |
 | --- | --- | --- | --- |
-| CloudNativePG cluster chart 0.9.0 | `charts/96bulls/charts/cluster-0.9.0.tgz` (SHA-256 `95b23ee4b7e2b24d7aec03a9b6a7b751ce42c7447f1299a34460764a43a8f030`) | [`cloudnative-pg/charts`, tag `cluster-v0.9.0`, commit `60fda2534060d41f3c9065adfbea0ede282f3920`](https://github.com/cloudnative-pg/charts/tree/cluster-v0.9.0/charts/cluster) | [Apache License 2.0 at that tag](https://github.com/cloudnative-pg/charts/blob/cluster-v0.9.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
-| MinIO chart 5.4.0 | `charts/96bulls/charts/minio-5.4.0.tgz` (SHA-256 `25fa2740480d1ebc9e64340854a6c42d3a7bc39c2a77378da91b21f144faa9af`) | [`minio/minio`, commit `43a74029685512ce9b1b76c053d48b43fc8d64fc`](https://github.com/minio/minio/tree/43a74029685512ce9b1b76c053d48b43fc8d64fc/helm/minio) (`helm/minio/Chart.yaml` is version 5.4.0) | [GNU Affero General Public License v3.0](https://github.com/minio/minio/blob/43a74029685512ce9b1b76c053d48b43fc8d64fc/LICENSE); local copy: [`docs/licenses/AGPL-3.0-only.txt`](docs/licenses/AGPL-3.0-only.txt); upstream notice reproduced below |
-| OpenTelemetry Collector chart 0.178.0 | `charts/96bulls/charts/opentelemetry-collector-0.178.0.tgz` (SHA-256 `9886a0cd6c5894bec18b628540428fda8bd32619715a64383348ebd662496024`) | [`open-telemetry/opentelemetry-helm-charts`, tag `opentelemetry-collector-0.178.0`, commit `7f0a8aa074b841451a32e4127b159685e8905959`](https://github.com/open-telemetry/opentelemetry-helm-charts/tree/opentelemetry-collector-0.178.0/charts/opentelemetry-collector) | [Apache License 2.0 at that tag](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/opentelemetry-collector-0.178.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
+| CloudNativePG cluster chart 0.9.0 | `charts/sessions-pipeline/charts/cluster-0.9.0.tgz` (SHA-256 `95b23ee4b7e2b24d7aec03a9b6a7b751ce42c7447f1299a34460764a43a8f030`) | [`cloudnative-pg/charts`, tag `cluster-v0.9.0`, commit `60fda2534060d41f3c9065adfbea0ede282f3920`](https://github.com/cloudnative-pg/charts/tree/cluster-v0.9.0/charts/cluster) | [Apache License 2.0 at that tag](https://github.com/cloudnative-pg/charts/blob/cluster-v0.9.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
+| MinIO chart 5.4.0 | `charts/sessions-pipeline/charts/minio-5.4.0.tgz` (SHA-256 `25fa2740480d1ebc9e64340854a6c42d3a7bc39c2a77378da91b21f144faa9af`) | [`minio/minio`, commit `43a74029685512ce9b1b76c053d48b43fc8d64fc`](https://github.com/minio/minio/tree/43a74029685512ce9b1b76c053d48b43fc8d64fc/helm/minio) (`helm/minio/Chart.yaml` is version 5.4.0) | [GNU Affero General Public License v3.0](https://github.com/minio/minio/blob/43a74029685512ce9b1b76c053d48b43fc8d64fc/LICENSE); local copy: [`docs/licenses/AGPL-3.0-only.txt`](docs/licenses/AGPL-3.0-only.txt); upstream notice reproduced below |
+| OpenTelemetry Collector chart 0.178.0 | `charts/sessions-pipeline/charts/opentelemetry-collector-0.178.0.tgz` (SHA-256 `9886a0cd6c5894bec18b628540428fda8bd32619715a64383348ebd662496024`) | [`open-telemetry/opentelemetry-helm-charts`, tag `opentelemetry-collector-0.178.0`, commit `7f0a8aa074b841451a32e4127b159685e8905959`](https://github.com/open-telemetry/opentelemetry-helm-charts/tree/opentelemetry-collector-0.178.0/charts/opentelemetry-collector) | [Apache License 2.0 at that tag](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/opentelemetry-collector-0.178.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
 
 `helm dependency build charts/agent-relay` packages the same third-party chart
-contents inside `charts/agent-relay/charts/96bulls-0.5.5.tgz`, whose bytes
+contents inside `charts/agent-relay/charts/sessions-pipeline-0.6.0.tgz`, whose bytes
 depend on that local build (the 2026-11-03 build had SHA-256
 `b9dedec3ad35dec5b3ad824780a51d700481afdad1dde086fcaa26fd6a95a9d3`); it is not
 committed or shipped in the handoff. That archive also contains no license or
@@ -99,7 +99,7 @@ cover an image's transitive packages.
 | Relay Dashboard | [`AgentWorkforce/relay-dashboard`](https://github.com/AgentWorkforce/relay-dashboard) | Repository contains an [Apache-2.0 `LICENSE`](https://github.com/AgentWorkforce/relay-dashboard/blob/main/LICENSE). |
 | Relayflows | [`AgentWorkforce/flows`](https://github.com/AgentWorkforce/flows) | Repository contains an [Apache-2.0 `LICENSE`](https://github.com/AgentWorkforce/flows/blob/main/LICENSE). |
 | Relayfile | [`AgentWorkforce/relayfile`](https://github.com/AgentWorkforce/relayfile) | Repository contains an [Apache-2.0 `LICENSE`](https://github.com/AgentWorkforce/relayfile/blob/main/LICENSE). |
-| 96Bulls Worker and AlleyOop | Chart metadata names `AgentWorkforce/96BullSessions`, which redirects to the private `AgentWorkforce/sessions-pipeline` repository | No license or notice file was found in the inspected repository. License not established. |
+| Sessions pipeline worker and AlleyOop | Chart metadata names the private `AgentWorkforce/sessions-pipeline` repository (formerly `AgentWorkforce/96BullSessions`) | No license or notice file was found in the inspected repository. License not established. |
 | Relay History | Private [`AgentWorkforce/relayhistory-cloud`](https://github.com/AgentWorkforce/relayhistory-cloud) repository | No license or notice file was found in the inspected repository. License not established. |
 | Relay Cloud API | Private [`AgentWorkforce/cloud`](https://github.com/AgentWorkforce/cloud) repository | No license or notice file was found in the inspected repository. License not established. |
 
@@ -131,7 +131,7 @@ not cleared by this notice.
    license terms and required notices. This does not change the Apache-2.0
    license of the Helm chart code in this repository.
 2. **Legal files are absent from the Helm packages.** The checked dependency
-   third-party archives and the generated `agent-relay`/`96bulls` archives
+   third-party archives and the generated `agent-relay`/`sessions-pipeline` archives
    contain no license or notice files. Root documentation is not automatically
    included by `helm package`. A release process must deliberately place the
    applicable legal material in each distributed artifact or otherwise define

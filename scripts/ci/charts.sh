@@ -44,9 +44,9 @@ for chart in "${charts[@]}"; do
   if [ -f "charts/$chart/Chart.lock" ] || grep -q '^dependencies:' "charts/$chart/Chart.yaml"; then
     # Helm does not recursively vendor dependencies of a file:// dependency.
     # Build the sessions umbrella first so agent-relay always contains its
-    # 96bulls-worker/alleyoop/third-party children, even in an isolated check.
+    # sessions-pipeline-worker/alleyoop/third-party children, even in an isolated check.
     if [ "$chart" = agent-relay ]; then
-      helm dependency build charts/96bulls >/dev/null || { err "$chart: nested 96bulls dependency build failed"; continue; }
+      helm dependency build charts/sessions-pipeline >/dev/null || { err "$chart: nested sessions-pipeline dependency build failed"; continue; }
     fi
     # helm dependency build only resolves https repositories that are added.
     for repo in $(sed -n 's/^ *repository: *\(https:.*\)/\1/p' "charts/$chart/Chart.yaml" | sort -u); do
@@ -89,7 +89,7 @@ for chart in "${charts[@]}"; do
           }
           case $chart in
             alleyoop) expected_shared=1; component_env=INGEST_RETRY_LIMIT ;;
-            96bulls-worker) expected_shared=5; component_env=REFEREE_RETRY_LIMIT ;;
+            sessions-pipeline-worker) expected_shared=5; component_env=REFEREE_RETRY_LIMIT ;;
             *) err "$label: numeric env fixture is unsupported for $chart"; expected_shared=0; component_env=UNKNOWN ;;
           esac
           [ "$(count_quoted_env REDIS_PORT 6378)" -eq "$expected_shared" ] \
@@ -112,7 +112,7 @@ for chart in "${charts[@]}"; do
           [ "$runtime_refs" = "hoopdb-runtime/HOOPDB_URL" ] \
             || err "$label: long-running workloads must read only the runtime URL, got $runtime_refs"
         fi
-        if [ "$chart" = "96bulls-worker" ]; then
+        if [ "$chart" = "sessions-pipeline-worker" ]; then
           summary_file_refs=$(grep -Ec '^[[:space:]]*- name: SUMMARY_MASTER_KEYS_FILE[[:space:]]*$' <<<"$out" || true)
           summary_value_refs=$(grep -Ec '^[[:space:]]*- name: SUMMARY_MASTER_KEYS[[:space:]]*$' <<<"$out" || true)
           [ "$summary_file_refs" -eq 1 ] || err "$label: SUMMARY_MASTER_KEYS_FILE must be injected exactly once (Bob Costas only), found $summary_file_refs"
@@ -163,23 +163,23 @@ for chart in "${charts[@]}"; do
   done
   if [ "$mode" = static ]; then
     case $chart in
-      96bulls-worker)
-        v=charts/96bulls-worker/ci/pod-identity-values.yaml
+      sessions-pipeline-worker)
+        v=charts/sessions-pipeline-worker/ci/pod-identity-values.yaml
         expect_render_failure "$chart" "$v" "unknown credential mode" "locker.credentials.mode must be secret or podIdentity" --set locker.credentials.mode=invalid
         expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
         expect_render_failure "$chart" "$v" "migration Secret without key" "migrations.hoopdb.existingSecret and key must be set together" --set migrations.hoopdb.existingSecret=hoopdb-migration
         expect_render_failure "$chart" "$v" "migration key without Secret" "migrations.hoopdb.existingSecret and key must be set together" --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL
-        v=charts/96bulls-worker/ci/external-secrets-values.yaml
-        expect_render_failure "$chart" "$v" "unmapped managed migration key" "externalSecrets.data must map HOOPDB_MIGRATION_URL" --set migrations.hoopdb.existingSecret=96bulls --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL
-        render "$chart" "$v" --set migrations.enabled=false --set migrations.hoopdb.existingSecret=96bulls --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL >/dev/null \
+        v=charts/sessions-pipeline-worker/ci/external-secrets-values.yaml
+        expect_render_failure "$chart" "$v" "unmapped managed migration key" "externalSecrets.data must map HOOPDB_MIGRATION_URL" --set migrations.hoopdb.existingSecret=sessions-pipeline --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL
+        render "$chart" "$v" --set migrations.enabled=false --set migrations.hoopdb.existingSecret=sessions-pipeline --set migrations.hoopdb.key=HOOPDB_MIGRATION_URL >/dev/null \
           || err "$chart: disabled migrations must not require the unused managed migration key"
         numeric=$(render "$chart" "$v" --set migrations.hoopdb.existingSecret=hoopdb-migration --set-string migrations.hoopdb.key=123)
         grep -Fq 'key: "123"' <<<"$numeric" \
           || err "$chart: numeric-looking migration Secret keys must remain quoted strings"
-        v=charts/96bulls-worker/ci/pod-identity-values.yaml
+        v=charts/sessions-pipeline-worker/ci/pod-identity-values.yaml
         expect_render_failure "$chart" "$v" "missing summary Secret" "summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" --set summaryEncryption.existingSecret=
         expect_render_failure "$chart" "$v" "duplicate summary key env" "configure summaryEncryption instead of components.bob-costas.env" --set-json 'components.bob-costas.env=[{"name":"SUMMARY_MASTER_KEYS","value":"not-a-real-key"}]'
-        expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
+        expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=sessions-pipeline
         expect_render_failure "$chart" "$v" "extraEnv in-cluster http" "extraEnv must not set ALLOW_IN_CLUSTER_HTTP" --set-json 'extraEnv=[{"name":"ALLOW_IN_CLUSTER_HTTP","value":"true"}]'
         expect_render_failure "$chart" "$v" "component in-cluster http" "components.referee.env must not set ALLOW_IN_CLUSTER_HTTP" --set-json 'components.referee.env=[{"name":"ALLOW_IN_CLUSTER_HTTP","value":"true"}]'
         ;;
@@ -187,7 +187,7 @@ for chart in "${charts[@]}"; do
         v=charts/alleyoop/ci/pod-identity-values.yaml
         expect_render_failure "$chart" "$v" "unknown credential mode" "locker.credentials.mode must be secret or podIdentity" --set locker.credentials.mode=invalid
         expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
-        expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
+        expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=sessions-pipeline
         expect_render_failure "$chart" "$v" "local JWKS without Secret" "existingSecret is required when auth.localJwks=true" --set auth.jwksUrl= --set auth.localJwks=true
         expect_render_failure "$chart" "$v" "interim bearer in production" "auth.allowInterimRelayAuthBearer=true is allowed only when environment=local" --set auth.allowInterimRelayAuthBearer=true
         expect_render_failure "$chart" "$v" "interim bearer through raw env" "configure auth.allowInterimRelayAuthBearer instead of ingest.env" --set-json 'ingest.env=[{"name":"ALLOW_INTERIM_RELAYAUTH_BEARER","value":"true"}]'
