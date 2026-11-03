@@ -5,6 +5,18 @@ for one Helm release. It does not mutate the cluster and does not collect raw
 manifests, pod logs, response bodies, certificate bodies, Kubernetes Secrets,
 database credentials, or database rows.
 
+One exception to "no Secrets read": with Helm's default storage driver
+(`HELM_DRIVER` unset, `secret`, or `secrets`), `helm status`, `helm get values`,
+and `helm history` load the release record from its `sh.helm.release.v1`
+Secret, which holds the rendered manifest and values. The collector never
+requests a Secret itself and keeps only curated fields and a redacted
+fingerprint, but the Secret is read. The bundle's `manifest.json` says so:
+`secretResourcesRead: true`, `secretResourcesReadBy: ["helm-release-storage"]`,
+and `helmStorageDriver`. The collector's identity therefore needs `get` and
+`list` on Secrets in the release namespace; without them the Helm sections are
+recorded in `collection-errors.json`. Grant that only to identities trusted
+with the release's values.
+
 ## Usage
 
 ```sh
@@ -56,7 +68,9 @@ some RBAC permissions are unavailable.
 Every external command goes through one policy gate. It permits only the
 specific read operations needed by the collector. Mutating kubectl and Helm
 commands are rejected, and direct `Secret`/`secrets` resource reads are
-rejected regardless of resource spelling. Commands never use a shell.
+rejected regardless of resource spelling. Helm's own read of its
+release-storage Secret (above) is the only Secret access, and it is reported
+in `manifest.json`. Commands never use a shell.
 
 Password-bearing URLs are rejected both at argument validation and command
 execution. Explicit health URLs also reject query strings and fragments, where
