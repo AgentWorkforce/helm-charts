@@ -60,6 +60,8 @@ migrations:
 
 extraConfig: {}
 extraEnv: []
+# EnvFromSource entries. They are listed before the chart ConfigMap, so they
+# cannot override chart-managed keys (RELAYAUTH_*, CRON_ENABLED, ...).
 extraEnvFrom: []
 service:
   type: ClusterIP

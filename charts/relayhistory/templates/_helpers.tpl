@@ -49,7 +49,8 @@ app.kubernetes.io/component: history
 {{- if .Values.ingress.enabled }}{{ if empty .Values.ingress.hosts }}{{ fail "ingress.enabled=true requires at least one host" }}{{ end }}{{ if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end }}{{ if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end }}{{ end -}}
 {{- $reservedEnv := list "PORT" "ENVIRONMENT" "MAX_BODY_BYTES" "MAX_INFLIGHT_BODY_BYTES" "SHUTDOWN_GRACE_MS" "SHUTDOWN_DRAIN_DELAY_MS" "PG_POOL_MAX" "CRON_ENABLED" "RELAYAUTH_JWKS_URL" "RELAYAUTH_ISSUER" "RELAYAUTH_AUDIENCE" "RELAYHISTORY_ORIGIN" "AGENT_RELAY_CLOUD_API_URL" "SESSION_EVENTS_ENABLED" "POSTHOG_HOST" "DATABASE_URL" "DATABASE_MIGRATIONS_URL" "DATABASE_RUNTIME_ROLE" "EMBEDDING_API_KEY" "OPENAI_API_KEY" "POSTHOG_API_KEY" "ALLOW_WRITE_HOLD" "ROLLOUT_BUDGET_SECONDS" -}}
 {{- range .Values.extraEnv }}{{ if has .name $reservedEnv }}{{ fail (printf "%s is managed by structured chart values and must not appear in extraEnv" .name) }}{{ end }}{{ end -}}
-{{- range .Values.extraEnvFrom }}{{ if has .name $reservedEnv }}{{ fail (printf "%s is managed by structured chart values and must not appear in extraEnvFrom" .name) }}{{ end }}{{ end -}}
+{{- /* extraEnvFrom entries (EnvFromSource) carry no variable names to check;
+the Deployment lists them before the chart ConfigMap so managed keys win. */ -}}
 {{- range $key, $_ := .Values.extraConfig }}{{ if has $key $reservedEnv }}{{ fail (printf "%s is managed by structured chart values and must not appear in extraConfig" $key) }}{{ end }}{{ end -}}
 {{- end -}}
 {{- define "relayhistory.secretEnv" -}}

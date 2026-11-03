@@ -155,4 +155,12 @@ for child in relayhistory relay-cloud-api; do
     --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" >/dev/null
 done
 
+# relayhistory: extraEnvFrom must not override chart-managed ConfigMap keys,
+# so the chart ConfigMap is the last (winning) envFrom source.
+last_env_from=$(helm template ci charts/relayhistory -n ci --no-hooks -f charts/relayhistory/ci/default-values.yaml \
+  --set-json 'extraEnvFrom=[{"configMapRef":{"name":"operator-extra"}}]' |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].envFrom[-1].configMapRef.name')
+test "$last_env_from" = ci-relayhistory \
+  || { echo "relayhistory: extraEnvFrom can override the chart ConfigMap (last envFrom is $last_env_from)" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"
