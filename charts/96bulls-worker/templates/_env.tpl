@@ -12,6 +12,7 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
 {{- if not (has (toString .Values.allowInClusterHttp) (list "true" "false")) }}{{ fail "96bulls-worker: allowInClusterHttp must be true or false" }}{{ end -}}
 {{- range .Values.extraEnv }}{{ if eq (.name | default "") "ALLOW_IN_CLUSTER_HTTP" }}{{ fail "96bulls-worker: extraEnv must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" }}{{ end }}{{ end -}}
+{{- range $n, $c := .Values.components }}{{ range ($c.env | default list) }}{{ if eq (.name | default "") "ALLOW_IN_CLUSTER_HTTP" }}{{ fail (printf "96bulls-worker: components.%s.env must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" $n) }}{{ end }}{{ end }}{{ end -}}
 {{- $migrations := .Values.migrations | default dict -}}
 {{- $migrationHoopdb := get $migrations "hoopdb" | default dict -}}
 {{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "96bulls-worker: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}

@@ -100,10 +100,14 @@ auth:
   # to the courier's RELAYAUTH_HISTORY_ORIGIN. Empty = not rendered.
   historyOrigin: ""
 
-# ALLOW_IN_CLUSTER_HTTP. false (default): every service URL must be https
-# (or loopback). true allows plain http only to in-cluster Service FQDNs
+# ALLOW_IN_CLUSTER_HTTP. false (default): the validated destination URLs
+# (RelayAuth, Cloud, ingest, JWKS, history origin) must be https (or
+# loopback). true allows plain http only to in-cluster Service FQDNs
 # (<svc>.<ns>.svc or <svc>.<ns>.svc.cluster.local), never public hosts, IPs
 # or short names; e.g. auth.jwksUrl=http://relayauth.relayauth.svc:8787/.well-known/jwks.json.
+# LOCKER_ENDPOINT (the bundled MinIO's http://locker:9000) and the OTLP
+# endpoint are outside this policy (96BullSessions README, runtime
+# destinations), so the bundled Locker works with false.
 allowInClusterHttp: false
 
 ingest:

@@ -19,7 +19,15 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
 {{- if and .Values.auth.localJwks (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when auth.localJwks=true" }}{{ end -}}
 {{- if not (has (toString .Values.allowInClusterHttp) (list "true" "false")) }}{{ fail "alleyoop: allowInClusterHttp must be true or false" }}{{ end -}}
-{{- with .Values.auth.historyOrigin }}{{ if not (regexMatch "^https?://[^/?#@]+$" .) }}{{ fail "alleyoop: auth.historyOrigin must be a bare origin (scheme://host[:port], no path, query or credentials)" }}{{ end }}{{ end -}}
+{{- with .Values.auth.historyOrigin }}
+{{- $origin := toString . -}}
+{{- $originError := "alleyoop: auth.historyOrigin must be a bare origin http(s)://host[:port]: a DNS hostname of RFC 1123 labels, an optional port 1-65535, and no path, query, fragment or credentials" -}}
+{{- if not (regexMatch "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$" $origin) }}{{ fail $originError }}{{ end -}}
+{{- $originHost := (urlParse $origin).hostname -}}
+{{- if or (gt (len $originHost) 253) (not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$" $originHost)) }}{{ fail $originError }}{{ end -}}
+{{- $originPort := regexFind ":[0-9]+$" $origin -}}
+{{- if and $originPort (or (lt (int (trimPrefix ":" $originPort)) 1) (gt (int (trimPrefix ":" $originPort)) 65535)) }}{{ fail $originError }}{{ end -}}
+{{- end -}}
 {{- $ingestEnvNames := list -}}
 {{- range concat (.Values.extraEnv | default list) (.Values.ingest.env | default list) }}{{ $ingestEnvNames = append $ingestEnvNames (.name | default "") }}{{ end -}}
 {{- if has "ALLOW_IN_CLUSTER_HTTP" $ingestEnvNames }}{{ fail "alleyoop: extraEnv/ingest.env must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" }}{{ end -}}
