@@ -8,6 +8,10 @@ chart/image/migration compatibility matrix, are in the
 [self-hosted requirements registry](self-hosted-requirements.md), generated
 from [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml).
 
+For the deployed GKE shape — load balancer and ingress routing, in-namespace
+pods, and the Cloud SQL / GCS / PVC data plane — see the
+[self-hosted architecture diagram](diagrams/self-hosted-architecture.md).
+
 ## Product shape
 
 The self-hosted product is composed rather than monolithic.
