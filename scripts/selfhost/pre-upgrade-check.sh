@@ -40,7 +40,7 @@ Options:
   -h, --help
 
 This command is read-only. It verifies that the evidence matches the currently
-deployed Helm revision and that no migration or backup Job is active or failed.
+deployed Helm revision and that every migration or backup Job is Complete=True.
 It does not run a backup, restore, migration, upgrade, or rollback.
 EOF
 }
@@ -133,7 +133,7 @@ for setting in \
   MAX_RESTORE_AGE_HOURS \
   MAX_COMPATIBILITY_AGE_HOURS; do
   is_positive_integer "${!setting}" ||
-    die "${setting,,} must be a positive integer"
+    die "$(tr '[:upper:]' '[:lower:]' <<<"$setting") must be a positive integer"
 done
 
 for evidence in \
@@ -322,7 +322,7 @@ import re
 import sys
 
 data = json.load(sys.stdin)
-matched = active = failed = 0
+matched = active = failed = incomplete = 0
 for item in data.get("items", []):
     metadata = item.get("metadata", {})
     labels = metadata.get("labels", {})
@@ -342,16 +342,25 @@ for item in data.get("items", []):
         condition.get("type"): condition.get("status")
         for condition in status.get("conditions", [])
     }
+    # Only Complete=True proves the Job ran to completion. A Job that
+    # succeeded after a retried pod keeps failed>0 but is complete; a
+    # suspended or not-yet-synced Job has no conditions and is not.
+    if conditions.get("Complete") == "True":
+        continue
     if status.get("active", 0) > 0:
         active += 1
-    if status.get("failed", 0) > 0 or conditions.get("Failed") == "True":
+    elif conditions.get("Failed") == "True":
         failed += 1
-print(matched, active, failed)
+    else:
+        incomplete += 1
+print(matched, active, failed, incomplete)
 '
 )" || die "cannot parse migration and backup Job status"
-read -r matched_jobs active_jobs failed_jobs <<<"$job_summary"
+read -r matched_jobs active_jobs failed_jobs incomplete_jobs <<<"$job_summary"
 ((active_jobs == 0)) || die "migration or backup Jobs are active"
 ((failed_jobs == 0)) || die "migration or backup Jobs have failed"
+((incomplete_jobs == 0)) ||
+  die "migration or backup Jobs are not Complete=True (suspended or not yet started)"
 
 printf '%s: release=%s revision=%s chart=%s status=deployed\n' \
   "$PROGRAM" "$RELEASE" "$current_revision" "${current_chart_version:-unknown}"
@@ -359,6 +368,6 @@ printf '%s: recovery_id=%s backup=PASS isolated_restore=PASS\n' \
   "$PROGRAM" "$recovery_id"
 printf '%s: target_chart=%s migration=%s rollback_strategy=%s\n' \
   "$PROGRAM" "$target_chart" "$migration_class" "$rollback_strategy"
-printf '%s: migration_or_backup_jobs=%s active=0 failed=0\n' \
-  "$PROGRAM" "$matched_jobs"
+printf '%s: migration_or_backup_jobs=%s complete=%s\n' \
+  "$PROGRAM" "$matched_jobs" "$matched_jobs"
 printf '%s: OK\n' "$PROGRAM"

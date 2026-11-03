@@ -279,4 +279,71 @@ if run_verify "${tmp_root}/verify-refs-all.out"; then
 fi
 pass "verify narrows health, TLS, and certificate references to --ingress-host"
 
+# ---------------------------------------------------------------------------
+# pre-upgrade-check.sh
+# ---------------------------------------------------------------------------
+now_utc() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+write_upgrade_evidence() {
+  local dir="$1"
+  local now
+  now="$(now_utc)"
+  mkdir -p "${dir}"
+  jq -n --arg now "${now}" '{
+    recoveryId: "ar-20260101T000000Z-abc123", status: "PASS",
+    providerStatus: "SUCCESSFUL", sourceRelease: "relay", sourceRevision: 3,
+    writesQuiesced: true, artifactsComplete: true, completedAt: $now}' \
+    >"${dir}/backup.json"
+  jq -n --arg now "${now}" '{
+    recoveryId: "ar-20260101T000000Z-abc123", status: "PASS", isolated: true,
+    allVerificationGatesPassed: true, completedAt: $now}' >"${dir}/restore.json"
+  jq -n --arg now "${now}" '{
+    status: "PASS", sourceRevision: 3, targetChartVersion: "2.0.0",
+    databaseMigration: "backward-compatible",
+    rollbackStrategy: "database-restore", reviewedAt: $now}' \
+    >"${dir}/compatibility.json"
+}
+
+run_pre_upgrade() {
+  local dir="$1"
+  "${TEST_BASH}" "${SELFHOST_DIR}/pre-upgrade-check.sh" \
+    --namespace relay --release relay --target-chart ./chart \
+    --backup-evidence "${dir}/backup.json" \
+    --restore-evidence "${dir}/restore.json" \
+    --compatibility-evidence "${dir}/compatibility.json" >/dev/null 2>&1
+}
+
+write_jobs() {
+  # write_jobs JSON_STATUS... : one migration Job per status object.
+  local items=""
+  local index=0
+  local status
+  for status in "$@"; do
+    index=$((index + 1))
+    items="${items}${items:+,}{\"metadata\":{\"name\":\"relay-cloud-api-migrate-${index}\"},\"status\":${status}}"
+  done
+  printf '{"items":[%s]}\n' "${items}" >"${fixtures}/jobs.batch.json"
+}
+
+reset_fixtures
+write_upgrade_evidence "${tmp_root}/upgrade"
+complete='{"succeeded":1,"conditions":[{"type":"Complete","status":"True"}]}'
+write_jobs "${complete}"
+run_pre_upgrade "${tmp_root}/upgrade" || fail "pre-upgrade rejected a Complete migration Job"
+# Succeeded after a retried pod: failed>0 but Complete=True.
+write_jobs '{"failed":1,"succeeded":1,"conditions":[{"type":"Complete","status":"True"}]}'
+run_pre_upgrade "${tmp_root}/upgrade" || fail "pre-upgrade rejected a Job that completed after a retry"
+for status in '{"active":0,"failed":0}' \
+  '{"conditions":[{"type":"Suspended","status":"True"}]}' \
+  '{"active":1}' \
+  '{"failed":3,"conditions":[{"type":"Failed","status":"True"}]}'; do
+  write_jobs "${complete}" "${status}"
+  if run_pre_upgrade "${tmp_root}/upgrade"; then
+    fail "pre-upgrade accepted a migration Job that is not Complete=True: ${status}"
+  fi
+done
+pass "pre-upgrade requires Complete=True on every migration Job"
+
 printf 'All self-hosted script tests passed.\n'
