@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# jq programs are intentionally single-quoted.
+# shellcheck disable=SC2016
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
 MODE="audit"
@@ -10,7 +12,7 @@ APPLY_REQUESTED=false
 APPROVAL="${CONFORMANCE_APPROVAL:-}"
 RUN_ID="${CONFORMANCE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 RELEASE_NAME="${CONFORMANCE_RELEASE:-agentworkforce-conformance}"
-RUN_NAMESPACE="${CONFORMANCE_NAMESPACE:-aw-conformance-${RUN_ID,,}}"
+RUN_NAMESPACE="${CONFORMANCE_NAMESPACE:-aw-conformance-$(printf '%s' "${RUN_ID}" | tr '[:upper:]' '[:lower:]')}"
 CHART="${CONFORMANCE_CHART:-}"
 CURRENT_VERSION="${CONFORMANCE_CURRENT_VERSION:-}"
 PREVIOUS_VERSION="${CONFORMANCE_PREVIOUS_VERSION:-}"
@@ -23,6 +25,7 @@ CONFORMANCE_HEALTH_PATH="${CONFORMANCE_HEALTH_PATH:-/readyz}"
 MIGRATION_FAILURE_VALUES="${CONFORMANCE_MIGRATION_FAILURE_VALUES:-}"
 WRONG_DATABASE_VALUES="${CONFORMANCE_WRONG_DATABASE_VALUES:-}"
 DB_OUTAGE_HOOK="${CONFORMANCE_DB_OUTAGE_HOOK:-}"
+DB_DEPENDENT_SELECTOR="${CONFORMANCE_DB_DEPENDENT_SELECTOR:-}"
 BACKUP_HOOK="${CONFORMANCE_BACKUP_HOOK:-}"
 RESTORE_HOOK="${CONFORMANCE_RESTORE_HOOK:-}"
 ROLLBACK_BASE_URL="${CONFORMANCE_ROLLBACK_BASE_URL:-}"
@@ -30,6 +33,7 @@ TARGET_NAMESPACE="${CONFORMANCE_TARGET_NAMESPACE:-}"
 TARGET_RELEASE="${CONFORMANCE_TARGET_RELEASE:-}"
 CLEANUP=false
 DB_OUTAGE_ACTIVE=false
+FRESH_INSTALL_OK=false
 VALUES_FILES=()
 CREATED_NAMESPACES=()
 STARTED_AT="$(utc_now)"
@@ -48,8 +52,10 @@ Core options:
   --values FILE                   Values file; repeatable
   --release NAME                  Conformance release prefix
   --namespace NAME                Conformance namespace prefix
-  --target-namespace NAME         Existing release namespace for read-only checks
-  --target-release NAME           Existing release name for read-only checks
+  --target-namespace NAME         Existing release namespace for read-only
+                                  audit checks (rejected with --apply)
+  --target-release NAME           Existing release name for read-only audit
+                                  checks (rejected with --apply)
   --adapter FILE                  Executable implementing product assertions
   --base-url HTTPS_URL            Existing or installed service URL
   --dns-name HOST                 DNS hostname to resolve
@@ -60,6 +66,10 @@ Failure and recovery fixtures:
   --migration-failure-values FILE Values that force a migration failure
   --wrong-database-values FILE    Values that configure a known-wrong database
   --db-outage-hook FILE           Executable supporting begin/end actions
+  --db-dependent-selector SEL     Pods that must go unready during the DB
+                                  outage (default: the release's api and
+                                  history components; Job pods are always
+                                  excluded)
   --backup-hook FILE              Executable supporting create action
   --restore-hook FILE             Executable supporting restore/verify actions
   --rollback-base-url HTTPS_URL   Side-by-side previous-version service URL
@@ -92,6 +102,7 @@ while (($#)); do
     --migration-failure-values) MIGRATION_FAILURE_VALUES="${2:?missing value for --migration-failure-values}"; shift 2 ;;
     --wrong-database-values) WRONG_DATABASE_VALUES="${2:?missing value for --wrong-database-values}"; shift 2 ;;
     --db-outage-hook) DB_OUTAGE_HOOK="${2:?missing value for --db-outage-hook}"; shift 2 ;;
+    --db-dependent-selector) DB_DEPENDENT_SELECTOR="${2:?missing value for --db-dependent-selector}"; shift 2 ;;
     --backup-hook) BACKUP_HOOK="${2:?missing value for --backup-hook}"; shift 2 ;;
     --restore-hook) RESTORE_HOOK="${2:?missing value for --restore-hook}"; shift 2 ;;
     --rollback-base-url) ROLLBACK_BASE_URL="${2:?missing value for --rollback-base-url}"; shift 2 ;;
@@ -111,6 +122,13 @@ elif [[ -n "${APPROVAL}" ]]; then
   die "approval was supplied without --apply"
 fi
 
+# Apply mode mutates whatever release it points at (outage hooks, rollout
+# restarts, adapter fixtures). It must only ever act on the isolated release it
+# installs itself, so an existing target is accepted for audit mode only.
+if [[ "${MODE}" == "apply" && ( -n "${TARGET_NAMESPACE}" || -n "${TARGET_RELEASE}" ) ]]; then
+  die "--target-namespace/--target-release are read-only audit inputs and cannot be combined with --apply"
+fi
+
 [[ "${RUN_NAMESPACE}" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] ||
   die "namespace must be a DNS label"
 ((${#RUN_NAMESPACE} <= 53)) ||
@@ -120,7 +138,7 @@ fi
 ((${#RELEASE_NAME} <= 43)) ||
   die "release prefix must be at most 43 characters to allow isolated suffixes"
 [[ "${TIMEOUT}" =~ ^[1-9][0-9]*(s|m|h)$ ]] || die "invalid timeout"
-for values_file in "${VALUES_FILES[@]}"; do
+for values_file in ${VALUES_FILES[@]+"${VALUES_FILES[@]}"}; do
   [[ -f "${values_file}" ]] || die "values file not found: ${values_file}"
 done
 
@@ -154,7 +172,7 @@ trap on_exit EXIT
 helm_values_args() {
   local values_file
   HELM_VALUES_ARGS=()
-  for values_file in "${VALUES_FILES[@]}"; do
+  for values_file in ${VALUES_FILES[@]+"${VALUES_FILES[@]}"}; do
     HELM_VALUES_ARGS+=("--values" "${values_file}")
   done
 }
@@ -177,17 +195,110 @@ create_namespace() {
   return 1
 }
 
+# helm_install_mode atomic|keep RELEASE NAMESPACE VERSION [extra helm args...]
+# "keep" leaves failed resources in place so negative scenarios can inspect
+# why the release failed before cleaning up.
+helm_install_mode() {
+  local rollback_mode="$1"
+  local release="$2"
+  local namespace="$3"
+  local version="$4"
+  shift 4
+  local atomic_args=()
+  [[ "${rollback_mode}" == "atomic" ]] && atomic_args=(--atomic)
+  helm_values_args
+  helm_version_args "${version}"
+  # Migration Jobs are plain (non-hook) Jobs; --wait alone does not wait for
+  # them, so a running or failed migration could otherwise report success.
+  run_quiet safe_helm upgrade --install "${release}" "${CHART}" \
+    --namespace "${namespace}" \
+    ${atomic_args[@]+"${atomic_args[@]}"} --wait --wait-for-jobs \
+    --timeout "${TIMEOUT}" --hide-secret \
+    ${HELM_VERSION_ARGS[@]+"${HELM_VERSION_ARGS[@]}"} ${HELM_VALUES_ARGS[@]+"${HELM_VALUES_ARGS[@]}"} "$@"
+}
+
 install_release() {
+  helm_install_mode atomic "$@"
+}
+
+install_release_keep_failure() {
+  helm_install_mode keep "$@"
+}
+
+# Print a JSON object classifying why release pods are not healthy:
+#   unrelated: pods blocked by image, config, or scheduling problems, which
+#              say nothing about the database fixture
+#   app_failed: workload containers that started and then stayed unready,
+#              exited non-zero, or crash-looped (the expected signal when
+#              the application cannot use its database)
+classify_release_pods() {
+  local release="$1"
+  local namespace="$2"
+  local pods_json=""
+  pods_json="$(safe_kubectl get pods --namespace "${namespace}" \
+    --selector "app.kubernetes.io/instance=${release}" --output json 2>/dev/null)" ||
+    return 1
+  jq -ce '
+    def statuses: ((.status.initContainerStatuses // []) + (.status.containerStatuses // []));
+    def unrelated_reason:
+      ["ErrImagePull", "ImagePullBackOff", "InvalidImageName",
+       "CreateContainerConfigError", "CreateContainerError", "RunContainerError"];
+    (.items // []) as $pods
+    | {
+        pods: ($pods | length),
+        unrelated: [
+          $pods[]
+          | select(
+              any(statuses[]; (.state.waiting.reason // "") as $r | any(unrelated_reason[]; . == $r))
+              or any((.status.conditions // [])[]; .type == "PodScheduled" and .status == "False")
+            )
+        ] | length,
+        app_failed: [
+          $pods[]
+          | select(
+              any(statuses[];
+                (.state.running != null and .ready != true)
+                or ((.state.terminated.exitCode // 0) != 0)
+                or ((.lastState.terminated.exitCode // 0) != 0)
+                or ((.state.waiting.reason // "") == "CrashLoopBackOff"))
+            )
+        ] | length
+      }
+  ' <<<"${pods_json}"
+}
+
+# Print the number of failed migration Jobs for a release. Migration Jobs are
+# identified by name or by their pod template component label.
+count_failed_migration_jobs() {
+  local release="$1"
+  local namespace="$2"
+  local jobs_json=""
+  jobs_json="$(safe_kubectl get jobs.batch --namespace "${namespace}" \
+    --selector "app.kubernetes.io/instance=${release}" --output json 2>/dev/null)" ||
+    return 1
+  jq -e '
+    [ (.items // [])[]
+      | select(
+          ((.metadata.name // "") | test("migrat"; "i"))
+          or ((.spec.template.metadata.labels["app.kubernetes.io/component"] // "") == "migration")
+        )
+      | select(any((.status.conditions // [])[]; .type == "Failed" and .status == "True"))
+    ] | length
+  ' <<<"${jobs_json}"
+}
+
+deployed_chart_matches_version() {
   local release="$1"
   local namespace="$2"
   local version="$3"
-  shift 3
-  helm_values_args
-  helm_version_args "${version}"
-  run_quiet safe_helm upgrade --install "${release}" "${CHART}" \
-    --namespace "${namespace}" \
-    --atomic --wait --timeout "${TIMEOUT}" --hide-secret \
-    "${HELM_VERSION_ARGS[@]}" "${HELM_VALUES_ARGS[@]}" "$@"
+  local releases_json=""
+  [[ -n "${version}" ]] || return 0
+  releases_json="$(safe_helm list --namespace "${namespace}" \
+    --filter "^${release}$" --output json 2>/dev/null)" || return 1
+  jq -e --arg release "${release}" --arg version "${version}" \
+    'any(.[]; .name == $release and .status == "deployed"
+      and ((.chart // "") | endswith("-" + $version)))' \
+    >/dev/null 2>&1 <<<"${releases_json}"
 }
 
 dry_run_release() {
@@ -195,7 +306,7 @@ dry_run_release() {
   helm_version_args "${CURRENT_VERSION}"
   run_quiet safe_helm upgrade --install "${RELEASE_NAME}" "${CHART}" \
     --namespace "${RUN_NAMESPACE}" --dry-run --hide-secret \
-    "${HELM_VERSION_ARGS[@]}" "${HELM_VALUES_ARGS[@]}"
+    ${HELM_VERSION_ARGS[@]+"${HELM_VERSION_ARGS[@]}"} ${HELM_VALUES_ARGS[@]+"${HELM_VALUES_ARGS[@]}"}
 }
 
 release_is_deployed() {
@@ -209,6 +320,19 @@ release_is_deployed() {
   jq -e --arg release "${release}" \
     'any(.[]; .name == $release and .status == "deployed")' \
     >/dev/null 2>&1 <<<"${releases_json}"
+}
+
+# Scenarios that mutate the active release (or ask hooks/adapters to) run only
+# against the isolated release this run installed successfully.
+require_isolated_release() {
+  local scenario="$1"
+  if [[ "${FRESH_INSTALL_OK}" != true ||
+    "${ACTIVE_NAMESPACE}" != "${RUN_NAMESPACE}" ||
+    "${ACTIVE_RELEASE}" != "${RELEASE_NAME}" ]]; then
+    emit_evidence "${scenario}" "SKIP" "requires a successful isolated fresh install in this run"
+    return 1
+  fi
+  return 0
 }
 
 scenario_preflight() {
@@ -241,6 +365,7 @@ scenario_fresh_install() {
     install_release "${RELEASE_NAME}" "${RUN_NAMESPACE}" "${CURRENT_VERSION}"; then
     ACTIVE_NAMESPACE="${RUN_NAMESPACE}"
     ACTIVE_RELEASE="${RELEASE_NAME}"
+    FRESH_INSTALL_OK=true
     export ACTIVE_NAMESPACE ACTIVE_RELEASE
     emit_evidence "fresh-install" "PASS" "fresh isolated install became ready" \
       "$(json_object --arg namespace "${RUN_NAMESPACE}" --arg release "${RELEASE_NAME}" \
@@ -291,13 +416,46 @@ scenario_migration_failure() {
     return
   fi
 
-  if install_release "${release}" "${namespace}" "${CURRENT_VERSION}" \
+  # The upgrade is not atomic: an atomic rollback would delete the failed
+  # migration Job before its failure could be attributed. The harness proves
+  # the cause first, then rolls back explicitly.
+  if install_release_keep_failure "${release}" "${namespace}" "${CURRENT_VERSION}" \
     --values "${MIGRATION_FAILURE_VALUES}"; then
     emit_evidence "${scenario}" "FAIL" "migration unexpectedly succeeded"
-  elif release_is_deployed "${release}" "${namespace}"; then
-    emit_evidence "${scenario}" "PASS" "migration failed and atomic rollback retained the deployed release"
+    return
+  fi
+
+  local failed_jobs="" pod_summary="" unrelated=0
+  if ! failed_jobs="$(count_failed_migration_jobs "${release}" "${namespace}")"; then
+    failed_jobs=0
+  fi
+  if pod_summary="$(classify_release_pods "${release}" "${namespace}")"; then
+    unrelated="$(jq -r '.unrelated' <<<"${pod_summary}")"
+  fi
+
+  if ((failed_jobs == 0)); then
+    emit_evidence "${scenario}" "FAIL" "upgrade failed but no migration Job reached Failed=True" \
+      "$(json_object --argjson unrelated "${unrelated}" '{unrelated_pod_failures: $unrelated}')"
+    run_quiet safe_helm rollback "${release}" --namespace "${namespace}" \
+      --wait --wait-for-jobs --timeout "${TIMEOUT}" || true
+    return
+  fi
+  if ((unrelated > 0)); then
+    emit_evidence "${scenario}" "FAIL" "migration Job failed alongside unrelated image, config, or scheduling failures" \
+      "$(json_object --argjson unrelated "${unrelated}" '{unrelated_pod_failures: $unrelated}')"
+    run_quiet safe_helm rollback "${release}" --namespace "${namespace}" \
+      --wait --wait-for-jobs --timeout "${TIMEOUT}" || true
+    return
+  fi
+
+  if run_quiet safe_helm rollback "${release}" --namespace "${namespace}" \
+    --wait --wait-for-jobs --timeout "${TIMEOUT}" &&
+    release_is_deployed "${release}" "${namespace}" &&
+    deployed_chart_matches_version "${release}" "${namespace}" "${PREVIOUS_VERSION}"; then
+    emit_evidence "${scenario}" "PASS" "migration Job failed and rollback restored the previous deployed release" \
+      "$(json_object --argjson failed_jobs "${failed_jobs}" '{failed_migration_jobs: $failed_jobs}')"
   else
-    emit_evidence "${scenario}" "FAIL" "migration failed but previous release was not retained"
+    emit_evidence "${scenario}" "FAIL" "migration failed but the previous release was not restored"
   fi
 }
 
@@ -315,14 +473,32 @@ scenario_wrong_database() {
     return
   }
   require_apply "${scenario}" || return
+  # Baseline: the same chart, version, and base values must already have
+  # become ready, so a failure below can be attributed to the overlay.
+  if [[ "${FRESH_INSTALL_OK}" != true ]]; then
+    emit_evidence "${scenario}" "SKIP" "requires a passing fresh install with the same base values as a baseline"
+    return
+  fi
 
   if ! create_namespace "${namespace}"; then
     emit_evidence "${scenario}" "FAIL" "could not create isolated namespace"
-  elif install_release "${release}" "${namespace}" "${CURRENT_VERSION}" \
+    return
+  fi
+  if install_release_keep_failure "${release}" "${namespace}" "${CURRENT_VERSION}" \
     --values "${WRONG_DATABASE_VALUES}"; then
     emit_evidence "${scenario}" "FAIL" "release became ready with a known-wrong database"
+    return
+  fi
+
+  local pod_summary=""
+  if ! pod_summary="$(classify_release_pods "${release}" "${namespace}")"; then
+    emit_evidence "${scenario}" "FAIL" "install failed but release pods could not be inspected"
+  elif jq -e '.unrelated == 0 and .app_failed > 0' >/dev/null <<<"${pod_summary}"; then
+    emit_evidence "${scenario}" "PASS" "known-wrong database left started workloads unready while the baseline became ready" \
+      "${pod_summary}"
   else
-    emit_evidence "${scenario}" "PASS" "known-wrong database prevented readiness"
+    emit_evidence "${scenario}" "FAIL" "install failed for a reason not attributable to the wrong database" \
+      "${pod_summary}"
   fi
 }
 
@@ -340,7 +516,7 @@ scenario_product_behaviors() {
   for pair in "${pairs[@]}"; do
     scenario="${pair%%:*}"
     action="${pair#*:}"
-    if require_apply "${scenario}"; then
+    if require_apply "${scenario}" && require_isolated_release "${scenario}"; then
       adapter_scenario "${scenario}" "${action}"
     fi
   done
@@ -349,21 +525,34 @@ scenario_product_behaviors() {
 scenario_db_outage() {
   local scenario="db-outage-readiness"
   require_apply "${scenario}" || return
+  require_isolated_release "${scenario}" || return
   if ! validate_hook "${DB_OUTAGE_HOOK}"; then
     emit_evidence "${scenario}" "SKIP" "executable DB outage hook is not configured"
     return
   fi
 
+  # Mark the outage active before calling begin: a hook can disable the
+  # database and then exit non-zero, and the exit trap must still run the
+  # repeat-safe end action.
+  DB_OUTAGE_ACTIVE=true
   if ! run_hook "${DB_OUTAGE_HOOK}" begin; then
     emit_evidence "${scenario}" "FAIL" "database outage hook failed to start"
+    if run_hook "${DB_OUTAGE_HOOK}" end; then
+      DB_OUTAGE_ACTIVE=false
+    fi
     return
   fi
-  DB_OUTAGE_ACTIVE=true
+
+  # Only PostgreSQL-dependent workloads are expected to fail readiness. The
+  # dashboard and SQLite-backed services stay ready, and completed migration
+  # Job pods never become ready, so both are excluded.
+  local selector="${DB_DEPENDENT_SELECTOR:-app.kubernetes.io/instance=${ACTIVE_RELEASE},app.kubernetes.io/component in (api,history)}"
+  selector="${selector},!job-name"
 
   local stayed_ready=false
   if ! run_quiet safe_kubectl wait --for=condition=Ready=false pod \
     --namespace "${ACTIVE_NAMESPACE}" \
-    --selector "app.kubernetes.io/instance=${ACTIVE_RELEASE}" --timeout=30s; then
+    --selector "${selector}" --timeout=30s; then
     stayed_ready=true
   fi
 
@@ -377,7 +566,7 @@ scenario_db_outage() {
     emit_evidence "${scenario}" "FAIL" "pods remained ready during database outage"
   elif run_quiet safe_kubectl wait --for=condition=Ready pod \
     --namespace "${ACTIVE_NAMESPACE}" \
-    --selector "app.kubernetes.io/instance=${ACTIVE_RELEASE}" --timeout="${TIMEOUT}"; then
+    --selector "${selector}" --timeout="${TIMEOUT}"; then
     emit_evidence "${scenario}" "PASS" "readiness failed closed and recovered after database restoration"
   else
     emit_evidence "${scenario}" "FAIL" "readiness did not recover after database restoration"
@@ -387,6 +576,7 @@ scenario_db_outage() {
 scenario_restart_outbox() {
   local scenario="restart-outbox-recovery"
   require_apply "${scenario}" || return
+  require_isolated_release "${scenario}" || return
   if [[ -z "${CONFORMANCE_ADAPTER}" ]]; then
     emit_evidence "${scenario}" "SKIP" "CONFORMANCE_ADAPTER is not configured"
     return
@@ -409,43 +599,103 @@ scenario_restart_outbox() {
   fi
 }
 
+# Print a JSON summary of GKE Ingress backend health as the charts deploy it:
+# a GCE Ingress with a ManagedCertificate and FrontendConfig, health checks
+# derived from readiness probes (no BackendConfig or HealthCheckPolicy).
+gke_backend_health_summary() {
+  local namespace="$1"
+  local ingresses_json="" certificates_json=""
+  ingresses_json="$(safe_kubectl get ingresses.networking.k8s.io \
+    --namespace "${namespace}" --output json 2>/dev/null)" || return 1
+  certificates_json="$(safe_kubectl get managedcertificates.networking.gke.io \
+    --namespace "${namespace}" --output json 2>/dev/null)" || certificates_json='{"items":[]}'
+  jq -cen --argjson ingresses "${ingresses_json}" --argjson certificates "${certificates_json}" '
+    def annotations: (.metadata.annotations // {});
+    [ ($ingresses.items // [])[]
+      | select(
+          (annotations["kubernetes.io/ingress.class"] // "") == "gce"
+          or (.spec.ingressClassName // "") == "gce"
+          or (annotations | has("networking.gke.io/managed-certificates"))
+        )
+    ] as $gke
+    | [ $gke[]
+        | (annotations["ingress.kubernetes.io/backends"] // "{}")
+        | (try fromjson catch {})
+        | to_entries[]
+      ] as $backends
+    | [ $gke[]
+        | (annotations["networking.gke.io/managed-certificates"] // "")
+        | split(",")[]
+        | gsub("^\\s+|\\s+$"; "")
+        | select(length > 0)
+      ] | unique as $cert_names
+    | ($certificates.items // []) as $certs
+    | {
+        gke_ingresses: ($gke | length),
+        ingresses_without_backend_status: [
+          $gke[] | select(((annotations["ingress.kubernetes.io/backends"] // "{}")
+            | (try fromjson catch {}) | length) == 0)
+        ] | length,
+        backends: ($backends | length),
+        unhealthy_backends: [$backends[] | select(.value != "HEALTHY")] | length,
+        managed_certificates: ($cert_names | length),
+        inactive_managed_certificates: [
+          $cert_names[] as $name
+          | select(([ $certs[] | select(.metadata.name == $name
+              and (.status.certificateStatus // "") == "Active") ] | length) == 0)
+        ] | length
+      }
+  '
+}
+
 scenario_networking() {
   local scenario="networkpolicy-gke-backend-health"
   local network_policy=false
   local backend_health=false
   local resource_names=""
+  local health_summary='{}'
+
+  if [[ "${MODE}" == "apply" ]]; then
+    require_isolated_release "${scenario}" || return
+  fi
 
   if resource_names="$(safe_kubectl get networkpolicy \
     --namespace "${ACTIVE_NAMESPACE}" --output=name 2>/dev/null)" &&
     [[ -n "${resource_names}" ]]; then
     network_policy=true
   fi
-  resource_names=""
-  if resource_names="$(safe_kubectl get backendconfig.cloud.google.com \
-    --namespace "${ACTIVE_NAMESPACE}" --output=name 2>/dev/null)" &&
-    [[ -n "${resource_names}" ]]; then
+  if health_summary="$(gke_backend_health_summary "${ACTIVE_NAMESPACE}")" &&
+    jq -e '
+      .gke_ingresses > 0
+      and .ingresses_without_backend_status == 0
+      and .backends > 0
+      and .unhealthy_backends == 0
+      and .managed_certificates > 0
+      and .inactive_managed_certificates == 0
+    ' >/dev/null <<<"${health_summary}"; then
     backend_health=true
   else
-    resource_names=""
-    if resource_names="$(safe_kubectl get healthcheckpolicy.networking.gke.io \
-      --namespace "${ACTIVE_NAMESPACE}" --output=name 2>/dev/null)" &&
-      [[ -n "${resource_names}" ]]; then
-      backend_health=true
-    fi
+    [[ -n "${health_summary}" ]] || health_summary='{}'
   fi
+  health_summary="$(jq -c --argjson network_policy "${network_policy}" \
+    '. + {network_policy: $network_policy}' <<<"${health_summary}" 2>/dev/null ||
+    printf '{}')"
 
   if [[ "${network_policy}" == true && "${backend_health}" == true ]]; then
     if [[ "${MODE}" == "apply" && -n "${CONFORMANCE_ADAPTER}" ]]; then
       if run_adapter network-policy-probe; then
-        emit_evidence "${scenario}" "PASS" "policy, GKE health resource, and traffic probe passed"
+        emit_evidence "${scenario}" "PASS" "policy, healthy GKE backends, active certificate, and traffic probe passed" \
+          "${health_summary}"
       else
-        emit_evidence "${scenario}" "FAIL" "network policy traffic probe failed"
+        emit_evidence "${scenario}" "FAIL" "network policy traffic probe failed" "${health_summary}"
       fi
     else
-      emit_evidence "${scenario}" "PASS" "NetworkPolicy and GKE backend health resources are readable"
+      emit_evidence "${scenario}" "PASS" "NetworkPolicy present, GKE Ingress backends HEALTHY, ManagedCertificate Active" \
+        "${health_summary}"
     fi
   else
-    emit_evidence "${scenario}" "FAIL" "required NetworkPolicy or GKE backend health resource is absent"
+    emit_evidence "${scenario}" "FAIL" "NetworkPolicy missing, or GKE Ingress backends or ManagedCertificate not healthy" \
+      "${health_summary}"
   fi
 }
 
@@ -471,7 +721,7 @@ scenario_dns_tls() {
 
 scenario_backup_restore() {
   local scenario="backup"
-  if require_apply "${scenario}"; then
+  if require_apply "${scenario}" && require_isolated_release "${scenario}"; then
     if ! validate_hook "${BACKUP_HOOK}"; then
       emit_evidence "${scenario}" "SKIP" "executable backup hook is not configured"
     elif run_hook "${BACKUP_HOOK}" create; then
@@ -482,7 +732,7 @@ scenario_backup_restore() {
   fi
 
   scenario="isolated-restore"
-  if require_apply "${scenario}"; then
+  if require_apply "${scenario}" && require_isolated_release "${scenario}"; then
     if ! validate_hook "${RESTORE_HOOK}"; then
       emit_evidence "${scenario}" "SKIP" "executable restore hook is not configured"
     elif run_hook "${RESTORE_HOOK}" restore && run_hook "${RESTORE_HOOK}" verify; then
@@ -540,7 +790,7 @@ scenario_cleanup() {
 
   local namespace
   local failed=false
-  for namespace in "${CREATED_NAMESPACES[@]}"; do
+  for namespace in ${CREATED_NAMESPACES[@]+"${CREATED_NAMESPACES[@]}"}; do
     if [[ "${namespace}" != "${RUN_NAMESPACE}" && "${namespace}" != "${RUN_NAMESPACE}-"* ]]; then
       failed=true
       continue

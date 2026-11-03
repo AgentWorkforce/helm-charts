@@ -43,7 +43,8 @@ Selection:
                                    Select all migration Jobs explicitly
 
 Ingress and health:
-      --ingress-host HOST          Verify only this ingress host
+      --ingress-host HOST          Verify only this ingress host (health URL,
+                                   TLS host, and certificate references)
       --health-url URL             Health URL; repeat for multiple endpoints
       --health-path PATH           Derived ingress health path (default: /health)
       --timeout SECONDS            Per-network-check timeout (default: 15)
@@ -222,7 +223,7 @@ if [[ -n "$INGRESS_HOST" ]]; then
     die_usage "--ingress-host is not a valid DNS host"
 fi
 
-for health_url in "${HEALTH_URLS[@]}"; do
+for health_url in ${HEALTH_URLS[@]+"${HEALTH_URLS[@]}"}; do
   validate_health_url "$health_url" ||
     die_usage "--health-url must be HTTP(S), contain a host, and contain no credentials, query, or fragment"
 done
@@ -449,6 +450,8 @@ INGRESS_AVAILABLE=false
 SELECTED_HOSTS=()
 TLS_HOSTS=()
 TLS_SECRET_REFS=()
+MANAGED_CERT_NAMES=()
+MANAGED_CERT_HOSTS=()
 
 if ((ingress_get_rc != 0)); then
   proof FAIL ingress "ingress_query_failed"
@@ -468,7 +471,6 @@ for item in items:
         selected.append(item)
 admitted = 0
 rule_hosts = set()
-tls_hosts = set()
 for item in selected:
     lb = item.get("status", {}).get("loadBalancer", {}).get("ingress", [])
     if any(x.get("hostname") or x.get("ip") for x in lb):
@@ -476,16 +478,16 @@ for item in selected:
     for rule in item.get("spec", {}).get("rules", []):
         if rule.get("host"):
             rule_hosts.add(rule["host"].lower())
-    for tls in item.get("spec", {}).get("tls", []):
-        tls_hosts.update(h.lower() for h in tls.get("hosts", []) if h)
-print(len(selected), admitted, len(rule_hosts), len(tls_hosts))
+if host_filter:
+    rule_hosts &= {host_filter}
+print(len(selected), admitted, len(rule_hosts))
 ' 2>/dev/null
   )"
   ingress_parse_rc=$?
   if ((ingress_parse_rc != 0)); then
     proof FAIL ingress "ingress_status_parse_failed"
   else
-    read -r ingress_count ingress_admitted ingress_host_count ingress_tls_host_count <<<"$ingress_summary"
+    read -r ingress_count ingress_admitted ingress_host_count <<<"$ingress_summary"
     if ((ingress_count == 0)); then
       if $ALLOW_MISSING_INGRESS; then
         proof SKIP ingress "no_ingress_allowed"
@@ -502,68 +504,61 @@ print(len(selected), admitted, len(rule_hosts), len(tls_hosts))
     fi
 
     if ((ingress_count > 0)); then
-      mapfile -t SELECTED_HOSTS < <(
+      # One pass emits typed records. With --ingress-host, every list is
+      # narrowed to that host: sibling hosts on the same Ingress are neither
+      # probed nor used for TLS or certificate references. A GKE Ingress
+      # without spec.tls that names a ManagedCertificate serves TLS for its
+      # rule hosts through that certificate.
+      while IFS=$'\t' read -r record_type record_value; do
+        case "$record_type" in
+          HOST) SELECTED_HOSTS+=("$record_value") ;;
+          TLS) TLS_HOSTS+=("$record_value") ;;
+          REF) TLS_SECRET_REFS+=("$record_value") ;;
+          MCERT) MANAGED_CERT_NAMES+=("$record_value") ;;
+          MHOST) MANAGED_CERT_HOSTS+=("$record_value") ;;
+        esac
+      done < <(
         printf '%s' "$ingress_json" |
           INGRESS_HOST_FILTER="$INGRESS_HOST" python3 -c '
 import json, os, sys
 data = json.load(sys.stdin)
 host_filter = os.environ.get("INGRESS_HOST_FILTER", "").lower()
-hosts = set()
+records = {"HOST": set(), "TLS": set(), "REF": set(), "MCERT": set(), "MHOST": set()}
 for item in data.get("items", []):
-    item_hosts = {
-        r.get("host", "").lower()
-        for r in item.get("spec", {}).get("rules", [])
-        if r.get("host")
-    }
-    if not host_filter or host_filter in item_hosts:
-        hosts.update(item_hosts)
-for host in sorted(hosts):
-    print(host)
-'
-      )
-      mapfile -t TLS_HOSTS < <(
-        printf '%s' "$ingress_json" |
-          INGRESS_HOST_FILTER="$INGRESS_HOST" python3 -c '
-import json, os, sys
-data = json.load(sys.stdin)
-host_filter = os.environ.get("INGRESS_HOST_FILTER", "").lower()
-hosts = set()
-for item in data.get("items", []):
+    spec = item.get("spec", {})
     rule_hosts = {
         r.get("host", "").lower()
-        for r in item.get("spec", {}).get("rules", [])
+        for r in spec.get("rules", [])
         if r.get("host")
     }
-    if not host_filter or host_filter in rule_hosts:
-        for tls in item.get("spec", {}).get("tls", []):
-            hosts.update(h.lower() for h in tls.get("hosts", []) if h)
-for host in sorted(hosts):
-    if not host_filter or host == host_filter:
-        print(host)
-'
-      )
-      mapfile -t TLS_SECRET_REFS < <(
-        printf '%s' "$ingress_json" |
-          INGRESS_HOST_FILTER="$INGRESS_HOST" python3 -c '
-import json, os, sys
-data = json.load(sys.stdin)
-host_filter = os.environ.get("INGRESS_HOST_FILTER", "").lower()
-refs = set()
-for item in data.get("items", []):
-    rule_hosts = {
-        r.get("host", "").lower()
-        for r in item.get("spec", {}).get("rules", [])
-        if r.get("host")
-    }
-    if not host_filter or host_filter in rule_hosts:
-        refs.update(
-            tls.get("secretName")
-            for tls in item.get("spec", {}).get("tls", [])
-            if tls.get("secretName")
-        )
-for ref in sorted(refs):
-    print(ref)
-'
+    if host_filter and host_filter not in rule_hosts:
+        continue
+    wanted = {host_filter} if host_filter else rule_hosts
+    records["HOST"].update(wanted)
+    tls_entries = spec.get("tls") or []
+    for tls in tls_entries:
+        tls_hosts = {h.lower() for h in tls.get("hosts", []) if h}
+        matched = tls_hosts & wanted if host_filter else tls_hosts
+        if not matched:
+            continue
+        records["TLS"].update(matched)
+        if tls.get("secretName"):
+            records["REF"].add(tls["secretName"])
+    annotations = item.get("metadata", {}).get("annotations", {}) or {}
+    managed = [
+        name.strip()
+        for name in annotations.get("networking.gke.io/managed-certificates", "").split(",")
+        if name.strip()
+    ]
+    if managed:
+        records["MCERT"].update(managed)
+        records["MHOST"].update(wanted)
+        if not tls_entries:
+            records["TLS"].update(wanted)
+for kind, values in records.items():
+    for value in sorted(values):
+        print(f"{kind}\t{value}")
+' 2>/dev/null
       )
     fi
   fi
@@ -571,7 +566,7 @@ fi
 
 # Use explicit health URLs, or derive HTTPS URLs from the selected ingress rules.
 if ((${#HEALTH_URLS[@]} == 0)) && $INGRESS_AVAILABLE; then
-  for host in "${SELECTED_HOSTS[@]}"; do
+  for host in ${SELECTED_HOSTS[@]+"${SELECTED_HOSTS[@]}"}; do
     HEALTH_URLS+=("https://${host}${HEALTH_PATH}")
   done
 fi
@@ -622,6 +617,54 @@ else
       proof FAIL "certificate[$cert_index]" "tls_validation_failed"
     fi
   done
+fi
+
+# GKE ManagedCertificate status corroborates the public TLS checks: every
+# certificate named by the selected Ingress must be Active and its domains
+# must cover the hosts it serves.
+if ((${#MANAGED_CERT_NAMES[@]} == 0)); then
+  proof SKIP managed_certificate "no_managed_certificate_references"
+else
+  managed_cert_json="$("${KUBECTL[@]}" get managedcertificates.networking.gke.io -o json 2>/dev/null)"
+  managed_cert_get_rc=$?
+  if ((managed_cert_get_rc != 0)); then
+    proof FAIL managed_certificate "managed_certificate_query_failed"
+  else
+    managed_cert_summary="$(
+      printf '%s' "$managed_cert_json" |
+        MANAGED_NAMES="$(printf '%s\n' "${MANAGED_CERT_NAMES[@]}")" \
+        MANAGED_HOSTS="$(printf '%s\n' ${MANAGED_CERT_HOSTS[@]+"${MANAGED_CERT_HOSTS[@]}"})" \
+        python3 -c '
+import json, os, sys
+names = [n for n in os.environ.get("MANAGED_NAMES", "").splitlines() if n]
+hosts = {h for h in os.environ.get("MANAGED_HOSTS", "").splitlines() if h}
+data = json.load(sys.stdin)
+by_name = {i.get("metadata", {}).get("name"): i for i in data.get("items", [])}
+inactive = 0
+covered = set()
+for name in names:
+    item = by_name.get(name)
+    if not item or item.get("status", {}).get("certificateStatus") != "Active":
+        inactive += 1
+        continue
+    covered.update(d.lower() for d in item.get("spec", {}).get("domains", []) if d)
+print(len(names), inactive, len(hosts - covered))
+' 2>/dev/null
+    )"
+    managed_cert_parse_rc=$?
+    if ((managed_cert_parse_rc != 0)); then
+      proof FAIL managed_certificate "managed_certificate_status_parse_failed"
+    else
+      read -r managed_count managed_inactive managed_uncovered <<<"$managed_cert_summary"
+      if ((managed_inactive > 0)); then
+        proof FAIL managed_certificate "certificates=$managed_count inactive=$managed_inactive"
+      elif ((managed_uncovered > 0)); then
+        proof FAIL managed_certificate "certificates=$managed_count uncovered_hosts=$managed_uncovered"
+      else
+        proof PASS managed_certificate "certificates=$managed_count active=$managed_count"
+      fi
+    fi
+  fi
 fi
 
 # If cert-manager is installed, corroborate public TLS checks using Certificate

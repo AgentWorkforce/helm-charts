@@ -41,6 +41,42 @@ class CommandPolicyTests(unittest.TestCase):
                         ]
                     )
 
+    def test_option_values_are_not_mistaken_for_verbs(self):
+        for command in (
+            ["kubectl", "--namespace", "get", "get", "pods", "--output", "json"],
+            ["kubectl", "--namespace", "top", "top", "pods", "--no-headers"],
+            ["helm", "status", "status", "--namespace", "x", "--output", "json"],
+            ["helm", "--namespace", "history", "history", "relay"],
+            ["helm", "get", "values", "get", "--namespace", "x", "--all"],
+        ):
+            with self.subTest(command=command):
+                support_bundle.CommandPolicy.check(command)
+
+    def test_every_kubectl_operand_is_checked_for_secrets(self):
+        for command in (
+            ["kubectl", "--namespace", "x", "get", "pods", "secrets"],
+            ["kubectl", "get", "pods", "secret/example", "--output", "json"],
+            ["kubectl", "-n", "x", "get", "pods,secrets"],
+        ):
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(
+                    support_bundle.CollectionError, "Secret reads"
+                ):
+                    support_bundle.CommandPolicy.check(command)
+
+    def test_unknown_options_and_extra_operands_are_rejected(self):
+        for command in (
+            ["kubectl", "--token", "abc", "get", "pods"],
+            ["kubectl", "get", "pods", "--raw", "/api/v1/secrets"],
+            ["kubectl", "--namespace"],
+            ["helm", "status", "relay", "--show-resources"],
+            ["helm", "status", "relay", "other"],
+            ["helm", "get", "manifest", "relay"],
+        ):
+            with self.subTest(command=command):
+                with self.assertRaises(support_bundle.CollectionError):
+                    support_bundle.CommandPolicy.check(command)
+
     def test_mutating_commands_are_blocked(self):
         for command in (
             ["kubectl", "delete", "pods", "--all"],
@@ -158,6 +194,8 @@ class MockedCollectionTests(unittest.TestCase):
         runner = mock.create_autospec(support_bundle.CommandRunner, instance=True)
 
         def json_result(argv):
+            # Every command the collector builds must pass the policy.
+            support_bundle.CommandPolicy.check(argv)
             if "status" in argv:
                 return {
                     "name": "agent-relay",
@@ -248,11 +286,17 @@ class MockedCollectionTests(unittest.TestCase):
             raise AssertionError(argv)
 
         runner.run_json.side_effect = json_result
-        runner.run_text.return_value = ""
+
+        def text_result(argv):
+            support_bundle.CommandPolicy.check(argv)
+            return ""
+
+        runner.run_text.side_effect = text_result
         documents, manifest = support_bundle.collect(self.options, runner)
         rendered = json.dumps({"documents": documents, "manifest": manifest})
         self.assertNotIn("must-not-appear", rendered)
         self.assertNotIn("inline-secret", rendered)
+        self.assertEqual(documents["collection-errors.json"]["errors"], [])
         self.assertEqual(documents["versions.json"]["appVersion"], "4.5.6")
         self.assertFalse(
             documents["migration-ledger-status.json"]["credentialsRead"]
@@ -260,6 +304,22 @@ class MockedCollectionTests(unittest.TestCase):
         self.assertFalse(
             documents["migration-ledger-status.json"]["databaseRowsRead"]
         )
+
+    def test_manifest_reports_helm_release_storage_secret_reads(self):
+        runner = mock.create_autospec(support_bundle.CommandRunner, instance=True)
+        runner.run_json.side_effect = support_bundle.CollectionError("offline")
+        runner.run_text.return_value = ""
+        for driver, expected in (("", True), ("secret", True), ("configmap", False)):
+            with self.subTest(driver=driver):
+                with mock.patch.dict(support_bundle.os.environ, {"HELM_DRIVER": driver}):
+                    _, manifest = support_bundle.collect(self.options, runner)
+                self.assertIs(manifest["secretResourcesRead"], expected)
+                self.assertEqual(
+                    manifest["secretResourcesReadBy"],
+                    ["helm-release-storage"] if expected else [],
+                )
+                self.assertFalse(manifest["kubernetesSecretsCollected"])
+                self.assertFalse(manifest["secretPayloadsIncluded"])
 
 
 if __name__ == "__main__":
