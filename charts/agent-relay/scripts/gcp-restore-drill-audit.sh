@@ -40,14 +40,34 @@ gcloud storage ls "${recovery_uri}/COMPLETE" >/dev/null 2>&1 || {
   echo "$PROGRAM: restore-drill evidence references a recovery set without a COMPLETE marker" >&2
   exit 1
 }
+# The drill must have been scheduled: its immutable request is the identity
+# record-restore-drill.sh checks before writing PASS.json.
+gcloud storage cp "${drill_uri}/request.json" "$workdir/request.json" >/dev/null 2>&1 || {
+  echo "$PROGRAM: restore-drill evidence has no matching drill request" >&2
+  exit 1
+}
 
-python3 - "$workdir/PASS.json" "$MAX_DRILL_AGE_DAYS" "$latest" <<'PY'
+# The checks below mirror record-restore-drill.sh (the only supported writer
+# of PASS.json), so evidence written straight to the bucket without the
+# recorder cannot satisfy this gate. Keep both in sync; the self-hosted
+# script tests assert that they reject the same evidence.
+python3 - "$workdir/PASS.json" "$MAX_DRILL_AGE_DAYS" "$latest" \
+  "$workdir/request.json" <<'PY'
 import datetime
 import json
 import re
 import sys
 
-path, max_age_text, uri = sys.argv[1:]
+path, max_age_text, uri, request_path = sys.argv[1:]
+required_gates = {
+    "cloudSql",
+    "relaycastIntegrity",
+    "relayauthIntegrity",
+    "gcsIntegrity",
+    "isolatedMessaging",
+    "crossWorkspaceDenied",
+    "noProductionReferences",
+}
 with open(path, encoding="utf-8") as stream:
     evidence = json.load(stream)
 if not isinstance(evidence, dict):
@@ -74,6 +94,25 @@ if not isinstance(drill_id, str) or not re.fullmatch(
 expected_suffix = f"/{recovery_id}/drills/{drill_id}/PASS.json"
 if not uri.endswith(expected_suffix):
     raise SystemExit("restore-drill evidence identity does not match its archive path")
+approved_by = evidence.get("approvedBy")
+if not isinstance(approved_by, str) or not re.fullmatch(
+    r"[A-Za-z0-9][A-Za-z0-9@._-]{1,127}", approved_by
+):
+    raise SystemExit("restore-drill evidence approvedBy must be a non-secret operator identifier")
+gates = evidence.get("verificationGates")
+if not isinstance(gates, dict) or set(gates) != required_gates:
+    raise SystemExit("restore-drill evidence verificationGates must contain exactly the documented gates")
+if any(value != "PASS" for value in gates.values()):
+    raise SystemExit("restore-drill evidence verification gates must all equal PASS")
+with open(request_path, encoding="utf-8") as stream:
+    request = json.load(stream)
+if (
+    not isinstance(request, dict)
+    or request.get("recoveryId") != recovery_id
+    or request.get("drillId") != drill_id
+    or request.get("status") != "REQUESTED"
+):
+    raise SystemExit("restore-drill request does not match the evidence identity")
 value = evidence.get("completedAt")
 if not isinstance(value, str):
     raise SystemExit("restore-drill evidence completedAt must be an RFC3339 string")

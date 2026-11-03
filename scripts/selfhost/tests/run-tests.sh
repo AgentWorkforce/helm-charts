@@ -573,4 +573,36 @@ if run_pre_upgrade "${tmp_root}/badid"; then
 fi
 pass "capture, request, record, audit, and pre-upgrade share one recovery-set contract"
 
+# Audit applies the recorder's checks: PASS.json written straight to the
+# bucket must be rejected by the audit exactly when the recorder rejects it.
+audit_case() {
+  # audit_case NAME JQ_FILTER [remove-request]
+  local name="$1"
+  local filter="$2"
+  reset_fixtures
+  printf '%s\n' "${recovery_id}" >"${tmp_root}/COMPLETE"
+  mkdir -p "${drill_dir}"
+  cp "${tmp_root}/COMPLETE" "${gcs}/relay-archive/recovery/${recovery_id}/COMPLETE"
+  jq -n --arg r "${recovery_id}" --arg d "${drill_id}" \
+    '{schemaVersion: 1, drillId: $d, recoveryId: $r, status: "REQUESTED"}' \
+    >"${drill_dir}/request.json"
+  [[ "${3:-}" == "remove-request" ]] && rm -f "${drill_dir}/request.json"
+  write_drill_evidence "${tmp_root}/drill.json" "${recovery_id}" "${drill_id}"
+  jq "${filter}" "${tmp_root}/drill.json" >"${tmp_root}/forged.json"
+  if run_record "${tmp_root}/forged.json"; then
+    fail "record accepted forged drill evidence (${name})"
+  fi
+  cp "${tmp_root}/forged.json" "${drill_dir}/PASS.json"
+  if run_audit; then
+    fail "audit accepted drill evidence the recorder rejects (${name})"
+  fi
+}
+audit_case "six-field evidence" \
+  '{status, isolated, allVerificationGatesPassed, automaticProductionCutover, recoveryId, drillId, completedAt}'
+audit_case "missing approvedBy" 'del(.approvedBy)'
+audit_case "failed gate" '.verificationGates.cloudSql = "FAIL"'
+audit_case "missing gate" 'del(.verificationGates.gcsIntegrity)'
+audit_case "no drill request" '.' remove-request
+pass "drill audit applies the recorder's evidence checks and requires the request"
+
 printf 'All self-hosted script tests passed.\n'
