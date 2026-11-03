@@ -80,6 +80,12 @@ jobs:
       - name: Customer release gate regression tests
         run: python3 ci/customer-release-gate/test.py
 
+      # The checked-in records stay consistent even while the release is
+      # blocked: evidence is schema-valid, customer-images.yaml uses the gate's
+      # vocabulary, and release.imageManifestSha256 is its current hash.
+      - name: Customer release records are consistent
+        run: python3 scripts/release/validate-customer-release.py --consistency
+
       - name: Self-hosted requirements doc is generated
         run: |
           node ci/self-hosted-requirements/registry.mjs render
