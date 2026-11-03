@@ -25,13 +25,14 @@ automountServiceAccountToken: false
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ printf "%s-%s" $name $identity }}
+  name: {{ include "relaycast.actors.deployJobName" (dict "root" . "hash" $identity) }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
     {{- include "relaycast.labels" . | nindent 4 }}
     app.kubernetes.io/component: actors-deploy
 spec:
   backoffLimit: {{ $da.deployer.backoffLimit }}
+  activeDeadlineSeconds: {{ $da.deployer.activeDeadlineSeconds | int64 }}
   template:
     {{- $podTemplate | nindent 4 }}
 {{- end }}

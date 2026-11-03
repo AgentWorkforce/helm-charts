@@ -5,6 +5,12 @@ docs/self-hosted-durable-actors.md. Every env name the gateway, the deployer
 and the dev sidecar read is wired in this file only.
 */}}
 
+{{/* "true" when the value is an integer (YAML numbers arrive as float64). */}}
+{{- define "relaycast.isInt" -}}
+{{- $v := . -}}
+{{- if or (kindIs "int" $v) (kindIs "int64" $v) (and (kindIs "float64" $v) (eq ($v | int64 | float64) $v)) }}true{{ end -}}
+{{- end }}
+
 {{- define "relaycast.actors.enabled" -}}
 {{- if eq (toString .Values.runtime.backend) "durable-actors" }}true{{ end -}}
 {{- end }}
@@ -20,6 +26,28 @@ and the dev sidecar read is wired in this file only.
 
 {{- define "relaycast.actors.deployerName" -}}
 {{- printf "%s-actors-deploy" (include "relaycast.fullname" . | trunc 45 | trimSuffix "-") -}}
+{{- end }}
+
+{{/*
+Deploy Job name: <deployerName>-<8-hex pod-template hash>. The Job name is
+copied into the pod's job-name label (max 63 characters), so the prefix is cut
+to 54 before the 9-character suffix. Short names are unchanged.
+*/}}
+{{- define "relaycast.actors.deployJobName" -}}
+{{- printf "%s-%s" (include "relaycast.actors.deployerName" .root | trunc 54 | trimSuffix "-") .hash -}}
+{{- end }}
+
+{{/*
+The durable-actors control-plane Service name. Must equal the vendored chart's
+`actors.name` (`<release>-durable-actors`, truncated to 63 as a whole).
+*/}}
+{{- define "relaycast.actors.controlPlaneServiceName" -}}
+{{- printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/* Env names the actor gateway sets itself; extraEnv must not repeat them. */}}
+{{- define "relaycast.actors.reservedEnv" -}}
+{{- list "PORT" "DURABLE_ACTORS_CONTROL_PLANE_URL" "DURABLE_ACTORS_PROJECT_ID" "DURABLE_ACTORS_SECRET" "DURABLE_ACTORS_HOME_REGION" "RELAYCAST_FILE_SIGNING_SECRET" "RELAYCAST_CREDENTIAL_KEYRING_FILE" "RELAYCAST_INTERNAL_SECRET_FILE" "RELAYCAST_PUBLIC_WORKSPACE_CREATE" "RELAYCAST_FILE_STORE" "RELAYCAST_FILE_DIR" "RELAYCAST_GCS_BUCKET" "RELAYCAST_GCS_PREFIX" "RELAYCAST_S3_BUCKET" "RELAYCAST_S3_REGION" "RELAYCAST_S3_ENDPOINT" "RELAYCAST_S3_PREFIX" "RELAYCAST_S3_FORCE_PATH_STYLE" "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY" "RELAYCAST_MAX_UPLOAD_BYTES" "RELAYCAST_SHUTDOWN_GRACE_MS" "RELAYCAST_LOG_FORMAT" "RELAYCAST_ENV" | toJson -}}
 {{- end }}
 
 {{- define "relaycast.actors.imageRef" -}}
@@ -41,7 +69,7 @@ and the dev sidecar read is wired in this file only.
 {{- else if $da.controlPlaneUrl -}}
 {{- $da.controlPlaneUrl -}}
 {{- else -}}
-{{- printf "http://%s-durable-actors.%s.svc.cluster.local:7100" (.Release.Name | trunc 48 | trimSuffix "-") .Release.Namespace -}}
+{{- printf "http://%s.%s.svc.cluster.local:7100" (include "relaycast.actors.controlPlaneServiceName" .) .Release.Namespace -}}
 {{- end -}}
 {{- end }}
 
@@ -60,10 +88,13 @@ and the dev sidecar read is wired in this file only.
 {{- if .Values.bootstrapProofRequired }}{{ fail "bootstrapProofRequired is a SQLite-image setting; the durable-actors gateway provisions through POST /internal/workspaces" }}{{ end -}}
 {{- if not (has $driver (list "local" "gcs" "s3")) }}{{ fail "runtime.durableActors.fileStore.driver must be local, gcs or s3" }}{{ end -}}
 {{- if and (ne $driver "local") (not $fs.bucket) }}{{ fail (printf "runtime.durableActors.fileStore.bucket is required for driver %s" $driver) }}{{ end -}}
+{{- if or (not (include "relaycast.isInt" $da.gateway.replicaCount)) (lt ($da.gateway.replicaCount | int64) 1) }}{{ fail "runtime.durableActors.gateway.replicaCount must be a positive integer" }}{{ end -}}
 {{- if and (eq $driver "local") (gt (int $da.gateway.replicaCount) 1) }}{{ fail "runtime.durableActors.gateway.replicaCount > 1 requires fileStore.driver gcs or s3: the local file store is one RWO volume" }}{{ end -}}
 {{- if lt (int $da.gateway.replicaCount) 1 }}{{ fail "runtime.durableActors.gateway.replicaCount must be >= 1" }}{{ end -}}
-{{- if or (kindIs "bool" $da.maxUploadBytes) (kindIs "string" $da.maxUploadBytes) (le (int64 $da.maxUploadBytes) 0) }}{{ fail "runtime.durableActors.maxUploadBytes must be a positive integer (and equal the actor's RELAYCAST_MAX_UPLOAD_BYTES)" }}{{ end -}}
-{{- if or (kindIs "bool" $da.shutdownGraceMs) (kindIs "string" $da.shutdownGraceMs) (lt (int64 $da.shutdownGraceMs) 0) }}{{ fail "runtime.durableActors.shutdownGraceMs must be a non-negative integer" }}{{ end -}}
+{{- if or (not (include "relaycast.isInt" $da.maxUploadBytes)) (lt ($da.maxUploadBytes | int64) 1) }}{{ fail "runtime.durableActors.maxUploadBytes must be a positive integer (and equal the actor's RELAYCAST_MAX_UPLOAD_BYTES)" }}{{ end -}}
+{{- if or (not (include "relaycast.isInt" $da.shutdownGraceMs)) (lt ($da.shutdownGraceMs | int64) 0) }}{{ fail "runtime.durableActors.shutdownGraceMs must be a non-negative integer" }}{{ end -}}
+{{- $reserved := include "relaycast.actors.reservedEnv" . | fromJsonArray -}}
+{{- range .Values.extraEnv }}{{ if has (toString .name) $reserved }}{{ fail (printf "%s is set by the durable-actors gateway and must not appear in extraEnv" .name) }}{{ end }}{{ end -}}
 {{- if not (has (toString $da.logFormat) (list "json" "text")) }}{{ fail "runtime.durableActors.logFormat must be json or text" }}{{ end -}}
 {{- if $da.devRuntime.enabled -}}
 {{- if not $da.devRuntime.acknowledgeNonProduction }}{{ fail "runtime.durableActors.devRuntime.enabled requires devRuntime.acknowledgeNonProduction=true: the dev runtime is single-process with local state and its key sits in the gateway pod" }}{{ end -}}
@@ -79,6 +110,7 @@ and the dev sidecar read is wired in this file only.
 {{- if eq $da.invocationSecret.name .Values.existingSecret }}{{ fail "runtime.durableActors.invocationSecret must be its own Secret, not existingSecret, so an invoke-only key is a values change only" }}{{ end -}}
 {{- if $da.deployer.enabled -}}
 {{- if or (not $da.adminKeySecret.name) (not $da.adminKeySecret.key) }}{{ fail "runtime.durableActors.adminKeySecret.name and .key are required for the deployer" }}{{ end -}}
+{{- if or (not (include "relaycast.isInt" $da.deployer.activeDeadlineSeconds)) (lt ($da.deployer.activeDeadlineSeconds | int64) 1) }}{{ fail "runtime.durableActors.deployer.activeDeadlineSeconds must be a positive integer" }}{{ end -}}
 {{- if not $da.deployer.artifactBucket }}{{ fail "runtime.durableActors.deployer.artifactBucket is required when the deployer is enabled (the durable-actors storage.bucket)" }}{{ end -}}
 {{- if not $da.actorEnvSecrets }}{{ fail "runtime.durableActors.actorEnvSecrets is required: the actor needs RELAYCAST_PUBLIC_URL and RELAYCAST_FILE_SIGNING_SECRET from a terse.ai/customer-secret Secret" }}{{ end -}}
 {{- range $da.actorEnvSecrets }}{{ if not (regexMatch "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" (toString .)) }}{{ fail "runtime.durableActors.actorEnvSecrets entries must be Kubernetes Secret names" }}{{ end }}{{ end -}}

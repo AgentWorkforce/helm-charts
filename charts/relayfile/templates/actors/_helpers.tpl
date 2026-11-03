@@ -3,6 +3,12 @@ Relayfile on TerseAI durable-actors (runtime.backend=durable-actors).
 Env contract: docs/self-hosted-durable-actors.md ("Relayfile env contract").
 */}}
 
+{{/* "true" when the value is an integer (YAML numbers arrive as float64). */}}
+{{- define "relayfile.isInt" -}}
+{{- $v := . -}}
+{{- if or (kindIs "int" $v) (kindIs "int64" $v) (and (kindIs "float64" $v) (eq ($v | int64 | float64) $v)) }}true{{ end -}}
+{{- end }}
+
 {{- define "relayfile.actors.enabled" -}}
 {{- if eq (toString .Values.runtime.backend) "durable-actors" }}true{{ end -}}
 {{- end }}
@@ -17,6 +23,28 @@ Env contract: docs/self-hosted-durable-actors.md ("Relayfile env contract").
 
 {{- define "relayfile.actors.deployerName" -}}
 {{- printf "%s-actors-deploy" (include "relayfile.fullname" . | trunc 45 | trimSuffix "-") -}}
+{{- end }}
+
+{{/*
+Deploy Job name: <deployerName>-<8-hex pod-template hash>. The Job name is
+copied into the pod's job-name label (max 63 characters), so the prefix is cut
+to 54 before the 9-character suffix. Short names are unchanged.
+*/}}
+{{- define "relayfile.actors.deployJobName" -}}
+{{- printf "%s-%s" (include "relayfile.actors.deployerName" .root | trunc 54 | trimSuffix "-") .hash -}}
+{{- end }}
+
+{{/*
+The durable-actors control-plane Service name. Must equal the vendored chart's
+`actors.name` (`<release>-durable-actors`, truncated to 63 as a whole).
+*/}}
+{{- define "relayfile.actors.controlPlaneServiceName" -}}
+{{- printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/* Env names the actor gateway sets itself; extraEnv must not repeat them. */}}
+{{- define "relayfile.actors.reservedEnv" -}}
+{{- list "PORT" "DURABLE_ACTORS_CONTROL_PLANE_URL" "DURABLE_ACTORS_PROJECT_ID" "DURABLE_ACTORS_SECRET" "RELAYFILE_ACTORS_ALLOW_ADMIN_KEY" "RELAYFILE_ACTORS_BROKER_URL" "RELAYFILE_ACTORS_BROKER_TOKEN" "RELAYFILE_JWT_SECRET" "RELAYAUTH_JWKS_URL" "RELAYFILE_INTERNAL_HMAC_SECRET" "RELAYFILE_BLOB_STORE" "RELAYFILE_BLOB_BUCKET" "RELAYFILE_BLOB_PREFIX" "RELAYFILE_BLOB_INLINE_MAX_BYTES" "RELAYFILE_S3_ENDPOINT" "RELAYFILE_S3_REGION" "RELAYFILE_S3_FORCE_PATH_STYLE" "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY" | toJson -}}
 {{- end }}
 
 {{/* image reference: repository@digest, else repository:tag. */}}
@@ -39,7 +67,7 @@ Env contract: docs/self-hosted-durable-actors.md ("Relayfile env contract").
 {{- else if $ta.controlPlaneUrl -}}
 {{- $ta.controlPlaneUrl -}}
 {{- else -}}
-{{- printf "http://%s-durable-actors.%s.svc.cluster.local:7100" (.Release.Name | trunc 48 | trimSuffix "-") .Release.Namespace -}}
+{{- printf "http://%s.%s.svc.cluster.local:7100" (include "relayfile.actors.controlPlaneServiceName" .) .Release.Namespace -}}
 {{- end -}}
 {{- end }}
 
@@ -58,7 +86,9 @@ Env contract: docs/self-hosted-durable-actors.md ("Relayfile env contract").
 {{- $driver := toString $ta.blobStore.driver -}}
 {{- if not (has $driver (list "gcs" "s3" "inline")) }}{{ fail "runtime.durableActors.blobStore.driver must be gcs, s3 or inline" }}{{ end -}}
 {{- if and (ne $driver "inline") (not $ta.blobStore.bucket) }}{{ fail (printf "runtime.durableActors.blobStore.bucket is required for driver %s" $driver) }}{{ end -}}
-{{- if lt (int $ta.blobStore.inlineMaxBytes) 0 }}{{ fail "runtime.durableActors.blobStore.inlineMaxBytes must be >= 0" }}{{ end -}}
+{{- if or (not (include "relayfile.isInt" $ta.blobStore.inlineMaxBytes)) (lt ($ta.blobStore.inlineMaxBytes | int64) 0) }}{{ fail "runtime.durableActors.blobStore.inlineMaxBytes must be a non-negative integer" }}{{ end -}}
+{{- $reserved := include "relayfile.actors.reservedEnv" . | fromJsonArray -}}
+{{- range .Values.extraEnv }}{{ if has (toString .name) $reserved }}{{ fail (printf "%s is set by the durable-actors gateway and must not appear in extraEnv" .name) }}{{ end }}{{ end -}}
 {{- if $ta.devRuntime.enabled -}}
 {{- if not $ta.devRuntime.acknowledgeNonProduction }}{{ fail "runtime.durableActors.devRuntime.enabled requires devRuntime.acknowledgeNonProduction=true: the dev runtime is single-process with local state and holds the admin key in the gateway pod" }}{{ end -}}
 {{- if .Values.autoscaling.enabled }}{{ fail "runtime.durableActors.devRuntime forces one replica; disable autoscaling" }}{{ end -}}
@@ -69,7 +99,10 @@ Env contract: docs/self-hosted-durable-actors.md ("Relayfile env contract").
 {{- if not $ta.secretKeys.brokerToken }}{{ fail "runtime.durableActors.secretKeys.brokerToken is required: the gateway gets actor sessions from the session broker" }}{{ end -}}
 {{- if or (not $ta.adminKeySecret.name) (not $ta.adminKeySecret.key) }}{{ fail "runtime.durableActors.adminKeySecret.name and .key are required (the durable-actors api-key, read only by the session broker and the deploy Job)" }}{{ end -}}
 {{- if eq $ta.adminKeySecret.name $ta.existingSecret }}{{ fail "runtime.durableActors.adminKeySecret must be a different Secret from runtime.durableActors.existingSecret: the gateway mounts existingSecret and must never be able to read the admin api-key" }}{{ end -}}
-{{- if lt (int $ta.gateway.replicaCount) 1 }}{{ fail "runtime.durableActors.gateway.replicaCount must be >= 1" }}{{ end -}}
+{{- if or (not (include "relayfile.isInt" $ta.gateway.replicaCount)) (lt ($ta.gateway.replicaCount | int64) 1) }}{{ fail "runtime.durableActors.gateway.replicaCount must be a positive integer" }}{{ end -}}
+{{- if not $ta.image.digest }}{{ fail "runtime.durableActors.image.digest is required (image tags are only allowed with devRuntime)" }}{{ end -}}
+{{- if and $ta.deployer.enabled (not $ta.workspaceImage.digest) }}{{ fail "runtime.durableActors.workspaceImage.digest is required for the deploy Job (image tags are only allowed with devRuntime)" }}{{ end -}}
+{{- if or (not (include "relayfile.isInt" $ta.deployer.activeDeadlineSeconds)) (lt ($ta.deployer.activeDeadlineSeconds | int64) 1) }}{{ fail "runtime.durableActors.deployer.activeDeadlineSeconds must be a positive integer" }}{{ end -}}
 {{- if and $ta.deployer.enabled (not $ta.deployer.artifactBucket) }}{{ fail "runtime.durableActors.deployer.artifactBucket is required when the deployer is enabled (the durable-actors storage.bucket)" }}{{ end -}}
 {{- end -}}
 {{- end -}}
@@ -107,6 +140,10 @@ Gateway env: the single place the relayfile actor-mode env contract is wired.
 {{- end }}
 {{- if $ta.secretKeys.jwtSecret }}
 {{ include "relayfile.actors.secretEnv" (dict "name" "RELAYFILE_JWT_SECRET" "secret" $ta.existingSecret "key" $ta.secretKeys.jwtSecret) }}
+{{- if .Values.auth.jwksUrl }}
+      # auth.jwksUrl verifies tokens; the HS256 secret is then optional.
+      optional: true
+{{- end }}
 {{- end }}
 {{- if .Values.auth.jwksUrl }}
 - name: RELAYAUTH_JWKS_URL

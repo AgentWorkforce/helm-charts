@@ -44,6 +44,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "relayfile.serviceAccountName" . }}
+      # Internet-facing and never calls the Kubernetes API (GKE Workload
+      # Identity uses the metadata server, not the ServiceAccount token).
+      automountServiceAccountToken: false
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}

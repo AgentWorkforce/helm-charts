@@ -39,7 +39,8 @@ runtime:
     # REQUIRED: an existing Secret in the release namespace (keys below).
     existingSecret: ""
     secretKeys:
-      # HS256 workspace-token secret. Optional when auth.jwksUrl is set.
+      # HS256 workspace-token secret. When auth.jwksUrl is set the key is
+      # read as optional (the Secret may omit it); set "" to drop it.
       jwtSecret: RELAYFILE_JWT_SECRET
       # Shared secret between the gateway and the session broker.
       brokerToken: RELAYFILE_ACTORS_BROKER_TOKEN
@@ -54,6 +55,8 @@ runtime:
     gateway:
       # Stateless: any count >= 1 (autoscaling.* also applies).
       replicaCount: 2
+      # In durable-actors mode the gateway uses these, not the top-level
+      # `resources` (which sizes the Go server only).
       resources:
         requests: { cpu: 100m, memory: 128Mi }
         limits: { memory: 512Mi }
@@ -72,6 +75,8 @@ runtime:
       # durable-actors/v3/artifacts/<uuid>/. Required when enabled.
       artifactBucket: ""
       backoffLimit: 3
+      # Upper bound on the whole Job (all retries), so a hung deploy fails.
+      activeDeadlineSeconds: 3600
       serviceAccount:
         # Workload Identity: a GSA with roles/storage.objectUser on the bucket.
         annotations: {}
@@ -285,6 +290,14 @@ networkPolicy:
   enabled: false
   # Allow ingress from all namespaces when true.
   allowExternalTraffic: true
+  # Explicit NetworkPolicy peers for the server port (requires
+  # allowExternalTraffic=false). Behind a GKE Ingress use same-namespace pods
+  # plus the GKE load balancer ranges:
+  #   - podSelector: {}
+  #   - ipBlock: { cidr: 35.191.0.0/16 }
+  #   - ipBlock: { cidr: 130.211.0.0/22 }
+  # Empty with allowExternalTraffic=false: same-namespace pods only.
+  ingressFrom: []
 
 # ---------------------------------------------------------------------------
 # Service Account

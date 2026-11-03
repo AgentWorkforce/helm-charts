@@ -76,7 +76,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if not (has (toString .Values.runtime.backend) (list "sqlite" "durable-actors")) }}
 {{- fail "runtime.backend must be sqlite or durable-actors" }}
 {{- end }}
-{{- if eq (toString .Values.runtime.backend) "durable-actors" }}
+{{- if include "relaycast.actors.enabled" . }}
 {{- include "relaycast.actors.validate" . }}
 {{- end }}
 {{- if not .Values.baseUrl }}

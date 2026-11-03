@@ -81,6 +81,8 @@ runtime:
       # The durable-actors storage.bucket (written through Workload Identity).
       artifactBucket: ""
       backoffLimit: 3
+      # Upper bound on the whole Job (all retries), so a hung deploy fails.
+      activeDeadlineSeconds: 3600
       serviceAccount:
         annotations: {}
       resources:

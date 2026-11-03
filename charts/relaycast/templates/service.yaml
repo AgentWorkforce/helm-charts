@@ -9,7 +9,7 @@ metadata:
   {{- $annotations := deepCopy (.Values.service.annotations | default dict) }}
   {{- $backendConfig := .Values.service.backendConfig }}
   {{- if not (or (kindIs "invalid" $backendConfig) (and (kindIs "string" $backendConfig) (eq $backendConfig ""))) }}
-  {{- if not (and (kindIs "string" $backendConfig) (regexMatch "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" $backendConfig)) }}{{ fail "service.backendConfig must be a BackendConfig name (DNS-1123 label, at most 63 characters)" }}{{ end }}
+  {{- if not (and (kindIs "string" $backendConfig) (le (len (toString $backendConfig)) 253) (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$" (toString $backendConfig))) }}{{ fail "service.backendConfig must be a BackendConfig name (DNS-1123 subdomain, at most 253 characters)" }}{{ end }}
   {{- if hasKey $annotations "cloud.google.com/backend-config" }}{{ fail "set service.backendConfig or service.annotations.cloud.google.com/backend-config, not both" }}{{ end }}
   {{- $_ := set $annotations "cloud.google.com/backend-config" (dict "default" $backendConfig | toJson) }}
   {{- end }}
