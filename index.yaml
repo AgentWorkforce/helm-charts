@@ -887,6 +887,33 @@ entries:
   - annotations:
       agentworkforce.dev/license-scope: First-party chart code only; dependencies
         and images retain their own licenses.
+      agentworkforce.dev/min-helm-version: 3.10.0
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-11-03T18:10:25.761926693Z"
+    description: Self-hosted Agent Relay control-plane API for messaging and sessions
+    digest: 13b4725374b25bb492972c8560cc7a527edc9b5db3896793e8500b079870c5c9
+    home: https://github.com/AgentWorkforce/cloud
+    keywords:
+    - agent-relay
+    - control-plane
+    - api
+    - self-hosted
+    kubeVersion: '>=1.28.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce
+    name: relay-cloud-api
+    sources:
+    - https://github.com/AgentWorkforce/cloud
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relay-cloud-api-0.2.1/relay-cloud-api-0.2.1.tgz
+    version: 0.2.1
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 0.1.0
@@ -1043,6 +1070,34 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 12.2.1-selfhost.1
+    created: "2026-11-03T18:10:26.01961176Z"
+    description: Portable Relaycast core for self-hosted Agent Relay deployments
+    digest: 875b49bf5dfc5f23f49153e9a8e6c63efc595aadd0b3de6423fc47c3bf178685
+    home: https://github.com/AgentWorkforce/relaycast
+    keywords:
+    - relaycast
+    - agents
+    - realtime
+    - self-hosted
+    - agentworkforce
+    kubeVersion: '>=1.22.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relaycast
+    sources:
+    - https://github.com/AgentWorkforce/relaycast
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relaycast
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relaycast-0.3.0/relaycast-0.3.0.tgz
+    version: 0.3.0
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 12.2.1-selfhost.1
     created: "2026-11-03T08:58:49.138721465Z"
     description: Portable Relaycast core for self-hosted Agent Relay deployments
     digest: 92d1eedd57e27bdb109e8e4d97db7019b534dc7c728be53b58d267fa2765a911
@@ -1114,6 +1169,35 @@ entries:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relaycast-0.1.0/relaycast-0.1.0.tgz
     version: 0.1.0
   relayfile:
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-11-03T18:10:26.344189329Z"
+    description: 'Relayfile — virtual filesystem sync for agents. A single Go binary
+      that serves a workspace file-sync API over HTTP, backed by Postgres in production
+      or in-memory for development. '
+    digest: 8fd945fb248a80dc78c055b1cb4e894c36996b59fff86ef5a851574d6117de4f
+    home: https://github.com/AgentWorkforce/relayfile
+    keywords:
+    - relayfile
+    - vfs
+    - filesystem
+    - sync
+    - agents
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relayfile
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayfile
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relayfile-0.2.0/relayfile-0.2.0.tgz
+    version: 0.2.0
   - annotations:
       agentworkforce.dev/license-scope: First-party chart code only; dependencies
         and images retain their own licenses.
@@ -1336,6 +1420,33 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 0.1.0
+    created: "2026-11-03T18:10:26.610348449Z"
+    description: Customer-hosted Relay History API backed by PostgreSQL
+    digest: 81d26764ceab279a6c1e517eaaf23aab52f2f6e5fb37b437af3b11178e3efd9d
+    home: https://github.com/AgentWorkforce/relayhistory-cloud
+    keywords:
+    - agent-relay
+    - sessions
+    - history
+    - pgvector
+    - self-hosted
+    kubeVersion: '>=1.28.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce
+    name: relayhistory
+    sources:
+    - https://github.com/AgentWorkforce/relayhistory-cloud
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relayhistory-0.1.1/relayhistory-0.1.1.tgz
+    version: 0.1.1
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.1.0
     created: "2026-11-03T08:58:49.79335577Z"
     description: Customer-hosted Relay History API backed by PostgreSQL
     digest: 284c1b56e80fbbfd0e73b8608572a7560f57656d99ecff121964e017c005ae59
@@ -1357,4 +1468,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relayhistory-0.1.0/relayhistory-0.1.0.tgz
     version: 0.1.0
-generated: "2026-11-03T10:49:26.820530991Z"
+generated: "2026-11-03T18:10:26.610475256Z"
