@@ -505,4 +505,72 @@ grep -q '^gcloud storage cp --if-generation-match=0 .*/request.json' "${command_
   fail "drill request upload is not create-only"
 pass "drill request upload uses --if-generation-match=0"
 
+write_drill_evidence() {
+  # write_drill_evidence FILE RECOVERY_ID DRILL_ID
+  jq -n --arg recovery "$2" --arg drill "$3" --arg now "$(now_utc)" '{
+    status: "PASS", isolated: true, allVerificationGatesPassed: true,
+    automaticProductionCutover: false, recoveryId: $recovery, drillId: $drill,
+    approvedBy: "operator@example.com", completedAt: $now,
+    verificationGates: {
+      cloudSql: "PASS", relaycastIntegrity: "PASS", relayauthIntegrity: "PASS",
+      gcsIntegrity: "PASS", isolatedMessaging: "PASS",
+      crossWorkspaceDenied: "PASS", noProductionReferences: "PASS"}}' >"$1"
+}
+
+run_record() {
+  "${TEST_BASH}" "${SELFHOST_DIR}/record-restore-drill.sh" --evidence "$1" \
+    --bucket relay-archive >"${tmp_root}/record.out" 2>&1
+}
+
+run_audit() {
+  env GCS_ARCHIVE_BUCKET=relay-archive MAX_DRILL_AGE_DAYS=30 \
+    "${TEST_BASH}" "${RECOVERY_DIR}/gcp-restore-drill-audit.sh" >"${tmp_root}/audit.out" 2>&1
+}
+
+# A recovery set written outside the contract (no COMPLETE marker content
+# naming it) is not selected for a drill.
+reset_fixtures
+write_backup_fixtures
+run_backup 8888aaaa || { cat "${tmp_root}/backup.out" >&2; fail "backup for contract tests failed"; }
+complete_marker="$(find "${gcs}" -name COMPLETE | head -n 1)"
+printf 'ar-19990101T000000Z-other\n' >"${complete_marker}"
+if run_drill_request; then
+  fail "drill request accepted a COMPLETE marker naming another recovery set"
+fi
+
+# record and audit require the recovery set's COMPLETE marker.
+reset_fixtures
+recovery_id="ar-20260101T000000Z-abc123"
+drill_id="drill-20260101T010000Z-def456"
+drill_dir="${gcs}/relay-archive/recovery/${recovery_id}/drills/${drill_id}"
+mkdir -p "${drill_dir}"
+jq -n --arg r "${recovery_id}" --arg d "${drill_id}" \
+  '{schemaVersion: 1, drillId: $d, recoveryId: $r, status: "REQUESTED"}' \
+  >"${drill_dir}/request.json"
+write_drill_evidence "${tmp_root}/drill.json" "${recovery_id}" "${drill_id}"
+if run_record "${tmp_root}/drill.json"; then
+  fail "record accepted a drill for a recovery set without COMPLETE"
+fi
+cp "${tmp_root}/drill.json" "${drill_dir}/PASS.json"
+if run_audit; then
+  fail "audit accepted a drill for a recovery set without COMPLETE"
+fi
+rm -f "${drill_dir}/PASS.json"
+printf '%s\n' "${recovery_id}" >"${gcs}/relay-archive/recovery/${recovery_id}/COMPLETE"
+run_record "${tmp_root}/drill.json" ||
+  { cat "${tmp_root}/record.out" >&2; fail "record rejected a valid drill"; }
+run_audit || { cat "${tmp_root}/audit.out" >&2; fail "audit rejected a recorded drill"; }
+
+# pre-upgrade uses the same recovery-ID format.
+write_upgrade_evidence "${tmp_root}/badid"
+for file in backup restore; do
+  jq '.recoveryId = "manual-backup-1"' "${tmp_root}/badid/${file}.json" \
+    >"${tmp_root}/badid/${file}.tmp" && mv "${tmp_root}/badid/${file}.tmp" "${tmp_root}/badid/${file}.json"
+done
+write_jobs "${complete}"
+if run_pre_upgrade "${tmp_root}/badid"; then
+  fail "pre-upgrade accepted a recoveryId outside the recovery-ID contract"
+fi
+pass "capture, request, record, audit, and pre-upgrade share one recovery-set contract"
+
 printf 'All self-hosted script tests passed.\n'

@@ -31,8 +31,33 @@ latest="$(
 
 recovery_id="${latest%/COMPLETE}"
 recovery_id="${recovery_id##*/}"
+# Recovery-set contract shared with gcp-recovery-backup.sh,
+# record-restore-drill.sh, gcp-restore-drill-audit.sh and
+# pre-upgrade-check.sh: gs://<archive>/<prefix>/<ar-ID>/ holds
+# evidence/backup.json and a COMPLETE marker whose content is the ID.
 [[ "$recovery_id" =~ ^ar-[0-9]{8}T[0-9]{6}Z-[a-z0-9]{1,8}$ ]] || {
   echo "$PROGRAM: selected recovery ID has an unsafe format" >&2
+  exit 1
+}
+recovery_uri="gs://${GCS_ARCHIVE_BUCKET}/${ARCHIVE_PREFIX}/${recovery_id}"
+gcloud storage cp "${recovery_uri}/COMPLETE" "$workdir/COMPLETE" >/dev/null
+gcloud storage cp "${recovery_uri}/evidence/backup.json" "$workdir/backup.json" >/dev/null
+python3 - "$workdir/COMPLETE" "$workdir/backup.json" "$recovery_id" <<'PY' || {
+import json
+import sys
+
+marker_path, backup_path, recovery_id = sys.argv[1:]
+with open(marker_path, encoding="utf-8") as stream:
+    if stream.read().strip() != recovery_id:
+        raise SystemExit("COMPLETE marker does not name its recovery set")
+with open(backup_path, encoding="utf-8") as stream:
+    backup = json.load(stream)
+if not isinstance(backup, dict) or backup.get("recoveryId") != recovery_id:
+    raise SystemExit("backup evidence does not match its recovery set")
+if backup.get("status") != "PASS" or backup.get("artifactsComplete") is not True:
+    raise SystemExit("backup evidence is not a complete PASS")
+PY
+  echo "$PROGRAM: selected recovery set does not satisfy the recovery-set contract" >&2
   exit 1
 }
 

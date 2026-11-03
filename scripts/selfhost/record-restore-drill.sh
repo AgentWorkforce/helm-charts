@@ -131,7 +131,10 @@ PY
 )" || die "restore-drill evidence failed validation"
 read -r recovery_id drill_id <<<"$identity"
 
-base="gs://${BUCKET}/${PREFIX}/${recovery_id}/drills/${drill_id}"
+recovery_uri="gs://${BUCKET}/${PREFIX}/${recovery_id}"
+base="${recovery_uri}/drills/${drill_id}"
+gcloud storage ls "${recovery_uri}/COMPLETE" >/dev/null 2>&1 ||
+  die "recovery set ${recovery_id} has no COMPLETE marker"
 gcloud storage ls "${base}/request.json" >/dev/null 2>&1 ||
   die "matching immutable drill request does not exist"
 if gcloud storage ls "${base}/PASS.json" >/dev/null 2>&1; then

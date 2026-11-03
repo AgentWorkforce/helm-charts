@@ -34,6 +34,12 @@ latest="$(
   exit 1
 }
 gcloud storage cp "$latest" "$workdir/PASS.json" >/dev/null
+drill_uri="${latest%/PASS.json}"
+recovery_uri="${drill_uri%/drills/*}"
+gcloud storage ls "${recovery_uri}/COMPLETE" >/dev/null 2>&1 || {
+  echo "$PROGRAM: restore-drill evidence references a recovery set without a COMPLETE marker" >&2
+  exit 1
+}
 
 python3 - "$workdir/PASS.json" "$MAX_DRILL_AGE_DAYS" "$latest" <<'PY'
 import datetime

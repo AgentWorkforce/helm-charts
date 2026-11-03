@@ -266,11 +266,13 @@ try:
     restore = load(restore_path)
     compatibility = load(compatibility_path)
 
+    # Same recovery-ID contract as gcp-recovery-backup.sh and the drill
+    # request, record, and audit scripts.
     recovery_id = require(backup, "recoveryId")
     if not isinstance(recovery_id, str) or not re.fullmatch(
-        r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", recovery_id
+        r"ar-[0-9]{8}T[0-9]{6}Z-[a-z0-9]{1,8}", recovery_id
     ):
-        raise ValueError("recoveryId has an unsafe format")
+        raise ValueError("recoveryId must match ar-YYYYMMDDTHHMMSSZ-<suffix>")
     require(backup, "status", "PASS")
     require(backup, "providerStatus", "SUCCESSFUL")
     require(backup, "sourceRelease", release)
