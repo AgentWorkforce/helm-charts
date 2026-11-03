@@ -39,35 +39,43 @@ are out of scope.
 
 ## agent-relay 0.3.1 (2026-11-03): reviewable release
 
-This is the first published release of the umbrella chart
-(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.1). It is meant
+This is the first release of the umbrella chart, to be published from the
+`agent-relay-0.3.1` tag (`oci://ghcr.io/agentworkforce/charts/agent-relay`,
+version 0.3.1). It is meant
 for review by a company evaluating self-hosted Agent Relay on GCP. It is a
 `portable-single` preview, not an HA or production-readiness claim, and the
 handoff archive is labelled a development preview because the fail-closed
 customer release gate does not pass yet. **[STATUS.md](STATUS.md)** lists
 what is proven, what is preview, and what is planned.
 
-Images in `charts/agent-relay/values-gcp.yaml` (all by immutable digest; mirror
-them to your registry by digest):
+Images in `charts/agent-relay/values-gcp.yaml`. The five available images are
+pinned by immutable digest; mirror them to your registry by digest. The
+Sessions services and RelayHistory images are not published: they render a
+zero digest (REQUIRED OVERRIDE) and block installation until a release image
+exists and you pin it.
 
 | Component | Image | Source | Supply chain |
 |---|---|---|---|
 | Control-plane API | `ghcr.io/agentworkforce/selfhost-api@sha256:535e6718…` | relaycontrol `8e989a1` | SBOM + max provenance; package visibility pending |
 | Dashboard | `ghcr.io/agentworkforce/relay-dashboard@sha256:bbeca872…` | relay-dashboard `b213406` | SBOM + max provenance + GitHub attestation; public |
-| RelayAuth | `ghcr.io/agentworkforce/relayauth@sha256:c23c92d2…` | relayauth `784582e` | SBOM + provenance + attestation; public |
-| Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad…` | relaycast `bdf1b69` | public; no SBOM yet (attested rebuild pending) |
-| Sessions wait-for-role | `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9…` | upstream `4c2710a` | upstream SBOM + SLSA provenance + verified cosign signature |
-| Sessions services | `ghcr.io/agentworkforce/96bulls-services` | sessions-pipeline main | **pending**: the attested publish needs the owner's dispatch; REQUIRED OVERRIDE until pinned |
-| RelayHistory | `ghcr.io/agentworkforce/relayhistory` | relayhistory-cloud | **pending**: the self-host runtime PR is held; REQUIRED OVERRIDE until pinned |
+| RelayAuth | `ghcr.io/agentworkforce/relayauth@sha256:c23c92d2…` | relayauth `784582e` | SBOM + provenance; public |
+| Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad…` | relaycast `bdf1b69` | public; **no SBOM, min-mode provenance only** (attested rebuild pending) |
+| Sessions wait-for-role | `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9…` | upstream `4c2710a` | upstream revision label `4c2710a`, run 40291448784; SBOM + SLSA attestation manifests; keyless cosign signature verified with `--certificate-github-workflow-sha` |
+| Sessions services | `ghcr.io/agentworkforce/96bulls-services` | sessions-pipeline main | **not published** (zero digest): the attested publish needs the owner's dispatch; REQUIRED OVERRIDE, installation blocker |
+| RelayHistory | `ghcr.io/agentworkforce/relayhistory` | relayhistory-cloud | **not published** (zero digest): the self-host runtime PR is held; REQUIRED OVERRIDE, installation blocker |
 
 Full revisions, release runs, platforms and blockers are in
 `self-hosted/customer-images.yaml`.
 
 Changes since the unreleased 0.2.x/0.3.0 profiles (0.3.0 renamed the `96bulls:` values key to `sessions-pipeline:`):
 
-- `values-gcp.yaml` pins the release images above instead of placeholders.
+- `values-gcp.yaml` pins the five available release images above instead of
+  placeholders. Sessions services and RelayHistory keep zero-digest
+  placeholders (REQUIRED OVERRIDE).
 - `values-gcp.yaml` sets `sessions-pipeline.alleyoop.auth.issuer` to RelayAuth's issuer
-  and asks for `historyOrigin`. The chart default (`https://96bulls.local`)
+  and asks for `historyOrigin` (REQUIRED OVERRIDE; it must equal
+  `relayhistory.relayauth.historyOrigin`, and the chart refuses to render when
+  they differ). The chart default (`https://96bulls.local`)
   rejected every RelayAuth-signed courier assertion.
 - The self-host dashboard image talks only to the same-origin `/cloud/api`
   prefix. Keep `relay-dashboard.runtime.apiBasePath` at `/cloud/api` and route

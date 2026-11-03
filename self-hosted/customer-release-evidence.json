@@ -86,7 +86,7 @@
     },
     "recovery": {
       "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      "evidence": "Not yet done; planned. A small-dataset isolated restore drill met the targets (RPO 0 s quiesced, RTO about 13 min; see upgradeRestore.restore), but the recovery gate is defined at supported-100 scale under load, which has not run.",
+      "evidence": "Not yet done; planned. A small-dataset isolated restore drill of chart 0.1.1 had no data loss between the quiesce point and the capture (writers quiesced for 314 s) and an RTO of 578 s to the gates passing, about 767 s (about 12.8 min) cold (see upgradeRestore.restore), but the recovery gate is defined at supported-100 scale under load, which has not run.",
       "result": "not-run",
       "rpoMinutes": 15,
       "rtoMinutes": 240
@@ -103,7 +103,7 @@
     }
   },
   "relayHistoryMigrations": {
-    "evidence": "2026-11-03 GKE drill: relayhistory-cloud 74a6e526 has 47 packages/relayhistory/db/migrations/*.sql; the image built from it (sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf, the live-proof RelayHistory image) has 47 *.sql in /app/db/migrations, and after install and after the 0.3.0 upgrade the sessions.__migrations ledger had 47 rows with 47/47 checksums equal to the file hashes (release-lane drill evidence migrations/relayhistory-previous.json, relayhistory-post-upgrade.json). This is NOT yet the RelayHistory release image: that image is unpublished (relayhistory-cloud #280 held), so the revision intentionally differs from customer-images.yaml.",
+    "evidence": "2026-11-03 GKE drill: relayhistory-cloud 74a6e526 has 47 packages/relayhistory/db/migrations/*.sql; the image built from it (sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf, the live-proof RelayHistory image) has 47 *.sql in /app/db/migrations, and after install and after the 0.3.0 upgrade the sessions.__migrations ledger had 47 rows with 47/47 checksums equal to the file hashes (release-lane drill evidence migrations/relayhistory-previous.json, relayhistory-post-upgrade.json). This is NOT the RelayHistory image in customer-images.yaml (4b5839f proof image) and NOT a release image: the release image is unpublished (relayhistory-cloud #280 held). The revision intentionally differs, so the release gate rejects this record (relayhistory-migrations) until migration evidence is recorded for the released image.",
     "imageCount": 47,
     "sourceCount": 47,
     "sourceRevision": "74a6e526afd2a821860afd341fb2a12907164829"
@@ -123,7 +123,7 @@
       "protected": false,
       "requiredApprovals": 0
     },
-    "imageManifestSha256": "sha256:f87587573a1ee83a5e69da1cd73c06cbe62439188bdcfaf6393e81a99536af9e",
+    "imageManifestSha256": "sha256:8ad64140e4f3e0b698624b9e165c52288ce56b8e5127f2a4cf35868e9a925347",
     "valuesFile": "charts/agent-relay/values-gcp.yaml"
   },
   "releaseDecision": "blocked",
@@ -132,7 +132,7 @@
     "restore": {
       "artifactSha256": "sha256:7bd437ce495b8d1a87b6cb8ac0adc443690268b91ed5b38766d0ed2dd82147d6",
       "chartVersion": "0.1.1",
-      "evidence": "2026-11-03 GKE drill: charts/agent-relay/scripts/gcp-recovery-backup.sh captured ar-20261103T181010Z-manual with writes quiesced (writesQuiesced=true, artifactsComplete=true; Cloud SQL backup + 3 exports, 2 Retain PVC snapshots, GCS copy, locked 35-day archive). Restored into a separate Cloud SQL instance, bucket, namespace and PVCs from imported snapshots; all 7 verification gates in docs/selfhost-backup-restore.md passed (Cloud SQL ledgers/roles, Relaycast and RelayAuth PRAGMA integrity_check ok, GCS names/sizes/CRC32C, isolated two-agent ping/reply, session list/replay/search, idempotent delivery retry, cross-workspace denial, no production references). RPO 0 s (quiesced), RTO 387 s to Ready / 578 s to gates passed (about 769 s cold). The first delivery-gate attempt failed on a harness bug and is recorded. The restore was of the PREVIOUS release (0.1.1, its images), not 0.3.0. Artifact: drill-restore-ar-20261103T181010Z-manual.tar.gz.",
+      "evidence": "2026-11-03 GKE drill: charts/agent-relay/scripts/gcp-recovery-backup.sh captured ar-20261103T181010Z-manual with writes quiesced for 314 s (writesQuiesced=true, artifactsComplete=true). The locked 35-day archive bucket holds the 3 Cloud SQL exports, the GCS copy and the evidence, including the snapshot handles; the Cloud SQL backup is held by Cloud SQL, and the Relaycast and RelayAuth PVC snapshots were Kubernetes VolumeSnapshots with a Retain policy, outside the bucket (deleted at drill cleanup). Restored into a separate Cloud SQL instance, bucket, namespace and PVCs from imported snapshots. All 7 verification gates recorded in restore.json passed: cloudSql (migration ledgers match, runtime/migration roles separate), relaycastIntegrity and relayauthIntegrity (PRAGMA integrity_check ok), gcsIntegrity (names/sizes/CRC32C), isolatedMessaging (known agents and DM, new two-agent ping/reply), crossWorkspaceDenied, noProductionReferences. The same run also checked recorded images, session list/replay/search and idempotent delivery retry (docs/selfhost-backup-restore.md verification checks). No data loss between the quiesce point and the capture (quiesced capture; RPO under live writes not measured). RTO 387 s to Ready / 578 s to gates passed; a cold restore adds about 189 s of instance creation (about 767 s). The first delivery-gate attempt failed on a harness bug and is recorded. The restore was of the PREVIOUS release (0.1.1, its images), not 0.3.1. Artifact: drill-restore-ar-20261103T181010Z-manual.tar.gz.",
       "imageManifestSha256": "sha256:91d7a00c271cd4476e0d76786fa3b0a39e0a9bff82b50c9d91c92314961e4615",
       "result": "pass"
     },

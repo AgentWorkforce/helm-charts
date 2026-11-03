@@ -41,7 +41,7 @@ Both archives unpack to one `agent-relay-customer-handoff/` directory:
 | `docs/` | Reference architecture, architecture and request-flow diagrams (`docs/diagrams/`), image supply chain, backup/restore runbook, conformance contract, and licenses |
 | `scripts/selfhost/`, `scripts/release/`, `scripts/conformance/` | Read-only verification, pre-upgrade gate, release validator, conformance tests, and the end-to-end harness (`e2e-gcp-proof.sh`) |
 | `docs/handoff/evidence/` | Sanitized summaries of the GKE end-to-end, upgrade and backup/restore runs, and the durable-actors preview proof |
-| `docs/operations/`, `docs/support/` | Operations contract (SLOs, capacity and load-test gates) and support runbook |
+| `docs/operations/`, `docs/support/`, `scripts/support/` | Operations contract (SLOs, capacity and load-test gates), support runbook, and the read-only support-bundle collector (`collect-support-bundle.py`) with its tests |
 | `self-hosted/` | Customer image manifest and release evidence |
 | `deps/`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Dependency pins and license notices |
 | `RELEASE-MANIFEST.json` | Source revision, tree, release mode, production-gate status, and per-file SHA-256 |

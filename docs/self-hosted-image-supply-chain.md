@@ -1,51 +1,55 @@
 # Self-hosted customer image and source inventory
 
-Status: **blocked for customer release**.
+Status: **blocked for customer release** (agent-relay 0.3.1, audited
+2026-11-03).
 
 The machine-readable source of this audit is
-[`self-hosted/customer-images.yaml`](../self-hosted/customer-images.yaml).
-The proof digests below are evidence, not approvals. The GCP conformance
-Artifact Registry repository is not a customer distribution contract.
-Separate chart-bundle licensing and notice gaps are recorded in
+[`self-hosted/customer-images.yaml`](../self-hosted/customer-images.yaml); this
+page summarizes it, and the manifest wins if they ever disagree. Recorded
+digests are evidence, not approvals. The GCP proof Artifact Registry
+repository is not a customer distribution contract. Separate chart-bundle
+licensing and notice gaps are recorded in
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md); resolving an image row
 does not resolve those packaging blockers.
 
 ## Scope and method
 
 This inventory covers the full-customer GCP umbrella profile in
-`charts/agent-relay/values-gcp-proof.yaml`, with all six product components
-enabled. The chart was rendered with its known proof digests solely to inspect
-Pod specs. It produces seven unique images because the Sessions migration Job
+`charts/agent-relay/values-gcp.yaml`, with all six product components
+enabled. It produces seven unique images because the Sessions migration Job
 also runs a CloudNativePG PostgreSQL wait-for-role init container.
+
+`values-gcp.yaml` pins five of them by digest. The Sessions services and
+RelayHistory release images are not published, so the profile renders a zero
+digest for both (REQUIRED OVERRIDE). Their rows below record the last audited
+private or proof digest as evidence; the profile does not render those
+digests, and the release gate reports the mismatch.
 
 Images disabled by this profile are not active: MinIO (`locker.enabled=false`),
 the OpenTelemetry collector (`otel.enabled=false`), the HoopDb Cluster, and
-`alpine/k8s` for the three disabled privileged SQL Jobs.
+`alpine/k8s` for the three disabled privileged SQL Jobs. Durable actors,
+Relayfile and Relayflows are optional components, off in this profile, and are
+not part of this matrix.
 
 The audit checked:
 
 - chart values and rendered Deployment/Job container images;
-- source repository visibility, exact commit availability, and repository
-  license metadata;
-- committed image workflows and the release runs recorded by the charts;
+- source repository, exact commit, and license;
+- the release workflow and run that built each digest;
 - registry manifests for platform coverage;
-- proof build records and the source worktree state used by those builds.
-
-Registry inspection of the proof images used the current operator's
-credentials. It does not prove that a customer can pull them. Anonymous
-inspection of the Sessions image returned `unauthorized`.
+- SBOM and provenance attestations, and signatures where published.
 
 ## Active inventory
 
-| Image | Active use | Source and revision | License | Platforms | Release and customer path | Result |
+| Image | Active use | Source and revision | License | Platforms | Release and supply chain | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762` | Relaycast Deployment | [`AgentWorkforce/relaycast`](https://github.com/AgentWorkforce/relaycast) `bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49` | Apache-2.0 | Registry-verified `linux/amd64`, `linux/arm64` | Manual reviewed [workflow](https://github.com/AgentWorkforce/relaycast/blob/bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49/.github/workflows/publish-container.yml), [run](https://github.com/AgentWorkforce/relaycast/actions/runs/41161384835); public GHCR digest can be mirrored | Available |
-| `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288` | RelayAuth Deployment | [`AgentWorkforce/relayauth`](https://github.com/AgentWorkforce/relayauth) `784582ef983bb72b13b43512d9a4142ef5dfabb2` | Apache-2.0 | Registry-verified `linux/amd64`, `linux/arm64` | Reviewed [workflow](https://github.com/AgentWorkforce/relayauth/blob/784582ef983bb72b13b43512d9a4142ef5dfabb2/.github/workflows/container.yml), [run](https://github.com/AgentWorkforce/relayauth/actions/runs/41277442855), SBOM/provenance and anonymous-pull check; public GHCR digest can be mirrored | Available |
-| `ghcr.io/agentworkforce/96bulls-services@sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2` | Four Sessions Deployments and migration Job | Private [`AgentWorkforce/sessions-pipeline`](https://github.com/AgentWorkforce/sessions-pipeline) `7d7229bb31c121ecb98cd4e35c248fc2cf5669ad` | Unresolved; no repository license detected | Workflow expects both architectures; registry verification is blocked by anonymous `unauthorized` | Approval-gated [workflow](https://github.com/AgentWorkforce/sessions-pipeline/blob/7d7229bb31c121ecb98cd4e35c248fc2cf5669ad/.github/workflows/publish-image.yml) and [run](https://github.com/AgentWorkforce/sessions-pipeline/actions/runs/41375745173), but no customer entitlement/public promotion path | **Hard blocker** |
-| `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3` | Sessions migration `wait-for-role` init container | Public [`cloudnative-pg/postgres-containers`](https://github.com/cloudnative-pg/postgres-containers); exact commit for this digest not recorded | Apache-2.0 | Registry-verified `linux/amd64`, `linux/arm64` | Public upstream digest; mirror after third-party review | Provenance review |
-| `<private-proof-registry>/relayhistory@sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba` | RelayHistory Deployment and migration Job | Private [`AgentWorkforce/relayhistory-cloud`](https://github.com/AgentWorkforce/relayhistory-cloud) `4b5839f17c5e0cd481e92712c2a1a340a1604e73` | Unresolved; no repository license detected | Operator-verified `linux/amd64`, `linux/arm64` | Local proof build only; no container release workflow or approved customer channel | **Hard blocker** |
-| `<private-proof-registry>/selfhost-api@sha256:0452a72da76d36c9c69ac6de75e51299b1df1a0fdfaec37831bff6deb55c7cf8` | Control API Deployment and migration Job | Private [`AgentWorkforce/cloud`](https://github.com/AgentWorkforce/cloud); no reproducible revision. The build tree was based on `b2d7b2d5781b8f601c19fbcbf0d495e40b217904`, but `packages/selfhost-api` was untracked and package manifests were modified. | Unresolved; no top-level license detected and no committed source snapshot | Operator-verified `linux/amd64` only | Local proof build only; no committed release workflow or approved customer channel | **Hard blocker** |
-| `<private-proof-registry>/relay-dashboard@sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe` | Dashboard init and application containers | Public [`AgentWorkforce/relay-dashboard`](https://github.com/AgentWorkforce/relay-dashboard), but no reproducible revision. The build tree was based on `f71af3ee19683891e4774affa4cf9185c7cc7dba` with modified and untracked application, replay, Docker, and workflow files. | Apache-2.0 source; binary review blocked by missing exact source snapshot | Operator-verified `linux/amd64`, `linux/arm64` | Local proof build only; the base revision has CI only, not a container release workflow | **Hard blocker** |
+| `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762` | Relaycast Deployment | [`AgentWorkforce/relaycast`](https://github.com/AgentWorkforce/relaycast) `bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49` | Apache-2.0 | Registry-verified `linux/amd64`, `linux/arm64` | [Workflow](https://github.com/AgentWorkforce/relaycast/blob/bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49/.github/workflows/publish-container.yml), [run](https://github.com/AgentWorkforce/relaycast/actions/runs/41161384835). **No SBOM**; only buildx's default min-mode, unsigned provenance. Public GHCR digest | **Hard blocker** (`IMG-BLOCK-005`) |
+| `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288` | RelayAuth Deployment | [`AgentWorkforce/relayauth`](https://github.com/AgentWorkforce/relayauth) `784582ef983bb72b13b43512d9a4142ef5dfabb2` | Apache-2.0 | Registry-verified `linux/amd64`, `linux/arm64` | [Workflow](https://github.com/AgentWorkforce/relayauth/blob/784582ef983bb72b13b43512d9a4142ef5dfabb2/.github/workflows/container.yml), [run](https://github.com/AgentWorkforce/relayauth/actions/runs/41277442855); SBOM and provenance; anonymous pull verified | Approved |
+| `ghcr.io/agentworkforce/96bulls-services@sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2` (evidence only; the profile renders a zero digest) | Four Sessions Deployments and migration Job | Private [`AgentWorkforce/sessions-pipeline`](https://github.com/AgentWorkforce/sessions-pipeline) `7d7229bb31c121ecb98cd4e35c248fc2cf5669ad` | Apache-2.0 by owner decision; the LICENSE landed on `main` in #172 (merge `51b38ff`), after this revision | Not registry-verified (anonymous inspection returns `unauthorized`) | Approval-gated [workflow](https://github.com/AgentWorkforce/sessions-pipeline/blob/7d7229bb31c121ecb98cd4e35c248fc2cf5669ad/.github/workflows/publish-image.yml), [run](https://github.com/AgentWorkforce/sessions-pipeline/actions/runs/41375745173); no SBOM, min-mode provenance. The attested release image is **not published** | **Hard blocker** (`IMG-BLOCK-001`, `IMG-BLOCK-005`) |
+| `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3` | Sessions migration `wait-for-role` init container | Public [`cloudnative-pg/postgres-containers`](https://github.com/cloudnative-pg/postgres-containers) `4c2710a78328becdadf708ca6d9cb3fb61f3f5ee` (the image's revision label and its SLSA provenance both name it) | Apache-2.0 packaging; PostgreSQL License | Registry-verified `linux/amd64`, `linux/arm64` | Upstream [`bake_targets.yml`](https://github.com/cloudnative-pg/postgres-containers/blob/4c2710a78328becdadf708ca6d9cb3fb61f3f5ee/.github/workflows/bake_targets.yml), [run 40291448784](https://github.com/cloudnative-pg/postgres-containers/actions/runs/40291448784); SPDX SBOM and SLSA v1 attestation manifests; keyless cosign signature verified with `--certificate-github-workflow-sha 4c2710a…` | Approved (third party) |
+| `<private-proof-registry>/relayhistory@sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba` (evidence only; the profile renders a zero digest) | RelayHistory Deployment and migration Job | Private [`AgentWorkforce/relayhistory-cloud`](https://github.com/AgentWorkforce/relayhistory-cloud) `4b5839f17c5e0cd481e92712c2a1a340a1604e73` | Apache-2.0 by owner decision; the LICENSE PR (#279) is open and held, so no revision carries it yet | Operator-verified `linux/amd64`, `linux/arm64` | Local proof build; no reviewed container release workflow or customer channel. The release image is **not published** | **Hard blocker** (`IMG-BLOCK-002`) |
+| `ghcr.io/agentworkforce/selfhost-api@sha256:535e6718fa239ce87dead3d22e7c53324bed44bfcef94018918e8804d24af478` | Control API Deployment and migration Job | [`AgentWorkforce/relaycontrol`](https://github.com/AgentWorkforce/relaycontrol) `main` `8e989a1b1842179f775906091777ce50a9f78ecd` | Apache-2.0 | Built for `linux/amd64`, `linux/arm64`; not registry-verified while the package is private | Reviewed [workflow](https://github.com/AgentWorkforce/relaycontrol/blob/8e989a1b1842179f775906091777ce50a9f78ecd/.github/workflows/release-selfhost-api-image.yml), [run](https://github.com/AgentWorkforce/relaycontrol/actions/runs/41684552871); SBOM and max-mode provenance. The GHCR package is **private** | **Hard blocker** (`IMG-BLOCK-003`) |
+| `ghcr.io/agentworkforce/relay-dashboard@sha256:bbeca872c7e204a02a17050db6ac6309c6d36a07bcd00e1da3a739923f990282` | Dashboard init and application containers | [`AgentWorkforce/relay-dashboard`](https://github.com/AgentWorkforce/relay-dashboard) `main` `b2134062c28c9526032b23a731aac4d681fe8689` | Apache-2.0 | Registry-verified anonymously, `linux/amd64`, `linux/arm64` | Reviewed [workflow](https://github.com/AgentWorkforce/relay-dashboard/blob/b2134062c28c9526032b23a731aac4d681fe8689/.github/workflows/container.yml), [run](https://github.com/AgentWorkforce/relay-dashboard/actions/runs/41697933750); SPDX SBOM, max-mode provenance and a GitHub build-provenance attestation; public | Approved |
 
 `relay-dashboard` intentionally appears twice in the rendered Pod (an init
 container copies static assets into a writable volume and the application
@@ -81,25 +85,24 @@ approved byte-for-byte third-party mirror.
 
 ## Exact blockers
 
-- `IMG-BLOCK-001` — **Sessions services**: GHCR denies anonymous access; no
-  distribution license or supported customer entitlement/promotion procedure
-  is recorded. Close by approving terms, establishing the customer channel,
-  and verifying both required architectures.
-- `IMG-BLOCK-002` — **RelayHistory**: the current artifact is explicitly
-  experimental, its source license is unresolved, and there is no container
-  release workflow or approved customer channel. The exact proof source commit
-  is known, but that alone does not make the binary releasable.
-- `IMG-BLOCK-003` — **Control API**: the digest cannot be reproduced from any
-  commit because its package and Dockerfile were untracked when built. It is
-  also amd64-only and lacks an approved license, workflow, and customer
-  channel.
-- `IMG-BLOCK-004` — **Dashboard**: the digest was built from a dirty source
-  tree. Commit and review the exact application and container changes, then
-  rebuild through an approved workflow and channel.
-- `IMG-REVIEW-001` — **CloudNativePG PostgreSQL helper**: public, pinned,
-  multi-arch, and Apache-2.0, but the digest-to-source revision and exact
-  upstream release run are not recorded. This is a provenance review item, not
-  a missing-public-image blocker.
+- `IMG-BLOCK-001` — **Sessions services**: the image is private and has no
+  approved customer acquisition or promotion procedure. The attested release
+  image (from `main` at or after the LICENSE merge `51b38ff`) needs the
+  owner's publish dispatch. Close by publishing it to a customer-readable
+  channel and verifying both required architectures.
+- `IMG-BLOCK-002` — **RelayHistory**: the recorded artifact is an experimental
+  proof image with no reviewed container release workflow or customer channel.
+  The self-host runtime PR and the LICENSE PR are held. Close with a reviewed
+  release workflow that publishes from the recorded commit, and promotion
+  evidence.
+- `IMG-BLOCK-003` — **Control API**: source and release are canonical
+  (relaycontrol `main` `8e989a1`, SBOM and max-mode provenance), but the GHCR
+  package is still private, so customers have no pull path. Close by making
+  the package public and verifying both platforms anonymously.
+- `IMG-BLOCK-005` — **Relaycast and Sessions services**: their release
+  workflows publish no SBOM and only buildx's default min-mode, unsigned
+  provenance. Close with a rebuild that publishes an SBOM and signed
+  provenance, and record the new digest.
 
-Until `IMG-BLOCK-001` through `IMG-BLOCK-004` are closed, the umbrella chart is
-not customer-image ready even if it renders or the proof cluster is healthy.
+Until these are closed, the umbrella chart is not customer-image ready even if
+it renders or the proof cluster is healthy.

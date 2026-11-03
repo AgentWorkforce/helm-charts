@@ -21,8 +21,10 @@ scope:
     enabled. Durable actors, Relayfile and Relayflows are optional preview
     components, off in this profile, and are not part of this matrix.
     RelayHistory and Sessions services still carry their last audited proof or
-    private digests here; values-gcp.yaml leaves them as REQUIRED OVERRIDE
-    until their release images are published.
+    private digests here (see each row's current.note); values-gcp.yaml
+    renders zero-digest REQUIRED OVERRIDE images for both until their release
+    images are published, so this matrix does not match what the profile
+    renders for those two rows, and the release gate reports that.
   activeUniqueImages: 7
   excludedConditionalImages:
     - image: cgr.dev/chainguard/minio
@@ -144,6 +146,12 @@ images:
       repository: ghcr.io/agentworkforce/96bulls-services
       digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
       chartStatus: shipped-private
+      note: >-
+        Last audited private digest, recorded as evidence. values-gcp.yaml does
+        not render it: worker.image and alleyoop.image are REQUIRED OVERRIDE
+        (ghcr.io/agentworkforce/96bulls-services@sha256:000...0) until an
+        attested release image is published, and the gate reports this row as
+        not rendered.
     source:
       repository: https://github.com/AgentWorkforce/sessions-pipeline
       revision: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
@@ -252,6 +260,12 @@ images:
       repository: <private-proof-registry-not-for-customer-use>/relayhistory
       digest: sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba
       chartStatus: experimental-proof-only
+      note: >-
+        Last audited proof image, recorded as evidence; never a customer
+        image. values-gcp.yaml does not render it: relayhistory.image is
+        REQUIRED OVERRIDE (ghcr.io/agentworkforce/relayhistory@sha256:000...0)
+        until a release image is published, and the gate reports this row as
+        not rendered.
     source:
       repository: https://github.com/AgentWorkforce/relayhistory-cloud
       revision: 4b5839f17c5e0cd481e92712c2a1a340a1604e73

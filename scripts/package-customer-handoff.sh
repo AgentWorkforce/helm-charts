@@ -52,12 +52,12 @@ INCLUDE_TREES = (
     "scripts/conformance",
     "scripts/release",
     "scripts/selfhost",
+    "scripts/support",
     "self-hosted",
 )
 INCLUDE_FILES = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
-    "docs/self-hosted-durable-actors.md",
     "docs/self-hosted-image-supply-chain.md",
     "docs/self-hosted-reference-architecture.md",
     "docs/self-hosted-relayflows.md",
