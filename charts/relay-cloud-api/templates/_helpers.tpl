@@ -36,6 +36,13 @@ app.kubernetes.io/component: api
 {{- if not .Values.existingSecret }}{{ fail "existingSecret is required; inline credentials are not supported" }}{{ end -}}
 {{- $optionalSecretKeys := list "previousEncryptionKey" "internalToken" "telemetryInstallKey" -}}
 {{- range $name, $key := .Values.secretKeys }}{{ if and (has $name $optionalSecretKeys) (empty $key) }}{{ continue }}{{ end }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString $key)) }}{{ fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}{{ end }}{{ end -}}
+{{- /* Every non-empty secretKeys.* value must name a distinct Secret key. The
+API pod projects the runtime and optional keys by key name, so a collision
+with databaseMigrationsUrl would mount the migration (owner) credential into
+the API pod, and any other collision would feed one credential to two
+settings. */ -}}
+{{- $seenSecretKeys := dict -}}
+{{- range $name := keys .Values.secretKeys | sortAlpha }}{{ $key := toString (index $.Values.secretKeys $name) }}{{ if empty $key }}{{ continue }}{{ end }}{{ if hasKey $seenSecretKeys $key }}{{ fail (printf "secretKeys.%s and secretKeys.%s both name Secret key %q: every secretKeys value must be distinct (a collision with databaseMigrationsUrl would mount the migration credential into the API pod)" (get $seenSecretKeys $key) $name $key) }}{{ end }}{{ $_ := set $seenSecretKeys $key $name }}{{ end -}}
 {{- include "relay-cloud-api.validateRuntime" . -}}
 {{- if and .Values.migrations.enabled (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name when migrations are enabled" }}{{ end -}}
 {{- if not (regexMatch "^https://[^/?#]+$" .Values.publicUrl) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
@@ -69,6 +76,7 @@ Optional keys are left out while empty. */ -}}
 {{- end -}}
 {{- define "relay-cloud-api.secretItems" -}}
 {{- range $key := include "relay-cloud-api.secretFiles" . | fromJson | values | sortAlpha | uniq }}
+{{- if eq $key (toString $.Values.secretKeys.databaseMigrationsUrl) }}{{ fail "the API pod must never mount secretKeys.databaseMigrationsUrl" }}{{ end }}
 - { key: {{ $key | quote }}, path: {{ $key | quote }} }
 {{- end }}
 {{- end -}}
@@ -82,7 +90,8 @@ Optional keys are left out while empty. */ -}}
 {{- if and (ne (include "relay-cloud-api.telemetryLevel" .) "off") (eq (.Values.telemetry.transport | default "https") "https") }}true{{ end -}}
 {{- end -}}
 {{- /* Non-secret deployment shape for SELFHOST_TELEMETRY_DEPLOYMENT; the API
-keeps only short keys, numbers, booleans and version-like strings. */ -}}
+keeps only short keys, numbers, booleans and version-like strings.
+telemetry.deployment is checked in validateRuntime before it is merged. */ -}}
 {{- define "relay-cloud-api.telemetryDeployment" -}}
 {{- $shape := dict "chart" .Chart.Name "chartVersion" .Chart.Version "appVersion" .Chart.AppVersion "replicas" 1 "flowsStorage" (.Values.flows.storage | default "postgres") "networkPolicy" (.Values.networkPolicy.enabled | default false) "ingress" (.Values.ingress.enabled | default false) -}}
 {{- toJson (mergeOverwrite $shape (deepCopy (.Values.telemetry.deployment | default dict))) -}}
@@ -118,7 +127,7 @@ keeps only short keys, numbers, booleans and version-like strings. */ -}}
 - { name: SELFHOST_TELEMETRY_INSTALL_ID, value: {{ .Values.telemetry.installId | quote }} }
 {{- with .Values.telemetry.probes }}
 - name: SELFHOST_TELEMETRY_PROBES
-  value: {{ $probes := list }}{{ range . }}{{ $probes = append $probes (printf "%s=%s" .name .url) }}{{ end }}{{ join "," $probes | quote }}
+  value: {{ $probes := list }}{{ range . }}{{ $probes = append $probes (printf "%s=%s" (toString .name) (toString .url)) }}{{ end }}{{ join "," $probes | quote }}
 {{- end }}
 - name: SELFHOST_TELEMETRY_DEPLOYMENT
   value: {{ include "relay-cloud-api.telemetryDeployment" . | quote }}
@@ -142,7 +151,13 @@ at startup is refused at render time instead of crash-looping. */ -}}
 {{- if not (has $storage (list "postgres" "gcs")) }}{{ fail "flows.storage must be postgres or gcs" }}{{ end -}}
 {{- if and (eq $storage "gcs") (not .Values.flows.gcsBucket) }}{{ fail "flows.gcsBucket is required when flows.storage=gcs" }}{{ end -}}
 {{- if and (ne $storage "gcs") (or .Values.flows.gcsBucket .Values.flows.gcsPrefix) }}{{ fail "flows.gcsBucket and flows.gcsPrefix apply only to flows.storage=gcs" }}{{ end -}}
-{{- with .Values.flows.gcsBucket }}{{ if not (regexMatch "^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$" .) }}{{ fail "flows.gcsBucket must be a GCS bucket name" }}{{ end }}{{ end -}}
+{{- with .Values.flows.gcsBucket }}
+{{- $bucket := toString . -}}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$" $bucket) }}{{ fail "flows.gcsBucket must be a GCS bucket name: 3-222 lowercase letters, digits, dots, dashes and underscores, starting and ending with a letter or digit" }}{{ end -}}
+{{- if and (not (contains "." $bucket)) (gt (len $bucket) 63) }}{{ fail "flows.gcsBucket must be at most 63 characters unless it is a dotted name" }}{{ end -}}
+{{- range $part := splitList "." $bucket }}{{ if or (empty $part) (gt (len $part) 63) (not (regexMatch "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$" $part)) }}{{ fail "flows.gcsBucket dotted components must each be 1-63 characters and start and end with a letter or digit" }}{{ end }}{{ end -}}
+{{- if or (hasPrefix "goog" $bucket) (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$" $bucket) }}{{ fail "flows.gcsBucket must not start with goog or be an IP address" }}{{ end -}}
+{{- end -}}
 {{- with .Values.flows.workerRelaycastUrl }}{{ if not (regexMatch "^https?://[^/?#@\\s]+(/[^?#\\s]*)?$" .) }}{{ fail "flows.workerRelaycastUrl must be an absolute http(s) URL without credentials, query or fragment" }}{{ end }}{{ end -}}
 {{- if not (kindIs "invalid" .Values.flows.queuePingMs) }}{{ if ne (toString .Values.flows.queuePingMs) "" }}
 {{- if not (regexMatch "^[0-9]+$" (toString .Values.flows.queuePingMs)) }}{{ fail "flows.queuePingMs must be an integer from 1000 to 120000" }}{{ end -}}
@@ -162,10 +177,26 @@ at startup is refused at render time instead of crash-looping. */ -}}
 {{- end -}}
 {{- $probeNames := list -}}
 {{- range .Values.telemetry.probes }}
-{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{0,39}$" (toString .name)) }}{{ fail "telemetry.probes[].name must be lowercase letters, digits and dashes (max 40)" }}{{ end -}}
-{{- if has .name $probeNames }}{{ fail (printf "telemetry.probes has a duplicate entry for %s" .name) }}{{ end -}}
-{{- $probeNames = append $probeNames .name -}}
-{{- if not (regexMatch "^https?://[^/?#@,\\s]+(/[^#,\\s]*)?$" (toString .url)) }}{{ fail (printf "telemetry.probes %s url must be an http(s) URL without credentials, fragment or commas" .name) }}{{ end -}}
+{{- $probeName := toString .name -}}
+{{- if not (kindIs "string" .name) }}{{ fail "telemetry.probes[].name must be a string (quote numeric names)" }}{{ end -}}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{0,39}$" $probeName) }}{{ fail "telemetry.probes[].name must be lowercase letters, digits and dashes (max 40)" }}{{ end -}}
+{{- if has $probeName $probeNames }}{{ fail (printf "telemetry.probes has a duplicate entry for %s" $probeName) }}{{ end -}}
+{{- $probeNames = append $probeNames $probeName -}}
+{{- if not (regexMatch "^https?://[^/?#@,\\s]+(/[^#,\\s]*)?$" (toString .url)) }}{{ fail (printf "telemetry.probes %s url must be an http(s) URL without credentials, fragment or commas" $probeName) }}{{ end -}}
+{{- end -}}
+{{- /* telemetry.deployment: flat, non-secret additions only, mirroring the
+API's sanitizeDeploymentShape (src/telemetry/config.ts) so nothing the API
+would silently drop, and nothing that could carry data, is rendered. */ -}}
+{{- $deployment := .Values.telemetry.deployment | default dict -}}
+{{- if not (kindIs "map" $deployment) }}{{ fail "telemetry.deployment must be a map of short keys to scalar values" }}{{ end -}}
+{{- if gt (len $deployment) 32 }}{{ fail "telemetry.deployment allows at most 32 keys" }}{{ end -}}
+{{- $reservedShape := list "chart" "chartVersion" "appVersion" "replicas" "flowsStorage" "networkPolicy" "ingress" -}}
+{{- range $key, $value := $deployment }}
+{{- if not (regexMatch "^[A-Za-z][A-Za-z0-9_.-]{0,47}$" $key) }}{{ fail (printf "telemetry.deployment key %q must start with a letter and contain at most 48 letters, digits, dots, dashes and underscores" $key) }}{{ end -}}
+{{- if has $key $reservedShape }}{{ fail (printf "telemetry.deployment.%s is rendered by the chart and must not be overridden" $key) }}{{ end -}}
+{{- if kindIs "string" $value }}
+{{- if or (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9_.+:@/-]{0,79}$" $value)) (contains "//" $value) }}{{ fail (printf "telemetry.deployment.%s must be a short version-like string (letters, digits and _.+:@/-, max 80, no URLs)" $key) }}{{ end -}}
+{{- else if not (or (kindIs "bool" $value) (kindIs "int" $value) (kindIs "int64" $value) (kindIs "float64" $value)) }}{{ fail (printf "telemetry.deployment.%s must be a string, number or boolean (nested maps, lists and nulls are not allowed)" $key) }}{{ end -}}
 {{- end -}}
 {{- if gt (len .Values.telemetry.probes) 20 }}{{ fail "telemetry.probes allows at most 20 entries" }}{{ end -}}
 {{- end -}}

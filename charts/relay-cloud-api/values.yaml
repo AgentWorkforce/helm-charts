@@ -84,11 +84,13 @@ telemetry:
   # Relaycast, RelayAuth and RelayHistory are always probed.
   probes: []
   # Extra non-secret deployment shape merged into the chart-rendered one
-  # (SELFHOST_TELEMETRY_DEPLOYMENT). Short keys; numbers, booleans and
-  # version-like strings only, never URLs or free text.
+  # (SELFHOST_TELEMETRY_DEPLOYMENT). Flat, at most 32 short keys; numbers,
+  # booleans and version-like strings only, never URLs, free text or nested
+  # maps. The chart-rendered keys cannot be overridden (render fails).
   deployment: {}
   # Destinations of the egress rule (TCP 443) the NetworkPolicy adds when
-  # level != off, transport=https and allowAllEgress=false. NetworkPolicy
+  # networkPolicy.enabled, allowAllEgress=false, level != off and
+  # transport=https. NetworkPolicy
   # cannot match a hostname, so the default is any public address; narrow it
   # to the ingest endpoint's addresses if they are stable.
   egressTo:
@@ -128,6 +130,11 @@ service:
   type: ClusterIP
   port: 80
   annotations: {}
+  # GKE BackendConfig bound to this Service: the chart renders the
+  # cloud.google.com/backend-config annotation ({"default": "<name>"}) from it.
+  # Under the agent-relay gkeIngress it must be <gkeIngress.name>-api (the
+  # umbrella fails the render with the exact expected name otherwise).
+  backendConfig: ""
 ingress:
   enabled: false
   className: ""

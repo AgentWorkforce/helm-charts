@@ -241,9 +241,10 @@ relay-cloud-api:
   service:
     annotations:
       cloud.google.com/neg: '{"ingress": true}'
-      # Binds the gkeIngress api BackendConfig (backend timeout for the flows
-      # worker queue SSE stream); must name <gkeIngress.name>-api.
-      cloud.google.com/backend-config: '{"default": "example-agent-relay-api"}'
+    # Binds the gkeIngress api BackendConfig (backend timeout for the flows
+    # worker queue SSE stream); the chart renders the annotation.
+    # REQUIRED OVERRIDE: <gkeIngress.name>-api.
+    backendConfig: example-agent-relay-api
   ingress:
     enabled: false
   networkPolicy:

@@ -26,9 +26,10 @@ gkeIngress:
   # match the child's service.port.
   backends:
     dashboard: { serviceName: "", servicePort: 8080 }
-    # timeoutSec (>= 60) goes into the api BackendConfig; the flows worker
-    # queue is a long-lived SSE stream. relay-cloud-api.service.annotations
-    # must carry cloud.google.com/backend-config: '{"default": "<name>-api"}'.
+    # timeoutSec (>= 60) goes into the api BackendConfig <name>-api (name
+    # truncated to 59 characters first); the flows worker queue is a
+    # long-lived SSE stream. Set relay-cloud-api.service.backendConfig to
+    # <name>-api; the chart renders the backend-config annotation from it.
     api: { serviceName: "", servicePort: 80, timeoutSec: 3600 }
     cast: { serviceName: "", servicePort: 8787 }
     history: { serviceName: "", servicePort: 8080 }

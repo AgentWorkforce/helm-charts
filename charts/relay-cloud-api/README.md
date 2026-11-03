@@ -33,12 +33,22 @@ whatever the API would refuse at startup:
 | `flows.workerRelaycastUrl` | `SELFHOST_FLOWS_WORKER_RELAYCAST_URL` | Optional Relaycast origin handed to workers. |
 | `flows.queuePingMs` | `SELFHOST_FLOWS_QUEUE_PING_MS` | SSE keepalive, 1000-120000 ms; keep it below proxy timeouts. |
 | `telemetry.level` | `SELFHOST_TELEMETRY_LEVEL` | `off` (default; the chart default is a pending decision), `errors` or `full`. |
-| `telemetry.transport`, `telemetry.endpoint`, `telemetry.installId`, `secretKeys.telemetryInstallKey` | `SELFHOST_TELEMETRY_TRANSPORT`, `_ENDPOINT`, `_INSTALL_ID`, `_INSTALL_KEY_FILE` | Required unless the level is `off` (the endpoint only for `https`). |
-| `telemetry.probes`, `telemetry.deployment` | `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT` | Extra health probes and deployment-shape keys. |
+| `telemetry.transport` | `SELFHOST_TELEMETRY_TRANSPORT` | Optional; `https` (default) or `file` (reports stay in the outbox for a signed export). |
+| `telemetry.installId`, `secretKeys.telemetryInstallKey` | `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE` | Both required unless the level is `off`. |
+| `telemetry.endpoint` | `SELFHOST_TELEMETRY_ENDPOINT` | Required only when the level is not `off` and the transport is `https`; optional with `file`. Must be an https URL. |
+| `telemetry.egressTo` | (NetworkPolicy) | Destinations of the telemetry egress rule; defaults to any public address. It must not be empty when the level is not `off`, the transport is `https`, `networkPolicy.enabled=true` and `networkPolicy.allowAllEgress=false`, and is unused otherwise. |
+| `telemetry.probes` | `SELFHOST_TELEMETRY_PROBES` | Up to 20 extra health probes; `name` is a string of lowercase letters, digits and dashes (quote numeric names). |
+| `telemetry.deployment` | `SELFHOST_TELEMETRY_DEPLOYMENT` | Extra flat deployment-shape keys (at most 32): string, number or boolean values only, version-like strings without `//`; the chart-rendered keys (`chart`, `chartVersion`, `appVersion`, `replicas`, `flowsStorage`, `networkPolicy`, `ingress`) cannot be overridden. |
 
-With `networkPolicy.allowAllEgress=false`, a TCP 443 egress rule to
-`telemetry.egressTo` is added only when the level is not `off` and the
-transport is `https`.
+Every non-empty `secretKeys.*` value must name a distinct Secret key; the
+chart refuses collisions, so the migration credential
+(`secretKeys.databaseMigrationsUrl`) is never mounted into the API pod.
+
+The chart adds a TCP 443 egress rule to `telemetry.egressTo` only when all of
+these hold: `networkPolicy.enabled=true`, `networkPolicy.allowAllEgress=false`,
+the level is not `off`, and the transport is `https`. With NetworkPolicy
+disabled, or with `allowAllEgress=true`, egress is not restricted and no rule
+is rendered. The migration Job's NetworkPolicy never gets this rule.
 
 The current runtime is deliberately one replica with `Recreate`: login/device
 rate limiting remains process-local. This is a GCP proof shape, not HA.

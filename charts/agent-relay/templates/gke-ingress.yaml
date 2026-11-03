@@ -65,17 +65,26 @@ explicit backends.<name>.serviceName must equal that derived name. */ -}}
 {{- /* The flows worker queue is a long-lived SSE stream through the api
 backend. GCE's default 30s backend timeout cuts every response at 30s, so
 the api Service gets a BackendConfig with a longer timeout, bound through the
-Service's cloud.google.com/backend-config annotation (set in the child's
-service.annotations; checked here). */ -}}
-{{- $apiBackendConfig := printf "%s-api" $gkeName | trunc 63 | trimSuffix "-" -}}
+Service's cloud.google.com/backend-config annotation. relay-cloud-api renders
+that annotation from relay-cloud-api.service.backendConfig; a parent chart
+cannot template a child's values, so the name is checked here against the one
+derived from gkeIngress.name. The name is truncated to 59 characters before
+-api is appended, so the <name>-api contract holds for long names. */ -}}
+{{- $apiBackendConfig := printf "%s-api" ($gkeName | trunc 59 | trimSuffix "-") -}}
 {{- $apiTimeout := int (dig "backends" "api" "timeoutSec" 0 $gke) -}}
 {{- if lt $apiTimeout 60 }}{{ fail "gkeIngress.backends.api.timeoutSec must be at least 60: the flows worker queue SSE stream needs a backend timeout above GCE's 30s default" }}{{ end -}}
 {{- if gt $apiTimeout 86400 }}{{ fail "gkeIngress.backends.api.timeoutSec must be at most 86400" }}{{ end -}}
 {{- $queuePing := dig "flows" "queuePingMs" "" $cloudApi | toString | default "20000" -}}
 {{- if and (regexMatch "^[0-9]+$" $queuePing) (ge (int64 $queuePing) (mul $apiTimeout 1000)) }}{{ fail "relay-cloud-api.flows.queuePingMs must be below gkeIngress.backends.api.timeoutSec" }}{{ end -}}
 {{- $wantBackendConfig := printf "{\"default\": \"%s\"}" $apiBackendConfig -}}
-{{- $haveBackendConfig := dig "service" "annotations" "cloud.google.com/backend-config" "" $cloudApi -}}
-{{- if ne (toString $haveBackendConfig | nospace) (nospace $wantBackendConfig) }}{{ fail (printf "gkeIngress requires relay-cloud-api.service.annotations.cloud.google.com/backend-config to be '%s' so the api backend gets the BackendConfig timeout" $wantBackendConfig) }}{{ end -}}
+{{- $haveBackendConfig := dig "service" "backendConfig" "" $cloudApi | toString -}}
+{{- if $haveBackendConfig }}
+{{- if ne $haveBackendConfig $apiBackendConfig }}{{ fail (printf "gkeIngress requires relay-cloud-api.service.backendConfig=%s (<gkeIngress.name>-api) so the api backend gets the BackendConfig timeout; got %s" $apiBackendConfig $haveBackendConfig) }}{{ end -}}
+{{- else }}
+{{- /* Legacy: a hand-written annotation is still accepted when it matches. */ -}}
+{{- $haveAnnotation := dig "service" "annotations" "cloud.google.com/backend-config" "" $cloudApi -}}
+{{- if ne (toString $haveAnnotation | nospace) (nospace $wantBackendConfig) }}{{ fail (printf "gkeIngress requires relay-cloud-api.service.backendConfig=%s (<gkeIngress.name>-api) so the api backend gets the BackendConfig timeout" $apiBackendConfig) }}{{ end -}}
+{{- end }}
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:

@@ -88,7 +88,7 @@ test "$(yq 'select(.kind == "Service" and .metadata.name == "agent-relay-gcp-pro
 # the flows worker queue SSE stream, bound through the api Service.
 test "$(yq 'select(.kind == "BackendConfig" and .metadata.name == "agent-relay-gcp-proof-api") | .spec.timeoutSec' <<<"$out")" -ge 60
 test "$(yq 'select(.kind == "Service" and .metadata.name == "relay-cloud-api") |
-  .metadata.annotations["cloud.google.com/backend-config"]' <<<"$out")" = '{"default": "agent-relay-gcp-proof-api"}'
+  .metadata.annotations["cloud.google.com/backend-config"]' <<<"$out")" = '{"default":"agent-relay-gcp-proof-api"}'
 expect_umbrella_failure() { # expected-error helm-args...
   local expected=$1 output; shift
   if output=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
@@ -100,8 +100,38 @@ expect_umbrella_failure() { # expected-error helm-args...
     || { echo "agent-relay: failed without expected error: $expected" >&2; echo "$output" >&2; exit 1; }
 }
 expect_umbrella_failure "gkeIngress.backends.api.timeoutSec must be at least 60" --set gkeIngress.backends.api.timeoutSec=30
-expect_umbrella_failure "cloud.google.com/backend-config to be" \
-  --set-json 'relay-cloud-api.service.annotations={"cloud.google.com/neg":"{\"ingress\": true}"}'
+expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api" \
+  --set relay-cloud-api.service.backendConfig=null
+expect_umbrella_failure "relay-cloud-api.service.backendConfig=agent-relay-gcp-proof-api" \
+  --set relay-cloud-api.service.backendConfig=other-api
+# Long names keep the -api suffix: truncate to 59, then append.
+long_name=$(printf 'n%.0s' $(seq 70))
+long_bc="$(printf 'n%.0s' $(seq 59))-api"
+long_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml \
+  --set "gkeIngress.name=$long_name" --set "relay-cloud-api.service.backendConfig=$long_bc")
+test "$(yq 'select(.kind == "BackendConfig") | .metadata.name' <<<"$long_out")" = "$long_bc" \
+  || { echo "long gkeIngress.name lost the -api BackendConfig suffix" >&2; exit 1; }
+# A customer name in the GCP profile renders once service.backendConfig follows it.
+helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
+  --set gkeIngress.name=acme-relay --set relay-cloud-api.service.backendConfig=acme-relay-api >/dev/null \
+  || { echo "values-gcp.yaml: customer gkeIngress.name with matching backendConfig failed to render" >&2; exit 1; }
+if acme_fail=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
+  --set gkeIngress.name=acme-relay 2>&1); then
+  echo "values-gcp.yaml: stale service.backendConfig rendered" >&2; exit 1
+fi
+grep -Fq 'relay-cloud-api.service.backendConfig=acme-relay-api' <<<"$acme_fail" \
+  || { echo "values-gcp.yaml: stale backendConfig failed without naming the expected value" >&2; echo "$acme_fail" >&2; exit 1; }
+expect_leaf_failure_early() { # expected helm-args...
+  local expected=$1 output; shift
+  if output=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml "$@" 2>&1); then
+    echo "relay-cloud-api: rendered despite expected failure: $expected" >&2; exit 1
+  fi
+  grep -Fq "$expected" <<<"$output" || { echo "relay-cloud-api: failed without expected error: $expected" >&2; echo "$output" >&2; exit 1; }
+}
+expect_leaf_failure_early "not both" --set service.backendConfig=x-api \
+  --set-json 'service.annotations={"cloud.google.com/backend-config":"{\"default\":\"x-api\"}"}'
+expect_leaf_failure_early "service.backendConfig must be a BackendConfig name" --set service.backendConfig=Bad_Name
 expect_umbrella_failure "flows.queuePingMs must be below gkeIngress.backends.api.timeoutSec" \
   --set gkeIngress.backends.api.timeoutSec=60 --set relay-cloud-api.flows.queuePingMs=60000
 # encryption.keyId is required (relaycontrol crash-loops without it).
@@ -236,26 +266,84 @@ test "$rotation_items" = "$(printf 'ci-0\n/var/run/agent-relay/secrets/old-key')
 
 # The telemetry egress rule (TCP 443) renders only when telemetry is sent:
 # level != off and transport=https, under restricted egress.
-telemetry_rules() { # helm-args...
-  helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
-    --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" "$@" |
-    yq 'select(.kind == "NetworkPolicy" and .metadata.name == "ci-relay-cloud-api") | .spec.egress[] | select(.ports[].port == 443) | .ports[].port' |
-    grep -c . || true
+# https_rules prints how many TCP 443 egress ports the named relay-cloud-api
+# NetworkPolicy carries. A failed helm render, a failed yq query or a missing
+# policy is an error, never a zero count; only grep's no-match (exit 1) is
+# tolerated.
+https_rules() { # policy-name helm-args...
+  local policy=$1 rendered np ports status=0; shift
+  rendered=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
+    --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" "$@") \
+    || { echo "relay-cloud-api: render failed for $policy ($*)" >&2; return 1; }
+  np=$(yq "select(.kind == \"NetworkPolicy\" and .metadata.name == \"$policy\")" <<<"$rendered") \
+    || { echo "relay-cloud-api: yq failed selecting NetworkPolicy $policy" >&2; return 1; }
+  test -n "$np" || { echo "relay-cloud-api: NetworkPolicy $policy was not rendered ($*)" >&2; return 1; }
+  ports=$(yq '.spec.egress[] | select(.ports[].port == 443) | .ports[].port' <<<"$np") \
+    || { echo "relay-cloud-api: yq failed reading $policy egress" >&2; return 1; }
+  grep -c . <<<"$ports" || status=$?
+  [ "$status" -le 1 ] || { echo "relay-cloud-api: grep failed counting $policy rules" >&2; return 1; }
+}
+telemetry_rules() { https_rules ci-relay-cloud-api "$@"; }
+expect_rules() { # expected message helm-args...
+  local expected=$1 message=$2 count; shift 2
+  count=$(telemetry_rules "$@") || exit 1
+  test "$count" = "$expected" || { echo "relay-cloud-api: $message (got $count)" >&2; exit 1; }
 }
 telemetry_on=(--set telemetry.installId=inst_abcdefgh12 --set secretKeys.telemetryInstallKey=telemetry-install-key
   --set telemetry.endpoint=https://agentrelay.com/api/v1/selfhost/telemetry)
-test "$(telemetry_rules)" = 0 || { echo "relay-cloud-api: telemetry egress rendered with level off" >&2; exit 1; }
-test "$(telemetry_rules --set telemetry.level=errors --set telemetry.transport=file "${telemetry_on[@]}")" = 0 \
-  || { echo "relay-cloud-api: telemetry egress rendered for transport=file" >&2; exit 1; }
-test "$(telemetry_rules --set telemetry.level=errors "${telemetry_on[@]}")" = 1 \
-  || { echo "relay-cloud-api: no telemetry egress rule with level errors over https" >&2; exit 1; }
-test "$(telemetry_rules --set telemetry.level=full "${telemetry_on[@]}")" = 1 \
-  || { echo "relay-cloud-api: no telemetry egress rule with level full over https" >&2; exit 1; }
-# The migration Job never sends telemetry.
-test "$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
-  --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" \
-  --set telemetry.level=full "${telemetry_on[@]}" |
-  yq 'select(.kind == "NetworkPolicy" and .metadata.name == "ci-relay-cloud-api-migration") | .spec.egress[] | select(.ports[].port == 443) | .ports[].port' | grep -c . || true)" = 0
+expect_rules 0 "telemetry egress rendered with level off"
+expect_rules 0 "telemetry egress rendered for transport=file" \
+  --set telemetry.level=errors --set telemetry.transport=file "${telemetry_on[@]}"
+expect_rules 1 "no telemetry egress rule with level errors over https" --set telemetry.level=errors "${telemetry_on[@]}"
+expect_rules 1 "no telemetry egress rule with level full over https" --set telemetry.level=full "${telemetry_on[@]}"
+# The migration Job never sends telemetry: its policy must exist and carry no
+# TCP 443 rule.
+migration_rules=$(https_rules ci-relay-cloud-api-migration --set telemetry.level=full "${telemetry_on[@]}") || exit 1
+test "$migration_rules" = 0 \
+  || { echo "relay-cloud-api: migration NetworkPolicy allows TCP 443 ($migration_rules rules)" >&2; exit 1; }
+# The helper itself must fail closed: a failing render is an error, not 0.
+if https_rules ci-relay-cloud-api --set telemetry.level=verbose >/dev/null 2>&1; then
+  echo "relay-cloud-api: https_rules treated a failed render as a count" >&2; exit 1
+fi
+if https_rules ci-relay-cloud-api-absent >/dev/null 2>&1; then
+  echo "relay-cloud-api: https_rules treated a missing NetworkPolicy as a count" >&2; exit 1
+fi
+
+# Secret keys: every secretKeys value must be distinct, so neither an optional
+# runtime key nor a required one can project the migration credential into the
+# API pod.
+for key in internalToken previousEncryptionKey telemetryInstallKey databaseUrl relayauthApiKey; do
+  expect_leaf_failure relay-cloud-api "both name Secret key \"database-migrations-url\"" \
+    --set "secretKeys.$key=database-migrations-url"
+done
+expect_leaf_failure relay-cloud-api "both name Secret key \"selfhost-bootstrap-token\"" \
+  --set secretKeys.internalToken=selfhost-bootstrap-token
+# Telemetry value shapes.
+expect_leaf_failure relay-cloud-api "telemetry.deployment.cluster must be a string, number or boolean" \
+  --set-json 'telemetry.deployment={"cluster":{"name":"x"}}'
+expect_leaf_failure relay-cloud-api "telemetry.deployment.endpoint must be a short version-like string" \
+  --set-json 'telemetry.deployment={"endpoint":"https://internal.example.org"}'
+expect_leaf_failure relay-cloud-api "telemetry.deployment.chart is rendered by the chart" \
+  --set-json 'telemetry.deployment={"chart":"other"}'
+expect_leaf_failure relay-cloud-api "telemetry.deployment key" --set-json 'telemetry.deployment={"1bad":"x"}'
+expect_leaf_failure relay-cloud-api "telemetry.probes[].name must be a string" \
+  --set-json 'telemetry.probes=[{"name":123,"url":"https://status.example.org/"}]'
+expect_leaf_failure relay-cloud-api "at most 63 characters unless it is a dotted name" \
+  --set flows.storage=gcs --set "flows.gcsBucket=$(printf 'a%.0s' $(seq 64))"
+expect_leaf_failure relay-cloud-api "dotted components must each be 1-63 characters" \
+  --set flows.storage=gcs --set "flows.gcsBucket=$(printf 'a%.0s' $(seq 64)).example"
+expect_leaf_failure relay-cloud-api "dotted components must each be 1-63 characters" \
+  --set flows.storage=gcs --set flows.gcsBucket=bad..bucket
+shape=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
+  "${telemetry_on[@]}" --set telemetry.level=errors \
+  --set-json 'telemetry.deployment={"region":"us-central1","nodes":3,"gke":true}' \
+  --set-json 'telemetry.probes=[{"name":"status-1","url":"https://status.example.org/"}]' |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "SELFHOST_TELEMETRY_DEPLOYMENT" or .name == "SELFHOST_TELEMETRY_PROBES") | .value')
+grep -q '"region":"us-central1"' <<<"$shape" && grep -q '"nodes":3' <<<"$shape" && grep -qx 'status-1=https://status.example.org/' <<<"$shape" \
+  || { echo "relay-cloud-api: telemetry deployment/probes not rendered ($shape)" >&2; exit 1; }
+helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/default-values.yaml \
+  --set flows.storage=gcs --set flows.gcsBucket=flows.agent-relay.example.com >/dev/null \
+  || { echo "relay-cloud-api: valid dotted GCS bucket rejected" >&2; exit 1; }
 
 expect_leaf_failure relay-cloud-api "ingress.hosts must include the publicUrl host" \
   --set-json 'ingress.hosts=["other.gcp-proof.agentrelay.com"]'
