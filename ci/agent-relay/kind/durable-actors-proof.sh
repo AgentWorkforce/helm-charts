@@ -89,6 +89,9 @@ RELAYFILE_JWT=$(rand 32)
 "${K[@]}" rollout status deploy/minio --timeout=180s
 
 log "helm install (umbrella, kind values)"
+# Helm does not recursively vendor file:// dependency children.
+helm dependency build charts/96bulls >/dev/null
+helm dependency build charts/agent-relay >/dev/null
 helm --kube-context "$CTX" upgrade --install agent-relay charts/agent-relay -n "$NS" \
   -f ci/agent-relay/kind-durable-actors-values.yaml --wait --timeout 10m
 "${K[@]}" get pods -o wide
