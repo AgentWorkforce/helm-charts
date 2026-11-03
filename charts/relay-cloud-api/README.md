@@ -18,6 +18,28 @@ runs `node node_modules/@cloud/selfhost-api/dist/server.js`; migrations run
 their `*PublicUrl` counterparts must be public HTTPS origins and are returned
 to clients or used as the externally stable RelayHistory assertion audience.
 
+## relaycontrol runtime settings
+
+The chart renders the relaycontrol env contract and refuses at render time
+whatever the API would refuse at startup:
+
+| Value | Env | Notes |
+| --- | --- | --- |
+| `encryption.keyId` (required) | `SELFHOST_ENCRYPTION_KEY_ID` | Non-secret id of `secretKeys.encryptionKey`, 1-64 URL-safe characters. |
+| `encryption.previousKeyId` + `secretKeys.previousEncryptionKey` | `SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID`, `SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE` | Key rotation; both or neither, and the id must differ from `keyId`. |
+| `secretKeys.internalToken` | `SELFHOST_INTERNAL_TOKEN_FILE` | Optional service bearer for `/internal/v1` (flows env delivery, telemetry issue reports). Never expose `/internal` publicly; the agent-relay GKE ingress denies it at the edge. |
+| `dashboardUrl` | `SELFHOST_DASHBOARD_URL` | Where OAuth callback pages and flow `runUrl`s point. Defaults to `publicUrl` + `/` in the API. |
+| `flows.storage`, `flows.gcsBucket`, `flows.gcsPrefix` | `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX` | `postgres` (default) or `gcs` (Workload Identity; bucket required). |
+| `flows.workerRelaycastUrl` | `SELFHOST_FLOWS_WORKER_RELAYCAST_URL` | Optional Relaycast origin handed to workers. |
+| `flows.queuePingMs` | `SELFHOST_FLOWS_QUEUE_PING_MS` | SSE keepalive, 1000-120000 ms; keep it below proxy timeouts. |
+| `telemetry.level` | `SELFHOST_TELEMETRY_LEVEL` | `off` (default; the chart default is a pending decision), `errors` or `full`. |
+| `telemetry.transport`, `telemetry.endpoint`, `telemetry.installId`, `secretKeys.telemetryInstallKey` | `SELFHOST_TELEMETRY_TRANSPORT`, `_ENDPOINT`, `_INSTALL_ID`, `_INSTALL_KEY_FILE` | Required unless the level is `off` (the endpoint only for `https`). |
+| `telemetry.probes`, `telemetry.deployment` | `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT` | Extra health probes and deployment-shape keys. |
+
+With `networkPolicy.allowAllEgress=false`, a TCP 443 egress rule to
+`telemetry.egressTo` is added only when the level is not `off` and the
+transport is `https`.
+
 The current runtime is deliberately one replica with `Recreate`: login/device
 rate limiting remains process-local. This is a GCP proof shape, not HA.
 

@@ -43,6 +43,7 @@ spec:
             - { name: RELAYCAST_PUBLIC_URL, value: {{ .Values.services.relaycastPublicUrl | quote }} }
             - { name: RELAYHISTORY_URL, value: {{ .Values.services.relayhistoryUrl | quote }} }
             - { name: RELAYHISTORY_PUBLIC_URL, value: {{ .Values.services.relayhistoryPublicUrl | quote }} }
+            {{- include "relay-cloud-api.runtimeEnv" . | nindent 12 }}
             {{- include "relay-cloud-api.secretEnv" . | nindent 12 }}
           volumeMounts:
             - { name: secrets, mountPath: /var/run/agent-relay/secrets, readOnly: true }
@@ -60,10 +61,7 @@ spec:
             secretName: {{ .Values.existingSecret }}
             defaultMode: 0440
             items:
-              - { key: {{ .Values.secretKeys.databaseUrl | quote }}, path: {{ .Values.secretKeys.databaseUrl | quote }} }
-              - { key: {{ .Values.secretKeys.relayauthApiKey | quote }}, path: {{ .Values.secretKeys.relayauthApiKey | quote }} }
-              - { key: {{ .Values.secretKeys.bootstrapToken | quote }}, path: {{ .Values.secretKeys.bootstrapToken | quote }} }
-              - { key: {{ .Values.secretKeys.encryptionKey | quote }}, path: {{ .Values.secretKeys.encryptionKey | quote }} }
+              {{- include "relay-cloud-api.secretItems" . | nindent 14 }}
         - name: tmp
           emptyDir: { sizeLimit: 64Mi }
       {{- with .Values.nodeSelector }}

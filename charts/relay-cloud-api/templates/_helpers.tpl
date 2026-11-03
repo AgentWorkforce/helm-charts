@@ -34,7 +34,9 @@ app.kubernetes.io/component: api
 {{- $image := include "relay-cloud-api.image" . -}}
 {{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the self-host API pilot has process-local login/device rate limits and is not HA" }}{{ end -}}
 {{- if not .Values.existingSecret }}{{ fail "existingSecret is required; inline credentials are not supported" }}{{ end -}}
-{{- range $name, $key := .Values.secretKeys }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString $key)) }}{{ fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}{{ end }}{{ end -}}
+{{- $optionalSecretKeys := list "previousEncryptionKey" "internalToken" "telemetryInstallKey" -}}
+{{- range $name, $key := .Values.secretKeys }}{{ if and (has $name $optionalSecretKeys) (empty $key) }}{{ continue }}{{ end }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString $key)) }}{{ fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}{{ end }}{{ end -}}
+{{- include "relay-cloud-api.validateRuntime" . -}}
 {{- if and .Values.migrations.enabled (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name when migrations are enabled" }}{{ end -}}
 {{- if not (regexMatch "^https://[^/?#]+$" .Values.publicUrl) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $url := dict "relayauthUrl" .Values.services.relayauthUrl "relaycastUrl" .Values.services.relaycastUrl "relayhistoryUrl" .Values.services.relayhistoryUrl }}{{ if not (regexMatch "^https?://[^/?#]+$" $url) }}{{ fail (printf "services.%s must be an HTTP(S) origin with no path" $name) }}{{ end }}{{ end -}}
@@ -50,11 +52,122 @@ app.kubernetes.io/component: api
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP" }}{{ end -}}
 {{- if .Values.ingress.enabled }}{{ if empty .Values.ingress.hosts }}{{ fail "ingress.enabled=true requires at least one host" }}{{ end }}{{ if not (has (urlParse .Values.publicUrl).hostname .Values.ingress.hosts) }}{{ fail "ingress.hosts must include the publicUrl host" }}{{ end }}{{ if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end }}{{ if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end }}{{ end -}}
 {{- end -}}
+{{- /* Secret files mounted into the API pod: env name -> Secret data key.
+Optional keys are left out while empty. */ -}}
+{{- define "relay-cloud-api.secretFiles" -}}
+{{- $files := dict "DATABASE_URL_FILE" .Values.secretKeys.databaseUrl "RELAYAUTH_API_KEY_FILE" .Values.secretKeys.relayauthApiKey "SELFHOST_BOOTSTRAP_TOKEN_FILE" .Values.secretKeys.bootstrapToken "SELFHOST_ENCRYPTION_KEY_FILE" .Values.secretKeys.encryptionKey -}}
+{{- with .Values.secretKeys.previousEncryptionKey }}{{ $_ := set $files "SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE" . }}{{ end -}}
+{{- with .Values.secretKeys.internalToken }}{{ $_ := set $files "SELFHOST_INTERNAL_TOKEN_FILE" . }}{{ end -}}
+{{- if and (ne (include "relay-cloud-api.telemetryLevel" .) "off") .Values.secretKeys.telemetryInstallKey }}{{ $_ := set $files "SELFHOST_TELEMETRY_INSTALL_KEY_FILE" .Values.secretKeys.telemetryInstallKey }}{{ end -}}
+{{- toJson $files -}}
+{{- end -}}
 {{- define "relay-cloud-api.secretEnv" -}}
-{{- range $env, $key := dict "DATABASE_URL_FILE" .Values.secretKeys.databaseUrl "RELAYAUTH_API_KEY_FILE" .Values.secretKeys.relayauthApiKey "SELFHOST_BOOTSTRAP_TOKEN_FILE" .Values.secretKeys.bootstrapToken "SELFHOST_ENCRYPTION_KEY_FILE" .Values.secretKeys.encryptionKey }}
+{{- range $env, $key := include "relay-cloud-api.secretFiles" . | fromJson }}
 - name: {{ $env }}
   value: /var/run/agent-relay/secrets/{{ $key }}
 {{- end }}
+{{- end -}}
+{{- define "relay-cloud-api.secretItems" -}}
+{{- range $key := include "relay-cloud-api.secretFiles" . | fromJson | values | sortAlpha | uniq }}
+- { key: {{ $key | quote }}, path: {{ $key | quote }} }
+{{- end }}
+{{- end -}}
+{{- /* YAML 1.1 reads a bare off as false; treat it as "off". */ -}}
+{{- define "relay-cloud-api.telemetryLevel" -}}
+{{- $level := .Values.telemetry.level -}}
+{{- if kindIs "bool" $level }}{{ ternary "on" "off" $level }}{{ else }}{{ $level | default "off" | toString | lower }}{{ end -}}
+{{- end -}}
+{{- /* True (non-empty) when the API sends telemetry over the network. */ -}}
+{{- define "relay-cloud-api.telemetryEgress" -}}
+{{- if and (ne (include "relay-cloud-api.telemetryLevel" .) "off") (eq (.Values.telemetry.transport | default "https") "https") }}true{{ end -}}
+{{- end -}}
+{{- /* Non-secret deployment shape for SELFHOST_TELEMETRY_DEPLOYMENT; the API
+keeps only short keys, numbers, booleans and version-like strings. */ -}}
+{{- define "relay-cloud-api.telemetryDeployment" -}}
+{{- $shape := dict "chart" .Chart.Name "chartVersion" .Chart.Version "appVersion" .Chart.AppVersion "replicas" 1 "flowsStorage" (.Values.flows.storage | default "postgres") "networkPolicy" (.Values.networkPolicy.enabled | default false) "ingress" (.Values.ingress.enabled | default false) -}}
+{{- toJson (mergeOverwrite $shape (deepCopy (.Values.telemetry.deployment | default dict))) -}}
+{{- end -}}
+{{- define "relay-cloud-api.runtimeEnv" -}}
+- { name: SELFHOST_ENCRYPTION_KEY_ID, value: {{ .Values.encryption.keyId | quote }} }
+{{- with .Values.encryption.previousKeyId }}
+- { name: SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID, value: {{ . | quote }} }
+{{- end }}
+{{- with .Values.dashboardUrl }}
+- { name: SELFHOST_DASHBOARD_URL, value: {{ . | quote }} }
+{{- end }}
+- { name: SELFHOST_FLOWS_STORAGE, value: {{ .Values.flows.storage | default "postgres" | quote }} }
+{{- if eq (.Values.flows.storage | default "postgres") "gcs" }}
+- { name: SELFHOST_FLOWS_GCS_BUCKET, value: {{ .Values.flows.gcsBucket | quote }} }
+{{- with .Values.flows.gcsPrefix }}
+- { name: SELFHOST_FLOWS_GCS_PREFIX, value: {{ . | quote }} }
+{{- end }}
+{{- end }}
+{{- with .Values.flows.workerRelaycastUrl }}
+- { name: SELFHOST_FLOWS_WORKER_RELAYCAST_URL, value: {{ . | quote }} }
+{{- end }}
+{{- if not (kindIs "invalid" .Values.flows.queuePingMs) }}{{ if ne (toString .Values.flows.queuePingMs) "" }}
+- { name: SELFHOST_FLOWS_QUEUE_PING_MS, value: {{ int64 .Values.flows.queuePingMs | toString | quote }} }
+{{- end }}{{ end }}
+{{- $level := include "relay-cloud-api.telemetryLevel" . }}
+- { name: SELFHOST_TELEMETRY_LEVEL, value: {{ $level | quote }} }
+- { name: SELFHOST_TELEMETRY_TRANSPORT, value: {{ .Values.telemetry.transport | default "https" | quote }} }
+{{- if ne $level "off" }}
+{{- with .Values.telemetry.endpoint }}
+- { name: SELFHOST_TELEMETRY_ENDPOINT, value: {{ . | quote }} }
+{{- end }}
+- { name: SELFHOST_TELEMETRY_INSTALL_ID, value: {{ .Values.telemetry.installId | quote }} }
+{{- with .Values.telemetry.probes }}
+- name: SELFHOST_TELEMETRY_PROBES
+  value: {{ $probes := list }}{{ range . }}{{ $probes = append $probes (printf "%s=%s" .name .url) }}{{ end }}{{ join "," $probes | quote }}
+{{- end }}
+- name: SELFHOST_TELEMETRY_DEPLOYMENT
+  value: {{ include "relay-cloud-api.telemetryDeployment" . | quote }}
+{{- end }}
+{{- end -}}
+{{- /* Fail-closed checks for the relaycontrol runtime contract (src/config.ts,
+src/flows/config.ts, src/telemetry/config.ts): everything the API would refuse
+at startup is refused at render time instead of crash-looping. */ -}}
+{{- define "relay-cloud-api.validateRuntime" -}}
+{{- $idPattern := "^[A-Za-z0-9_-]{1,64}$" -}}
+{{- if not .Values.encryption.keyId }}{{ fail "encryption.keyId is required (SELFHOST_ENCRYPTION_KEY_ID): the non-secret id of secretKeys.encryptionKey" }}{{ end -}}
+{{- if not (regexMatch $idPattern (toString .Values.encryption.keyId)) }}{{ fail "encryption.keyId must contain 1-64 URL-safe characters (A-Z a-z 0-9 _ -)" }}{{ end -}}
+{{- if ne (empty .Values.encryption.previousKeyId) (empty .Values.secretKeys.previousEncryptionKey) }}{{ fail "encryption.previousKeyId and secretKeys.previousEncryptionKey must be set together (both or neither)" }}{{ end -}}
+{{- with .Values.encryption.previousKeyId }}
+{{- if not (regexMatch $idPattern (toString .)) }}{{ fail "encryption.previousKeyId must contain 1-64 URL-safe characters (A-Z a-z 0-9 _ -)" }}{{ end -}}
+{{- if eq (toString .) (toString $.Values.encryption.keyId) }}{{ fail "encryption.previousKeyId must differ from encryption.keyId" }}{{ end -}}
+{{- if eq $.Values.secretKeys.previousEncryptionKey $.Values.secretKeys.encryptionKey }}{{ fail "secretKeys.previousEncryptionKey must name a different Secret key than secretKeys.encryptionKey" }}{{ end -}}
+{{- end -}}
+{{- with .Values.dashboardUrl }}{{ if not (regexMatch "^https?://[^/?#@\\s]+(/[^?#\\s]*)?$" .) }}{{ fail "dashboardUrl must be an absolute http(s) URL without credentials, query or fragment" }}{{ end }}{{ end -}}
+{{- $storage := .Values.flows.storage | default "postgres" -}}
+{{- if not (has $storage (list "postgres" "gcs")) }}{{ fail "flows.storage must be postgres or gcs" }}{{ end -}}
+{{- if and (eq $storage "gcs") (not .Values.flows.gcsBucket) }}{{ fail "flows.gcsBucket is required when flows.storage=gcs" }}{{ end -}}
+{{- if and (ne $storage "gcs") (or .Values.flows.gcsBucket .Values.flows.gcsPrefix) }}{{ fail "flows.gcsBucket and flows.gcsPrefix apply only to flows.storage=gcs" }}{{ end -}}
+{{- with .Values.flows.gcsBucket }}{{ if not (regexMatch "^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$" .) }}{{ fail "flows.gcsBucket must be a GCS bucket name" }}{{ end }}{{ end -}}
+{{- with .Values.flows.workerRelaycastUrl }}{{ if not (regexMatch "^https?://[^/?#@\\s]+(/[^?#\\s]*)?$" .) }}{{ fail "flows.workerRelaycastUrl must be an absolute http(s) URL without credentials, query or fragment" }}{{ end }}{{ end -}}
+{{- if not (kindIs "invalid" .Values.flows.queuePingMs) }}{{ if ne (toString .Values.flows.queuePingMs) "" }}
+{{- if not (regexMatch "^[0-9]+$" (toString .Values.flows.queuePingMs)) }}{{ fail "flows.queuePingMs must be an integer from 1000 to 120000" }}{{ end -}}
+{{- if or (lt (int64 .Values.flows.queuePingMs) 1000) (gt (int64 .Values.flows.queuePingMs) 120000) }}{{ fail "flows.queuePingMs must be an integer from 1000 to 120000" }}{{ end -}}
+{{- end }}{{ end -}}
+{{- $level := include "relay-cloud-api.telemetryLevel" . -}}
+{{- if not (has $level (list "off" "errors" "full")) }}{{ fail "telemetry.level must be off, errors, or full" }}{{ end -}}
+{{- $transport := .Values.telemetry.transport | default "https" -}}
+{{- if not (has $transport (list "https" "file")) }}{{ fail "telemetry.transport must be https or file" }}{{ end -}}
+{{- with .Values.telemetry.endpoint }}{{ if not (regexMatch "^https://[^/?#@\\s]+(/[^?#\\s]*)?$" .) }}{{ fail "telemetry.endpoint must be an https URL without credentials, query or fragment" }}{{ end }}{{ end -}}
+{{- with .Values.telemetry.installId }}{{ if not (regexMatch "^inst_[A-Za-z0-9]{8,64}$" .) }}{{ fail "telemetry.installId must look like inst_<8-64 alphanumerics>" }}{{ end }}{{ end -}}
+{{- if ne $level "off" }}
+{{- if not .Values.telemetry.installId }}{{ fail "telemetry.installId is required unless telemetry.level is off" }}{{ end -}}
+{{- if not .Values.secretKeys.telemetryInstallKey }}{{ fail "secretKeys.telemetryInstallKey is required unless telemetry.level is off" }}{{ end -}}
+{{- if and (eq $transport "https") (not .Values.telemetry.endpoint) }}{{ fail "telemetry.endpoint is required for telemetry.transport=https unless telemetry.level is off" }}{{ end -}}
+{{- if and (eq $transport "https") .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.telemetry.egressTo) }}{{ fail "telemetry.egressTo must not be empty: restricted egress would block the telemetry endpoint" }}{{ end -}}
+{{- end -}}
+{{- $probeNames := list -}}
+{{- range .Values.telemetry.probes }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{0,39}$" (toString .name)) }}{{ fail "telemetry.probes[].name must be lowercase letters, digits and dashes (max 40)" }}{{ end -}}
+{{- if has .name $probeNames }}{{ fail (printf "telemetry.probes has a duplicate entry for %s" .name) }}{{ end -}}
+{{- $probeNames = append $probeNames .name -}}
+{{- if not (regexMatch "^https?://[^/?#@,\\s]+(/[^#,\\s]*)?$" (toString .url)) }}{{ fail (printf "telemetry.probes %s url must be an http(s) URL without credentials, fragment or commas" .name) }}{{ end -}}
+{{- end -}}
+{{- if gt (len .Values.telemetry.probes) 20 }}{{ fail "telemetry.probes allows at most 20 entries" }}{{ end -}}
 {{- end -}}
 {{- define "relay-cloud-api.migrationPodTemplate" -}}
 metadata:
