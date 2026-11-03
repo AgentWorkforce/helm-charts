@@ -97,7 +97,6 @@ case " $* " in
 esac
 case " $* " in
   *" get networkpolicy "*) printf 'networkpolicy.networking.k8s.io/default-deny\n' ;;
-  *" get backendconfig.cloud.google.com "*) printf 'backendconfig.cloud.google.com/service\n' ;;
 esac
 exit 0
 MOCK
@@ -147,6 +146,27 @@ if CONFORMANCE_BASE_URL=http://conformance.example.test \
 fi
 pass "reference HTTP adapter validates TLS and success envelopes"
 
+# GKE Ingress as charts/agent-relay renders it: ManagedCertificate and
+# FrontendConfig annotations, backend health reported by the GCE controller.
+write_gke_fixtures() {
+  local namespace="$1"
+  local backend_state="${2:-HEALTHY}"
+  local cert_state="${3:-Active}"
+  jq -n --arg state "${backend_state}" '{items: [{
+    metadata: {name: "agent-relay", annotations: {
+      "kubernetes.io/ingress.class": "gce",
+      "networking.gke.io/managed-certificates": "agent-relay-cert",
+      "networking.gke.io/v1beta1.FrontendConfig": "agent-relay-frontend",
+      "ingress.kubernetes.io/backends": ({"k8s1-api": "HEALTHY", "k8s1-cast": $state} | tojson)
+    }}}]}' >"${fixtures}/${namespace}.ingresses.networking.k8s.io.json"
+  jq -n --arg state "${cert_state}" '{items: [{
+    metadata: {name: "agent-relay-cert"},
+    status: {certificateStatus: $state}}]}' \
+    >"${fixtures}/${namespace}.managedcertificates.networking.gke.io.json"
+}
+write_gke_fixtures production
+write_gke_fixtures aw-conformance-test
+
 audit_evidence="${tmp_root}/audit-evidence"
 "${TEST_BASH}" "${HARNESS}" \
   --chart ./umbrella \
@@ -163,6 +183,18 @@ jq -e '.scenarios | length == 19' "${audit_evidence}/summary.json" >/dev/null
 jq -e '.scenarios[] | select(.scenario == "fresh-install" and .status == "PASS")' \
   "${audit_evidence}/summary.json" >/dev/null
 pass "audit mode is dry-run/read-only and emits valid evidence"
+
+for broken in "UNHEALTHY Active" "HEALTHY Provisioning"; do
+  read -r backend_state cert_state <<<"${broken}"
+  write_gke_fixtures gke-broken "${backend_state}" "${cert_state}"
+  "${TEST_BASH}" "${HARNESS}" --target-namespace gke-broken \
+    --evidence-dir "${tmp_root}/gke-${backend_state}-${cert_state}" >/dev/null 2>&1 || true
+  jq -e '.scenarios[] | select(.scenario == "networkpolicy-gke-backend-health") | .status == "FAIL"' \
+    "${tmp_root}/gke-${backend_state}-${cert_state}/summary.json" >/dev/null ||
+    fail "GKE health passed with backend=${backend_state} certificate=${cert_state}"
+done
+assert_not_contains "${command_log}" 'backendconfig'
+pass "GKE health checks Ingress backends and ManagedCertificate, not BackendConfig"
 
 : >"${command_log}"
 if "${TEST_BASH}" "${HARNESS}" --apply --approval NOPE --chart ./umbrella \

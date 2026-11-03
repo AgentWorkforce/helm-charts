@@ -599,11 +599,61 @@ scenario_restart_outbox() {
   fi
 }
 
+# Print a JSON summary of GKE Ingress backend health as the charts deploy it:
+# a GCE Ingress with a ManagedCertificate and FrontendConfig, health checks
+# derived from readiness probes (no BackendConfig or HealthCheckPolicy).
+gke_backend_health_summary() {
+  local namespace="$1"
+  local ingresses_json="" certificates_json=""
+  ingresses_json="$(safe_kubectl get ingresses.networking.k8s.io \
+    --namespace "${namespace}" --output json 2>/dev/null)" || return 1
+  certificates_json="$(safe_kubectl get managedcertificates.networking.gke.io \
+    --namespace "${namespace}" --output json 2>/dev/null)" || certificates_json='{"items":[]}'
+  jq -cen --argjson ingresses "${ingresses_json}" --argjson certificates "${certificates_json}" '
+    def annotations: (.metadata.annotations // {});
+    [ ($ingresses.items // [])[]
+      | select(
+          (annotations["kubernetes.io/ingress.class"] // "") == "gce"
+          or (.spec.ingressClassName // "") == "gce"
+          or (annotations | has("networking.gke.io/managed-certificates"))
+        )
+    ] as $gke
+    | [ $gke[]
+        | (annotations["ingress.kubernetes.io/backends"] // "{}")
+        | (try fromjson catch {})
+        | to_entries[]
+      ] as $backends
+    | [ $gke[]
+        | (annotations["networking.gke.io/managed-certificates"] // "")
+        | split(",")[]
+        | gsub("^\\s+|\\s+$"; "")
+        | select(length > 0)
+      ] | unique as $cert_names
+    | ($certificates.items // []) as $certs
+    | {
+        gke_ingresses: ($gke | length),
+        ingresses_without_backend_status: [
+          $gke[] | select(((annotations["ingress.kubernetes.io/backends"] // "{}")
+            | (try fromjson catch {}) | length) == 0)
+        ] | length,
+        backends: ($backends | length),
+        unhealthy_backends: [$backends[] | select(.value != "HEALTHY")] | length,
+        managed_certificates: ($cert_names | length),
+        inactive_managed_certificates: [
+          $cert_names[] as $name
+          | select(([ $certs[] | select(.metadata.name == $name
+              and (.status.certificateStatus // "") == "Active") ] | length) == 0)
+        ] | length
+      }
+  '
+}
+
 scenario_networking() {
   local scenario="networkpolicy-gke-backend-health"
   local network_policy=false
   local backend_health=false
   local resource_names=""
+  local health_summary='{}'
 
   if [[ "${MODE}" == "apply" ]]; then
     require_isolated_release "${scenario}" || return
@@ -614,32 +664,38 @@ scenario_networking() {
     [[ -n "${resource_names}" ]]; then
     network_policy=true
   fi
-  resource_names=""
-  if resource_names="$(safe_kubectl get backendconfig.cloud.google.com \
-    --namespace "${ACTIVE_NAMESPACE}" --output=name 2>/dev/null)" &&
-    [[ -n "${resource_names}" ]]; then
+  if health_summary="$(gke_backend_health_summary "${ACTIVE_NAMESPACE}")" &&
+    jq -e '
+      .gke_ingresses > 0
+      and .ingresses_without_backend_status == 0
+      and .backends > 0
+      and .unhealthy_backends == 0
+      and .managed_certificates > 0
+      and .inactive_managed_certificates == 0
+    ' >/dev/null <<<"${health_summary}"; then
     backend_health=true
   else
-    resource_names=""
-    if resource_names="$(safe_kubectl get healthcheckpolicy.networking.gke.io \
-      --namespace "${ACTIVE_NAMESPACE}" --output=name 2>/dev/null)" &&
-      [[ -n "${resource_names}" ]]; then
-      backend_health=true
-    fi
+    [[ -n "${health_summary}" ]] || health_summary='{}'
   fi
+  health_summary="$(jq -c --argjson network_policy "${network_policy}" \
+    '. + {network_policy: $network_policy}' <<<"${health_summary}" 2>/dev/null ||
+    printf '{}')"
 
   if [[ "${network_policy}" == true && "${backend_health}" == true ]]; then
     if [[ "${MODE}" == "apply" && -n "${CONFORMANCE_ADAPTER}" ]]; then
       if run_adapter network-policy-probe; then
-        emit_evidence "${scenario}" "PASS" "policy, GKE health resource, and traffic probe passed"
+        emit_evidence "${scenario}" "PASS" "policy, healthy GKE backends, active certificate, and traffic probe passed" \
+          "${health_summary}"
       else
-        emit_evidence "${scenario}" "FAIL" "network policy traffic probe failed"
+        emit_evidence "${scenario}" "FAIL" "network policy traffic probe failed" "${health_summary}"
       fi
     else
-      emit_evidence "${scenario}" "PASS" "NetworkPolicy and GKE backend health resources are readable"
+      emit_evidence "${scenario}" "PASS" "NetworkPolicy present, GKE Ingress backends HEALTHY, ManagedCertificate Active" \
+        "${health_summary}"
     fi
   else
-    emit_evidence "${scenario}" "FAIL" "required NetworkPolicy or GKE backend health resource is absent"
+    emit_evidence "${scenario}" "FAIL" "NetworkPolicy missing, or GKE Ingress backends or ManagedCertificate not healthy" \
+      "${health_summary}"
   fi
 }
 
