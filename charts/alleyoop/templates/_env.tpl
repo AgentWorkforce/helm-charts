@@ -18,6 +18,35 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- if and .Values.auth.jwksUrl .Values.auth.localJwks }}{{ fail "alleyoop: set auth.jwksUrl OR auth.localJwks, not both" }}{{ end -}}
 {{- if not (or .Values.auth.jwksUrl .Values.auth.localJwks) }}{{ fail "alleyoop: set auth.jwksUrl (RelayAuth JWKS) or auth.localJwks=true (JWKS JSON from existingSecret, local/kind only)" }}{{ end -}}
 {{- if and .Values.auth.localJwks (not .Values.existingSecret) }}{{ fail "alleyoop: existingSecret is required when auth.localJwks=true" }}{{ end -}}
+{{- include "alleyoop.validateLocker" . }}
+{{- end }}
+
+{{/*
+Locker provider validation; runs last so the other value checks report first.
+*/}}
+{{- define "alleyoop.validateLocker" -}}
+{{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
+{{- /* Locker provider. The services image selects S3 (unset LOCKER_PROVIDER) or
+native GCS (LOCKER_PROVIDER=gcs, Workload Identity through the GKE metadata
+server). It refuses HMAC keys on GCS and refuses the S3 client against a
+Google Cloud Storage endpoint, so both shapes fail here at render time. */ -}}
+{{- $provider := .Values.locker.provider | default "s3" -}}
+{{- if not (has $provider (list "s3" "gcs")) }}{{ fail "alleyoop: locker.provider must be s3 or gcs" }}{{ end -}}
+{{- $gcs := eq $provider "gcs" -}}
+{{- $extraEnvNames := list -}}
+{{- range .Values.extraEnv }}{{ $extraEnvNames = append $extraEnvNames (.name | default "") }}{{ end -}}
+{{- $endpointHost := "" -}}
+{{- if .Values.locker.endpoint }}{{ $endpointHost = (urlParse .Values.locker.endpoint).hostname | lower }}{{ end -}}
+{{- if and (not $gcs) (or (eq $endpointHost "storage.googleapis.com") (hasSuffix ".storage.googleapis.com" $endpointHost) (eq $endpointHost "storage.google.com")) }}{{ fail "alleyoop: locker.endpoint is a Google Cloud Storage endpoint: set locker.provider=gcs (the services refuse GCS through the S3 client and HMAC keys)" }}{{ end -}}
+{{- if $gcs }}
+{{- if ne $credentialsMode "podIdentity" }}{{ fail "alleyoop: locker.provider=gcs requires locker.credentials.mode=podIdentity (GKE Workload Identity; the services refuse HMAC keys on GCS)" }}{{ end -}}
+{{- if not (has (.Values.locker.endpoint | default "") (list "" "https://storage.googleapis.com" "https://storage.googleapis.com/")) }}{{ fail "alleyoop: locker.provider=gcs requires locker.endpoint to be empty or https://storage.googleapis.com" }}{{ end -}}
+{{- if not .Values.locker.bucket }}{{ fail "alleyoop: locker.bucket is required with locker.provider=gcs" }}{{ end -}}
+{{- range $name := list "CLOUD_SQL_CONNECTION_NAME" "REDIS_HOST" "REDIS_PORT" "REDIS_AUTH_ENABLED" "REDIS_TRANSIT_ENCRYPTION" "REDIS_TLS_CA_PEM" "PUBSUB_TOPIC" "PUBSUB_SUBSCRIPTION" }}
+{{- if not (has $name $extraEnvNames) }}{{ fail (printf "alleyoop: locker.provider=gcs arms the services' GCS data-path readiness check, which needs %s in extraEnv (Cloud SQL connection name, Memorystore TLS and Pub/Sub settings); pods never become Ready without it" $name) }}{{ end -}}
+{{- end }}
+{{- end }}
+{{- range $name := list "LOCKER_PROVIDER" "PIPELINE_RAW_PROVIDER" }}{{ if has $name $extraEnvNames }}{{ fail (printf "alleyoop: extraEnv must not set %s: use locker.provider" $name) }}{{ end }}{{ end -}}
 {{- end }}
 
 {{/*
@@ -62,6 +91,12 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
   value: {{ $v.locker.bucket | quote }}
 - name: LOCKER_REGION
   value: {{ $v.locker.region | quote }}
+{{- if eq ($v.locker.provider | default "s3") "gcs" }}
+- name: LOCKER_PROVIDER
+  value: "gcs"
+- name: PIPELINE_RAW_PROVIDER
+  value: "gcs"
+{{- end }}
 {{- if eq ($v.locker.credentials.mode | default "secret") "secret" }}
 - name: LOCKER_ACCESS_KEY_ID
   valueFrom:

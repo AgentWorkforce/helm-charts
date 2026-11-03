@@ -36,9 +36,12 @@ spec:
           securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - { name: http, containerPort: {{ .Values.server.port }}, protocol: TCP }
+          # Later envFrom sources win on duplicate keys, so the chart ConfigMap
+          # comes last: extraEnvFrom can add variables but cannot override the
+          # managed configuration (explicit env entries win over both).
           envFrom:
-            - configMapRef: { name: {{ include "relayhistory.fullname" . }} }
             {{- with .Values.extraEnvFrom }}{{ toYaml . | nindent 12 }}{{- end }}
+            - configMapRef: { name: {{ include "relayhistory.fullname" . }} }
           env:
             {{- include "relayhistory.secretEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}{{ toYaml . | nindent 12 }}{{- end }}

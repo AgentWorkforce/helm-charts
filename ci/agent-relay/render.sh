@@ -111,4 +111,127 @@ fi
 grep -q 'requires components.relayauth=true' <<<"$ar_fail" \
   || { echo "render failed without the expected components.relayauth error" >&2; exit 1; }
 
+# Migration Jobs: spec.template is immutable, so any pod template change
+# (here: resources) must produce a new Job name.
+proof_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/gcp-proof-values.yaml)
+for child in relayhistory relay-cloud-api; do
+  base_job=$(yq "select(.kind == \"Job\" and .metadata.name == \"${child}-migrate-*\") | .metadata.name" <<<"$out")
+  resized=$(helm template proof charts/agent-relay -n agent-relay --no-hooks "${proof_args[@]}" \
+    --set "${child}.resources.limits.memory=7Gi" |
+    yq "select(.kind == \"Job\" and .metadata.name == \"${child}-migrate-*\") | .metadata.name")
+  test -n "$base_job" || { echo "$child: no migration Job rendered" >&2; exit 1; }
+  if [ "$base_job" = "$resized" ]; then
+    echo "$child: migration Job name ignores pod template changes ($base_job)" >&2
+    exit 1
+  fi
+done
+
+# NOTES.txt waits on Jobs by component=migration; the Job object itself
+# (not only its pods) must carry that label.
+for child in relayhistory relay-cloud-api; do
+  test "$(yq "select(.kind == \"Job\" and .metadata.name == \"${child}-migrate-*\") |
+    .metadata.labels[\"app.kubernetes.io/component\"]" <<<"$out")" = migration \
+    || { echo "$child: migration Job metadata lacks app.kubernetes.io/component=migration" >&2; exit 1; }
+done
+
+# Leaf-chart fail-closed validations for the suite's child charts, rendered
+# standalone from their CI values.
+expect_leaf_failure() { # chart expected-error helm-args...
+  local chart=$1 expected=$2 output; shift 2
+  if output=$(helm template ci "charts/$chart" -n ci --no-hooks -f "charts/$chart/ci/default-values.yaml" "$@" 2>&1); then
+    echo "$chart: rendered despite expected failure: $expected" >&2
+    exit 1
+  fi
+  grep -Fq "$expected" <<<"$output" \
+    || { echo "$chart: failed without expected error: $expected" >&2; echo "$output" >&2; exit 1; }
+}
+db_egress='[{"to":[{"ipBlock":{"cidr":"10.20.0.0/24"}}],"ports":[{"protocol":"TCP","port":5432}]}]'
+for child in relayhistory relay-cloud-api; do
+  expect_leaf_failure "$child" "allowAllEgress=false requires networkPolicy.additionalEgress" \
+    --set networkPolicy.allowAllEgress=false
+  expect_leaf_failure "$child" "additionalEgress rule needs a non-empty to" \
+    --set networkPolicy.allowAllEgress=false --set-json 'networkPolicy.additionalEgress=[{"ports":[{"port":5432}]}]'
+  helm template ci "charts/$child" -n ci --no-hooks -f "charts/$child/ci/default-values.yaml" \
+    --set networkPolicy.allowAllEgress=false --set-json "networkPolicy.additionalEgress=$db_egress" >/dev/null
+done
+
+# relayhistory: extraEnvFrom must not override chart-managed ConfigMap keys,
+# so the chart ConfigMap is the last (winning) envFrom source.
+last_env_from=$(helm template ci charts/relayhistory -n ci --no-hooks -f charts/relayhistory/ci/default-values.yaml \
+  --set-json 'extraEnvFrom=[{"configMapRef":{"name":"operator-extra"}}]' |
+  yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].envFrom[-1].configMapRef.name')
+test "$last_env_from" = ci-relayhistory \
+  || { echo "relayhistory: extraEnvFrom can override the chart ConfigMap (last envFrom is $last_env_from)" >&2; exit 1; }
+
+expect_leaf_failure relay-cloud-api "ingress.hosts must include the publicUrl host" \
+  --set-json 'ingress.hosts=["other.gcp-proof.agentrelay.com"]'
+
+expect_leaf_failure relay-dashboard "runtime.apiBasePath must not be /" --set runtime.apiBasePath=/
+expect_leaf_failure relay-dashboard "runtime.loginPath must not be /" --set runtime.loginPath=/
+expect_leaf_failure relay-dashboard "runtime.apiBasePath and runtime.loginPath must differ" --set runtime.loginPath=/cloud/api/
+expect_leaf_failure relay-dashboard "runtime.loginPath must differ from runtime.appPath" --set runtime.appPath=/app --set runtime.loginPath=/app/
+
+for child in relay-dashboard relay-cloud-api relayhistory; do
+  expect_leaf_failure "$child" "podLabels must not set selector label app.kubernetes.io/name" \
+    --set 'podLabels.app\.kubernetes\.io/name=custom'
+done
+
+# The authority gate applies only when Relaycast itself is deployed.
+helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  --set components.relaycast=false --set components.relayauth=false \
+  --set components.sessionsPipeline=false --set components.relayhistory=false \
+  --set components.cloudApi=false --set components.dashboard=false \
+  --set relaycast.credentials.authority=relayauth >/dev/null \
+  || { echo "authority=relayauth gate fired with components.relaycast=false" >&2; exit 1; }
+
+# Umbrella Ingress backends must name Services the children render, also
+# without the profile's fullnameOverrides.
+no_override=$(helm template ar charts/agent-relay -n agent-relay --no-hooks "${proof_args[@]}" \
+  --set relaycast.fullnameOverride=null --set relayhistory.fullnameOverride=null \
+  --set relay-cloud-api.fullnameOverride=null --set relay-dashboard.fullnameOverride=null \
+  --set relay-dashboard.api.serviceName=null)
+rendered_services=$(yq 'select(.kind == "Service") | .metadata.name' <<<"$no_override" | grep -v '^---$' | sort -u)
+for backend in $(yq 'select(.kind == "Ingress") | .spec.rules[].http.paths[].backend.service.name' <<<"$no_override" | grep -v '^---$' | sort -u); do
+  grep -qx "$backend" <<<"$rendered_services" \
+    || { echo "umbrella Ingress backend $backend has no rendered Service" >&2; exit 1; }
+done
+if mismatch=$(helm template proof charts/agent-relay -n agent-relay --no-hooks "${proof_args[@]}" \
+  --set gkeIngress.backends.history.serviceName=history 2>&1); then
+  echo "mismatched gkeIngress backend serviceName rendered successfully" >&2
+  exit 1
+fi
+grep -q 'gkeIngress.backends.history.serviceName=history does not match' <<<"$mismatch" \
+  || { echo "backend mismatch failed without the expected error" >&2; exit 1; }
+
+# The customer GCP profile stores Sessions objects in GCS through the native
+# adapter (Workload Identity), never AWS S3 or HMAC keys.
+gcp_out=$(helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml)
+for w in ar-worker-referee ar-worker-bob-costas ar-worker-hoopdb-indexer ar-alleyoop-ingest; do
+  test "$(yq "select(.kind == \"Deployment\" and .metadata.name == \"$w\") |
+    .spec.template.spec.containers[0].env[] | select(.name == \"LOCKER_PROVIDER\") | .value" <<<"$gcp_out")" = gcs \
+    || { echo "values-gcp.yaml: $w does not select the GCS Locker" >&2; exit 1; }
+done
+if grep -Eq 'name: "?LOCKER_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)"?$' <<<"$gcp_out"; then
+  echo "values-gcp.yaml renders static Locker HMAC credentials" >&2
+  exit 1
+fi
+
+# The supported-100 overlay sizes Relaycast backups, so it must enable them.
+s100=$(helm template ar charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp.yaml -f charts/agent-relay/values-gcp-supported-100.yaml)
+test "$(yq 'select(.kind == "CronJob" and .metadata.name == "relaycast-backup") | .metadata.name' <<<"$s100")" = relaycast-backup \
+  || { echo "supported-100 overlay does not render the Relaycast backup CronJob" >&2; exit 1; }
+test "$(yq 'select(.kind == "PersistentVolumeClaim" and .metadata.name == "relaycast-backup") | .spec.resources.requests.storage' <<<"$s100")" = 100Gi \
+  || { echo "supported-100 overlay backup PVC is not 100Gi" >&2; exit 1; }
+
+# relayauth model B has no default Relaycast URL: the keyring requires one.
+if rauth_fail=$(helm template ci charts/relayauth -n ci --no-hooks -f charts/relayauth/ci/default-values.yaml \
+  --set secretKeys.relaycastCredentialKeyring=relaycast-credential-keyring \
+  --set secretKeys.relaycastInternalSecret=relaycast-internal-secret 2>&1); then
+  echo "relayauth model B rendered without relaycast.url" >&2
+  exit 1
+fi
+grep -q 'relaycast.url is required' <<<"$rauth_fail" \
+  || { echo "relayauth model B failed without the relaycast.url error" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"

@@ -7,6 +7,18 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: agent-relay
 {{- end -}}
+{{- /* Job metadata labels: the runtime component label is replaced by
+migration so `kubectl wait job -l app.kubernetes.io/component=migration`
+(NOTES.txt) finds the Job. */ -}}
+{{- define "relay-cloud-api.migrationLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
+app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: migration
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: agent-relay
+{{- end -}}
 {{- define "relay-cloud-api.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
@@ -32,12 +44,56 @@ app.kubernetes.io/component: api
 {{- $portToken := regexFind ":[0-9]+$" $url -}}
 {{- if and $portToken (or (lt (int (trimPrefix ":" $portToken)) 1) (gt (int (trimPrefix ":" $portToken)) 65535)) }}{{ fail (printf "services.%s port must be between 1 and 65535" $name) }}{{ end -}}
 {{- end -}}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.allowAllEgress) (empty .Values.networkPolicy.additionalEgress) }}{{ fail "networkPolicy.enabled with allowAllEgress=false requires networkPolicy.additionalEgress: restricted egress allows only same-namespace pods and DNS, which blocks the external PostgreSQL database and any RelayAuth, Relaycast or Relay History URL outside the namespace" }}{{ end -}}
+{{- range .Values.networkPolicy.additionalEgress }}{{ if empty .to }}{{ fail "every networkPolicy.additionalEgress rule needs a non-empty to (an empty to matches every destination; use ipBlock 0.0.0.0/0 to allow any destination explicitly)" }}{{ end }}{{ end -}}
+{{- range $key, $_ := include "relay-cloud-api.selectorLabels" . | fromYaml }}{{ if hasKey ($.Values.podLabels | default dict) $key }}{{ fail (printf "podLabels must not set selector label %s: the Deployment selector would no longer match its pods" $key) }}{{ end }}{{ end -}}
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP" }}{{ end -}}
-{{- if .Values.ingress.enabled }}{{ if empty .Values.ingress.hosts }}{{ fail "ingress.enabled=true requires at least one host" }}{{ end }}{{ if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end }}{{ if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end }}{{ end -}}
+{{- if .Values.ingress.enabled }}{{ if empty .Values.ingress.hosts }}{{ fail "ingress.enabled=true requires at least one host" }}{{ end }}{{ if not (has (urlParse .Values.publicUrl).hostname .Values.ingress.hosts) }}{{ fail "ingress.hosts must include the publicUrl host" }}{{ end }}{{ if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end }}{{ if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end }}{{ end -}}
 {{- end -}}
 {{- define "relay-cloud-api.secretEnv" -}}
 {{- range $env, $key := dict "DATABASE_URL_FILE" .Values.secretKeys.databaseUrl "RELAYAUTH_API_KEY_FILE" .Values.secretKeys.relayauthApiKey "SELFHOST_BOOTSTRAP_TOKEN_FILE" .Values.secretKeys.bootstrapToken "SELFHOST_ENCRYPTION_KEY_FILE" .Values.secretKeys.encryptionKey }}
 - name: {{ $env }}
   value: /var/run/agent-relay/secrets/{{ $key }}
 {{- end }}
+{{- end -}}
+{{- define "relay-cloud-api.migrationPodTemplate" -}}
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: migration
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "relay-cloud-api.serviceAccountName" . }}
+  automountServiceAccountToken: false
+  securityContext: {{ toYaml .Values.podSecurityContext | nindent 4 }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets: {{ toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: migrate
+      image: {{ include "relay-cloud-api.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command: {{ toYaml .Values.migrations.command | nindent 8 }}
+      args: {{ toYaml .Values.migrations.args | nindent 8 }}
+      securityContext: {{ toYaml .Values.containerSecurityContext | nindent 8 }}
+      env:
+        - name: DATABASE_MIGRATIONS_URL_FILE
+          value: /var/run/agent-relay/secrets/{{ .Values.secretKeys.databaseMigrationsUrl }}
+        - name: SELFHOST_RUNTIME_DATABASE_ROLE
+          value: {{ .Values.database.runtimeRole | quote }}
+      volumeMounts:
+        - { name: database, mountPath: /var/run/agent-relay/secrets, readOnly: true }
+        - { name: tmp, mountPath: /tmp }
+      resources: {{ toYaml .Values.resources | nindent 8 }}
+  volumes:
+    - name: database
+      secret:
+        secretName: {{ .Values.existingSecret }}
+        defaultMode: 0440
+        items:
+          - key: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
+            path: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
+    - name: tmp
+      emptyDir: { sizeLimit: 64Mi }
 {{- end -}}

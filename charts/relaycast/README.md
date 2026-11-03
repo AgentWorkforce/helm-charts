@@ -1,7 +1,10 @@
 # Relaycast Helm chart
 
-This chart runs the portable Relaycast core on Kubernetes. It has no dependency
-on Relayflows, RelayAuth, Relayfile, 96Bulls, or a cloud provider.
+This chart runs the portable Relaycast core on Kubernetes. In the default
+(legacy credentials) and `credentials.authority=self` modes it has no
+dependency on Relayflows, RelayAuth, Relayfile, 96Bulls, or a cloud provider.
+`credentials.authority=relayauth` (model B, below) adds a runtime dependency on
+a reachable RelayAuth deployment.
 
 The self-host runtime is a single Node process backed by SQLite and a local
 uploaded-file store, both on one persistent volume. The chart therefore allows

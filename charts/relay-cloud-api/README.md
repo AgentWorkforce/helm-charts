@@ -21,6 +21,13 @@ to clients or used as the externally stable RelayHistory assertion audience.
 The current runtime is deliberately one replica with `Recreate`: login/device
 rate limiting remains process-local. This is a GCP proof shape, not HA.
 
+`networkPolicy.enabled` defaults to true with `allowAllEgress: false`, which
+allows egress only to same-namespace pods and DNS. The external PostgreSQL
+database (and any service URL outside the namespace) is then unreachable, so
+the chart refuses to render until you either list it in
+`networkPolicy.additionalEgress` (each rule with a non-empty `to`) or set
+`allowAllEgress: true`, as the umbrella GCP profiles do.
+
 The migration is a normal deterministic Job because this repository installs
 with `helm template --no-hooks`. An operator or reconciler must wait for it to
 complete before considering a rollout successful; the API stays unready while

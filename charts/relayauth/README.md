@@ -58,10 +58,26 @@ RelayAuth can own the `ar_` credential tag keyring and push `ar_ws_` workspace
 keys into a Relaycast deployment, which then verifies tags through RelayAuth's
 remote CredentialTagger. Set both `secretKeys.relaycastCredentialKeyring` (the
 `ar_` keyring) and `secretKeys.relaycastInternalSecret` (Relaycast's internal
-admin secret) — the chart refuses partial wiring — and point `relaycast.url`
-at the Relaycast Service (default `http://relaycast:8787`).
-`secretKeys.relaycastServiceApiKey` adds an optional service API key. The
-relaycast chart side is `credentials.authority=relayauth`.
+admin secret) — the chart refuses partial wiring — and set `relaycast.url`
+to the Relaycast Service. It has no default and is required with the keyring.
+Use the namespace-qualified name whenever Relaycast runs in another namespace
+than RelayAuth (for example `http://relaycast.relaycast.svc:8787`, or
+`http://<release>-relaycast.<ns>.svc:8787` without a `fullnameOverride`); the
+short `http://relaycast:8787` resolves only in the same namespace with
+`fullnameOverride=relaycast`. If either release enables its NetworkPolicy,
+it must admit the other namespace.
+`secretKeys.relaycastServiceApiKey` adds an optional service API key.
+
+The relaycast release needs all of the following (its chart refuses partial
+wiring):
+
+- `credentials.format=ar` and `credentials.authority=relayauth`;
+- `credentials.relayauth.url` pointing at this RelayAuth Service (for example
+  `http://relayauth.auth.svc:8787` for the standalone install above);
+- `secretKeys.relayauthToken` naming the key, in its `existingSecret`, that
+  holds the token Relaycast presents to RelayAuth's CredentialTagger;
+- an `image.digest` for a `>=12.3.x` relaycast engine build. The relaycast
+  chart's pinned default predates `ar_` custody.
 
 ## Rotation
 

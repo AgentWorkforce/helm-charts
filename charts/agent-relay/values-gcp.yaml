@@ -97,8 +97,11 @@ relayauth:
     # workspace keys into the internal admin API. Set both or neither.
     # relaycastCredentialKeyring: relaycast-credential-keyring
     # relaycastInternalSecret: relaycast-internal-secret
-  # relaycast:
-  #   url: http://relaycast:8787
+  # Relaycast internal admin API, used only with the model B keyring above.
+  # relaycast.fullnameOverride=relaycast in this namespace makes the short
+  # Service name resolve.
+  relaycast:
+    url: http://relaycast:8787
   jwksIngress:
     enabled: false
   networkPolicy:
@@ -117,7 +120,13 @@ relayauth:
     hoopdb:
       existingSecret: example-agent-relay-secrets
       key: HOOPDB_URL
+    # Session objects live in GCS through the services' native GCS adapter
+    # (LOCKER_PROVIDER=gcs) with GKE Workload Identity; the endpoint stays
+    # empty (the official https://storage.googleapis.com API) and no HMAC key
+    # is involved. An empty endpoint with the default s3 provider would mean
+    # AWS S3.
     locker:
+      provider: gcs
       endpoint: ""
       # REQUIRED OVERRIDE: customer-owned GCS bucket and its GCP region.
       bucket: example-agent-relay-sessions
@@ -126,6 +135,19 @@ relayauth:
         mode: podIdentity
     lockerInit:
       enabled: false
+    # REQUIRED OVERRIDE: provider=gcs arms the services' GCS data-path
+    # readiness check, which requires these settings (no secrets) on every
+    # worker and Alleyoop pod. The chart refuses to render without them.
+    extraEnv: &sessionsGcsDataPath
+      - { name: CLOUD_SQL_CONNECTION_NAME, value: "example-project:us-central1:example-sessions" }
+      - { name: REDIS_HOST, value: "10.0.0.3" }
+      - { name: REDIS_PORT, value: "6378" }
+      - { name: REDIS_AUTH_ENABLED, value: "false" }
+      - { name: REDIS_TRANSIT_ENCRYPTION, value: SERVER_AUTHENTICATION }
+      # Memorystore server CA bundle (public PEM, never a private key).
+      - { name: REDIS_TLS_CA_PEM, value: "REQUIRED OVERRIDE: Memorystore server CA PEM bundle" }
+      - { name: PUBSUB_TOPIC, value: "projects/example-project/topics/example-sessions" }
+      - { name: PUBSUB_SUBSCRIPTION, value: "projects/example-project/subscriptions/example-sessions" }
     migrations:
       hoopdb:
         existingSecret: example-agent-relay-secrets
@@ -147,12 +169,15 @@ relayauth:
       existingSecret: example-agent-relay-secrets
       key: HOOPDB_URL
     locker:
+      provider: gcs
       endpoint: ""
       # REQUIRED OVERRIDE: same GCS bucket and region as worker.locker.
       bucket: example-agent-relay-sessions
       region: us-central1
       credentials:
         mode: podIdentity
+    # Same GCS data-path settings as worker.extraEnv.
+    extraEnv: *sessionsGcsDataPath
     auth:
       jwksUrl: http://relayauth:8787/.well-known/jwks.json
   hoopdb:

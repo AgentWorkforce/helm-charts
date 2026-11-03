@@ -23,9 +23,11 @@ runtime:
   loginPath: /login
 
 # A leaf Ingress can proxy /cloud/api to this Service. The GKE proof uses the
-# umbrella Ingress instead and leaves this ingress disabled.
+# umbrella Ingress instead and leaves this ingress disabled. Required when
+# ingress.enabled=true: the relay-cloud-api Service name in this namespace,
+# i.e. its fullname (<release>-relay-cloud-api unless fullnameOverride is set).
 api:
-  serviceName: relay-cloud-api
+  serviceName: ""
   servicePort: 80
 
 ingress:

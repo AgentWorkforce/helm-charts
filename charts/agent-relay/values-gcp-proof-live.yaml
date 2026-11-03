@@ -2,6 +2,17 @@
 # RelayAuth and the Sessions pipeline already run in their own namespaces.
 # The exposed components inherit the proof profile's GKE load-balancer
 # NetworkPolicy rules.
+#
+# Cross-namespace requirement: relayhistory and relay-cloud-api below call
+# http://relayauth.relayauth.svc:8787 from this namespace. If the RelayAuth
+# release in the relayauth namespace runs with networkPolicy.enabled, its
+# default ingressFrom admits same-namespace pods only and these calls are
+# dropped. That release must admit this namespace, for example:
+#   networkPolicy:
+#     ingressFrom:
+#       - podSelector: {}
+#       - namespaceSelector:
+#           matchLabels: { kubernetes.io/metadata.name: agent-relay }
 components:
   relayauth: false
   sessionsPipeline: false

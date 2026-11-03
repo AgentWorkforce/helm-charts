@@ -40,10 +40,27 @@
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
 {{- end }}
 {{- if ne (len (list $hostRoot $hostApi $hostCast $hostHistory | uniq)) 4 }}{{ fail "gkeIngress.hosts.root/api/cast/history must all be distinct" }}{{ end -}}
-{{- range $name := list "dashboard" "api" "cast" "history" }}
+{{- /* Backend Service names are derived from each child's fullname rules, so
+the Ingress always targets the Services the children actually render. An
+explicit backends.<name>.serviceName must equal that derived name. */ -}}
+{{- $castName := dig "nameOverride" "" $relaycast | default "relaycast" -}}
+{{- $castService := dig "fullnameOverride" "" $relaycast | default (ternary .Release.Name (printf "%s-%s" .Release.Name $castName) (contains $castName .Release.Name)) -}}
+{{- $children := dict
+  "dashboard" (list "relay-dashboard" $dashboard (dig "fullnameOverride" "" $dashboard | default (printf "%s-%s" .Release.Name (dig "nameOverride" "" $dashboard | default "relay-dashboard"))))
+  "api" (list "relay-cloud-api" $cloudApi (dig "fullnameOverride" "" $cloudApi | default (printf "%s-%s" .Release.Name (dig "nameOverride" "" $cloudApi | default "relay-cloud-api"))))
+  "cast" (list "relaycast" $relaycast $castService)
+  "history" (list "relayhistory" $relayhistory (dig "fullnameOverride" "" $relayhistory | default (printf "%s-%s" .Release.Name (dig "nameOverride" "" $relayhistory | default "relayhistory"))))
+-}}
+{{- $backendNames := dict -}}
+{{- range $name, $child := $children }}
 {{- $backend := dig "backends" $name (dict) $gke -}}
-{{- if not (dig "serviceName" "" $backend) }}{{ fail (printf "gkeIngress.backends.%s.serviceName is required" $name) }}{{ end -}}
+{{- $expected := index $child 2 | trunc 63 | trimSuffix "-" -}}
+{{- $configured := dig "serviceName" "" $backend -}}
+{{- if and $configured (ne $configured $expected) }}{{ fail (printf "gkeIngress.backends.%s.serviceName=%s does not match the %s Service %s; leave it empty to derive it" $name $configured (index $child 0) $expected) }}{{ end -}}
+{{- $_ := set $backendNames $name $expected -}}
 {{- if not (dig "servicePort" 0 $backend) }}{{ fail (printf "gkeIngress.backends.%s.servicePort is required" $name) }}{{ end -}}
+{{- $childPort := dig "service" "port" 0 (index $child 1) -}}
+{{- if and $childPort (ne (int $childPort) (int (dig "servicePort" 0 $backend))) }}{{ fail (printf "gkeIngress.backends.%s.servicePort must equal %s.service.port (%v)" $name (index $child 0) $childPort) }}{{ end -}}
 {{- end }}
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
@@ -115,19 +132,19 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $gke.backends.api.serviceName }}
+                name: {{ index $backendNames "api" }}
                 port: { number: {{ $gke.backends.api.servicePort }} }
           - path: /login
             pathType: Prefix
             backend:
               service:
-                name: {{ $gke.backends.api.serviceName }}
+                name: {{ index $backendNames "api" }}
                 port: { number: {{ $gke.backends.api.servicePort }} }
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ $gke.backends.dashboard.serviceName }}
+                name: {{ index $backendNames "dashboard" }}
                 port: { number: {{ $gke.backends.dashboard.servicePort }} }
     - host: {{ $hostApi | quote }}
       http:
@@ -136,7 +153,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $gke.backends.api.serviceName }}
+                name: {{ index $backendNames "api" }}
                 port: { number: {{ $gke.backends.api.servicePort }} }
     - host: {{ $hostCast | quote }}
       http:
@@ -163,7 +180,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $gke.backends.cast.serviceName }}
+                name: {{ index $backendNames "cast" }}
                 port: { number: {{ $gke.backends.cast.servicePort }} }
     - host: {{ $hostHistory | quote }}
       http:
@@ -172,6 +189,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ $gke.backends.history.serviceName }}
+                name: {{ index $backendNames "history" }}
                 port: { number: {{ $gke.backends.history.servicePort }} }
 {{- end }}

@@ -1,54 +1,18 @@
 {{- include "relay-cloud-api.validate" . }}
 {{- if .Values.migrations.enabled }}
-{{- $identity := printf "%s|%s|%s|%s|%s" (include "relay-cloud-api.image" .) .Values.existingSecret .Values.secretKeys.databaseMigrationsUrl .Values.database.runtimeRole .Values.migrations.identitySalt | sha256sum | trunc 8 }}
+{{- $podTemplate := include "relay-cloud-api.migrationPodTemplate" . }}
+{{- /* Job spec.template is immutable: any pod template change must yield a new
+Job name, so the identity hashes the fully rendered template. */}}
+{{- $identity := printf "%s|%s" $podTemplate .Values.migrations.identitySalt | sha256sum | trunc 8 }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ printf "%s-migrate-%s" (include "relay-cloud-api.fullname" . | trunc 45 | trimSuffix "-") $identity }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    {{- include "relay-cloud-api.labels" . | nindent 4 }}
+    {{- include "relay-cloud-api.migrationLabels" . | nindent 4 }}
 spec:
   backoffLimit: {{ .Values.migrations.backoffLimit }}
   activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        app.kubernetes.io/component: migration
-    spec:
-      restartPolicy: Never
-      serviceAccountName: {{ include "relay-cloud-api.serviceAccountName" . }}
-      automountServiceAccountToken: false
-      securityContext: {{ toYaml .Values.podSecurityContext | nindent 8 }}
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets: {{ toYaml . | nindent 8 }}
-      {{- end }}
-      containers:
-        - name: migrate
-          image: {{ include "relay-cloud-api.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: {{ toYaml .Values.migrations.command | nindent 12 }}
-          args: {{ toYaml .Values.migrations.args | nindent 12 }}
-          securityContext: {{ toYaml .Values.containerSecurityContext | nindent 12 }}
-          env:
-            - name: DATABASE_MIGRATIONS_URL_FILE
-              value: /var/run/agent-relay/secrets/{{ .Values.secretKeys.databaseMigrationsUrl }}
-            - name: SELFHOST_RUNTIME_DATABASE_ROLE
-              value: {{ .Values.database.runtimeRole | quote }}
-          volumeMounts:
-            - { name: database, mountPath: /var/run/agent-relay/secrets, readOnly: true }
-            - { name: tmp, mountPath: /tmp }
-          resources: {{ toYaml .Values.resources | nindent 12 }}
-      volumes:
-        - name: database
-          secret:
-            secretName: {{ .Values.existingSecret }}
-            defaultMode: 0440
-            items:
-              - key: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
-                path: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
-        - name: tmp
-          emptyDir: { sizeLimit: 64Mi }
+  template: {{- $podTemplate | nindent 4 }}
 {{- end }}

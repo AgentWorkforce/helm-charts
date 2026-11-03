@@ -21,11 +21,14 @@ gkeIngress:
     api: ""
     cast: ""
     history: ""
+  # serviceName is derived from each child chart's fullname (fullnameOverride,
+  # else <release>-<chart>); an explicit value must match it. servicePort must
+  # match the child's service.port.
   backends:
-    dashboard: { serviceName: relay-dashboard, servicePort: 8080 }
-    api: { serviceName: relay-cloud-api, servicePort: 80 }
-    cast: { serviceName: relaycast, servicePort: 8787 }
-    history: { serviceName: relayhistory, servicePort: 8080 }
+    dashboard: { serviceName: "", servicePort: 8080 }
+    api: { serviceName: "", servicePort: 80 }
+    cast: { serviceName: "", servicePort: 8787 }
+    history: { serviceName: "", servicePort: 8080 }
 
 # Child values are intentionally not populated with credentials or image
 # placeholders here. Every leaf chart fails closed until its existingSecret,

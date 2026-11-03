@@ -26,14 +26,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "relay-dashboard.validate" -}}
 {{- $image := include "relay-dashboard.image" . -}}
 {{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the dashboard image serves one static replica and the chart makes no HA claim" }}{{ end -}}
+{{- range $key, $_ := include "relay-dashboard.selectorLabels" . | fromYaml }}{{ if hasKey ($.Values.podLabels | default dict) $key }}{{ fail (printf "podLabels must not set selector label %s: the Deployment selector would no longer match its pods" $key) }}{{ end }}{{ end -}}
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP; expose the dashboard only through ingress" }}{{ end -}}
 {{- if not (regexMatch "^https://[^/?#]+$" .Values.runtime.publicUrl) }}{{ fail "runtime.publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $path := dict "appPath" .Values.runtime.appPath "apiBasePath" .Values.runtime.apiBasePath "loginPath" .Values.runtime.loginPath }}{{ if not (regexMatch "^/[^?#]*$" $path) }}{{ fail (printf "runtime.%s must be an absolute path without query or fragment" $name) }}{{ end }}{{ end -}}
+{{- /* The ingress routes apiBasePath and loginPath to the API and / to the
+dashboard: "/" or a shared path would create duplicate Prefix paths with
+different backends, which controllers reject or resolve unpredictably. */ -}}
+{{- $appPath := trimSuffix "/" .Values.runtime.appPath -}}
+{{- $apiPath := trimSuffix "/" .Values.runtime.apiBasePath -}}
+{{- $loginPath := trimSuffix "/" .Values.runtime.loginPath -}}
+{{- range $name, $path := dict "apiBasePath" $apiPath "loginPath" $loginPath }}{{ if not $path }}{{ fail (printf "runtime.%s must not be /: it would shadow the dashboard route" $name) }}{{ end }}{{ if eq $path $appPath }}{{ fail (printf "runtime.%s must differ from runtime.appPath" $name) }}{{ end }}{{ end -}}
+{{- if eq $apiPath $loginPath }}{{ fail "runtime.apiBasePath and runtime.loginPath must differ" }}{{ end -}}
 {{- if .Values.ingress.enabled -}}
 {{- if not .Values.ingress.host }}{{ fail "ingress.host is required when ingress.enabled=true" }}{{ end -}}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" .Values.ingress.host) }}{{ fail "ingress.host must be a DNS hostname" }}{{ end -}}
 {{- if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end -}}
-{{- if not .Values.api.serviceName }}{{ fail "api.serviceName is required; runtime.apiBasePath must fail closed to relay-cloud-api" }}{{ end -}}
+{{- if not .Values.api.serviceName }}{{ fail "api.serviceName is required when ingress.enabled=true: set it to the relay-cloud-api Service name (its fullname, <release>-relay-cloud-api unless fullnameOverride is set)" }}{{ end -}}
 {{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end -}}
 {{- end -}}
 {{- end -}}

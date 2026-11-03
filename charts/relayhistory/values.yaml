@@ -48,6 +48,10 @@ telemetry:
 
 migrations:
   enabled: true
+  # The Job name carries a hash of the fully rendered pod template, so any
+  # change to it (image, env, resources, security context...) creates a new
+  # Job instead of patching the immutable spec.template. Change identitySalt
+  # only to force a re-run with an otherwise identical template.
   identitySalt: ""
   allowWriteHold: false
   rolloutBudgetSeconds: 600
@@ -56,6 +60,8 @@ migrations:
 
 extraConfig: {}
 extraEnv: []
+# EnvFromSource entries. They are listed before the chart ConfigMap, so they
+# cannot override chart-managed keys (RELAYAUTH_*, CRON_ENABLED, ...).
 extraEnvFrom: []
 service:
   type: ClusterIP
@@ -103,6 +109,12 @@ readinessProbe:
   timeoutSeconds: 3
 networkPolicy:
   enabled: true
+  # With allowAllEgress=false the pods may reach only same-namespace pods and
+  # DNS plus additionalEgress. The database (and any service URL outside the
+  # namespace) needs an additionalEgress rule, so rendering fails when
+  # allowAllEgress=false and additionalEgress is empty. Give each rule a
+  # non-empty `to` (enforced): an empty or omitted `to` matches every
+  # destination; use ipBlock 0.0.0.0/0 to allow any destination explicitly.
   ingressFrom: []
   allowAllEgress: false
   additionalEgress: []
