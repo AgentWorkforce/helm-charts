@@ -1,0 +1,85 @@
+# kind proof of Relaycast and Relayfile in runtime.backend=durable-actors with
+# the `durable-actors dev` sidecar (upstream's Kubernetes provider needs GKE
+# Sandbox + GCS, which kind cannot provide). Locally built images are loaded
+# with `kind load docker-image` (tag kind, pullPolicy Never); MinIO serves both
+# file stores (S3 API). Never a production shape: one replica each, actor state
+# in an emptyDir.
+#
+#   helm install agent-relay charts/agent-relay -n agent-relay \
+#     -f ci/agent-relay/kind-durable-actors-values.yaml
+#
+# Secrets to create first (namespace agent-relay):
+#   relaycast-secrets: internal-secret (>=32 chars), workspace-bootstrap-secret,
+#     credential-keyring ({"current":"a","keys":{"a":"<secret>"}}),
+#     file-signing-secret, durable-actors-dev-secret
+#   relaycast-minio, relayfile-minio: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   relayfile-actors: RELAYFILE_JWT_SECRET, DURABLE_ACTORS_SECRET
+# MinIO at http://minio:9000 with buckets relaycast and relayfile.
+components:
+  relaycast: true
+  relayauth: false
+  sessionsPipeline: false
+  relayhistory: false
+  cloudApi: false
+  dashboard: false
+  relayflows: false
+  durableActors: false
+  relayfile: true
+
+relaycast:
+  fullnameOverride: relaycast
+  baseUrl: http://relaycast.agent-relay.svc:8787
+  allowInsecureBaseUrl: true
+  existingSecret: relaycast-secrets
+  secretKeys:
+    credentialKeyring: credential-keyring
+  credentials:
+    format: ar
+    authority: self
+  runtime:
+    backend: durable-actors
+    durableActors:
+      gateway:
+        image:
+          repository: relaycast-actors-gateway
+          tag: kind
+          pullPolicy: Never
+      fileStore:
+        driver: s3
+        bucket: relaycast
+        s3:
+          endpoint: http://minio:9000
+          forcePathStyle: true
+          existingSecret: relaycast-minio
+      devRuntime:
+        enabled: true
+        acknowledgeNonProduction: true
+        image:
+          repository: relaycast-actors-dev
+          tag: kind
+          pullPolicy: Never
+
+relayfile:
+  fullnameOverride: relayfile
+  runtime:
+    backend: durable-actors
+    durableActors:
+      image:
+        repository: relayfile-actors
+        tag: kind
+        pullPolicy: Never
+      workspaceImage:
+        repository: relayfile-actors-workspace
+        tag: kind
+        pullPolicy: Never
+      existingSecret: relayfile-actors
+      blobStore:
+        driver: s3
+        bucket: relayfile
+        s3:
+          endpoint: http://minio:9000
+          forcePathStyle: true
+          existingSecret: relayfile-minio
+      devRuntime:
+        enabled: true
+        acknowledgeNonProduction: true

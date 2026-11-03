@@ -1,7 +1,10 @@
 # Relaycast Helm chart
 
-This chart runs the portable Relaycast core on Kubernetes. It has no dependency
-on Relayflows, RelayAuth, Relayfile, 96Bulls, or a cloud provider.
+This chart runs the portable Relaycast core on Kubernetes. In the default
+(legacy credentials) and `credentials.authority=self` modes it has no
+dependency on Relayflows, RelayAuth, Relayfile, 96Bulls, or a cloud provider.
+`credentials.authority=relayauth` (model B, below) adds a runtime dependency on
+a reachable RelayAuth deployment.
 
 The self-host runtime is a single Node process backed by SQLite and a local
 uploaded-file store, both on one persistent volume. The chart therefore allows
@@ -11,7 +14,7 @@ exactly one replica and upgrades with `Recreate`. `runtime.backend` is fixed to
 ## Defaults
 
 - **Image:** pinned by immutable multi-arch digest (`linux/amd64`, `linux/arm64`).
-- **Secrets:** both come from your `existingSecret` and are mounted read-only as
+- **Secrets:** they come from your `existingSecret` and are mounted read-only as
   files (`*_FILE`). The chart never renders a secret value.
 - **Anonymous `POST /v1/workspaces`:** off (`404`). You create workspaces
   through the in-cluster admin API, as shown in [First run](#first-run).
@@ -79,6 +82,33 @@ The frame shapes are in Relaycast's
 [self-hosting guide](https://github.com/AgentWorkforce/relaycast/blob/main/docs/self-hosting.md#5-connecting-clients).
 `GET /v1/ws` is only for observer tokens. It refuses agent tokens and
 workspace keys.
+
+## Credential format and authority (ar_ / model B)
+
+By default Relaycast issues and verifies legacy credentials locally. With
+`credentials.format=ar` an authority is required:
+
+- `credentials.authority=relayauth` (model B): RelayAuth owns the `ar_`
+  credential tag keyring and pushes `ar_ws_` workspace keys into Relaycast.
+  Relaycast verifies `ar_` tags through RelayAuth's remote CredentialTagger
+  (`RELAYCAST_RELAYAUTH_URL` + `RELAYCAST_RELAYAUTH_TOKEN_FILE`).
+- `credentials.authority=self`: Relaycast verifies `ar_` tags against a local
+  keyring (`secretKeys.credentialKeyring`, mounted as
+  `RELAYCAST_CREDENTIAL_KEYRING_FILE`).
+
+A mounted `secretKeys.credentialKeyring` always takes precedence over the
+remote tagger. `ar_` custody requires a `>=12.3.x` engine image — override
+`image.digest`; the pinned default predates it.
+
+```yaml
+credentials:
+  format: ar
+  authority: relayauth
+  relayauth:
+    url: http://relayauth.relayauth.svc:8787
+secretKeys:
+  relayauthToken: relaycast-relayauth-token   # key in existingSecret
+```
 
 ## Public ingress
 

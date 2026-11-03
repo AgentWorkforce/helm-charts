@@ -71,10 +71,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "relaycast.validate" -}}
 {{- if ne (int .Values.replicaCount) 1 }}
-{{- fail "replicaCount must be 1: Relaycast self-host stores SQLite and uploaded files on one persistent volume" }}
+{{- fail "replicaCount must be 1: Relaycast self-host stores SQLite and uploaded files on one persistent volume (runtime.backend=durable-actors scales runtime.durableActors.gateway.replicaCount instead)" }}
 {{- end }}
-{{- if ne .Values.runtime.backend "sqlite" }}
-{{- fail "runtime.backend must be sqlite: no HA Relaycast backend has been released and proven yet" }}
+{{- if not (has (toString .Values.runtime.backend) (list "sqlite" "durable-actors")) }}
+{{- fail "runtime.backend must be sqlite or durable-actors" }}
+{{- end }}
+{{- if include "relaycast.actors.enabled" . }}
+{{- include "relaycast.actors.validate" . }}
 {{- end }}
 {{- if not .Values.baseUrl }}
 {{- fail "baseUrl is required: the HTTPS origin clients use, or an http:// cluster-internal origin with allowInsecureBaseUrl=true" }}
@@ -102,8 +105,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if not .Values.existingSecret }}
 {{- fail "existingSecret is required: create a Secret holding the internal and workspace-bootstrap secrets (see the chart README); the chart never renders secret values" }}
 {{- end }}
+{{- range $name := list "internalSecret" "bootstrapSecret" }}
+{{- if not (index ($.Values.secretKeys | default dict) $name) }}
+{{- fail (printf "secretKeys.%s is required" $name) }}
+{{- end }}
+{{- end }}
 {{- range $name, $key := .Values.secretKeys }}
-{{- if not (regexMatch "^[-._a-zA-Z0-9]+$" (toString $key)) }}
+{{- if and $key (not (regexMatch "^[-._a-zA-Z0-9]+$" (toString $key))) }}
 {{- fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}
 {{- end }}
 {{- end }}
@@ -124,6 +132,36 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- if and (not (kindIs "invalid" .Values.mailbox.depthCap)) (not (regexMatch "^[1-9][0-9]*$" (toString .Values.mailbox.depthCap))) }}
 {{- fail "mailbox.depthCap must be a positive integer when set" }}
+{{- end }}
+{{- $credentials := .Values.credentials | default dict -}}
+{{- $credentialFormat := dig "format" "legacy" $credentials -}}
+{{- $credentialAuthority := dig "authority" "" $credentials -}}
+{{- $relayauthUrl := dig "relayauth" "url" "" $credentials -}}
+{{- if not (has $credentialFormat (list "legacy" "ar")) }}
+{{- fail "credentials.format must be legacy or ar" }}
+{{- end }}
+{{- if not (has $credentialAuthority (list "" "self" "relayauth")) }}
+{{- fail "credentials.authority must be empty, self, or relayauth" }}
+{{- end }}
+{{- if and (eq $credentialFormat "ar") (not $credentialAuthority) }}
+{{- fail "credentials.authority is required when credentials.format=ar (self or relayauth)" }}
+{{- end }}
+{{- if eq $credentialAuthority "relayauth" }}
+{{- if not $relayauthUrl }}
+{{- fail "credentials.relayauth.url is required when credentials.authority=relayauth" }}
+{{- end }}
+{{- if not .Values.secretKeys.relayauthToken }}
+{{- fail "secretKeys.relayauthToken is required when credentials.authority=relayauth" }}
+{{- end }}
+{{- end }}
+{{- if and (eq $credentialAuthority "self") (not .Values.secretKeys.credentialKeyring) }}
+{{- fail "secretKeys.credentialKeyring is required when credentials.authority=self" }}
+{{- end }}
+{{- if and $relayauthUrl (not .Values.secretKeys.relayauthToken) }}
+{{- fail "secretKeys.relayauthToken is required when credentials.relayauth.url is set" }}
+{{- end }}
+{{- if and .Values.secretKeys.relayauthToken (not $relayauthUrl) }}
+{{- fail "credentials.relayauth.url is required when secretKeys.relayauthToken is set" }}
 {{- end }}
 {{- if .Values.ingress.enabled }}
 {{- if .Values.publicWorkspaceCreate }}
@@ -155,7 +193,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 {{- range .Values.extraEnv }}
-{{- if or (has .name (list "PORT" "RELAYCAST_DB_PATH" "RELAYCAST_ENV" "RELAYCAST_MESSAGE_TTL_DAYS" "RELAYCAST_MAILBOX_TTL_MS" "RELAYCAST_MAILBOX_DEPTH_CAP" "RELAYCAST_PUBLIC_WORKSPACE_CREATE" "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED" "RELAYCAST_ALLOW_INSECURE_BASE_URL" "RELAYCAST_PRIVATE_DNS_SUFFIXES" "RELAYCAST_INSECURE_BASE_URL_HOSTS")) (hasPrefix "RELAYCAST_INTERNAL_SECRET" .name) (hasPrefix "RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET" .name) }}
+{{- if or (has .name (list "PORT" "RELAYCAST_DB_PATH" "RELAYCAST_ENV" "RELAYCAST_MESSAGE_TTL_DAYS" "RELAYCAST_MAILBOX_TTL_MS" "RELAYCAST_MAILBOX_DEPTH_CAP" "RELAYCAST_PUBLIC_WORKSPACE_CREATE" "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED" "RELAYCAST_ALLOW_INSECURE_BASE_URL" "RELAYCAST_PRIVATE_DNS_SUFFIXES" "RELAYCAST_INSECURE_BASE_URL_HOSTS")) (hasPrefix "RELAYCAST_INTERNAL_SECRET" .name) (hasPrefix "RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET" .name) (hasPrefix "RELAYCAST_RELAYAUTH" .name) (hasPrefix "RELAYCAST_CREDENTIAL" .name) }}
 {{- fail (printf "%s is managed by structured chart values and must not appear in extraEnv" .name) }}
 {{- end }}
 {{- end }}

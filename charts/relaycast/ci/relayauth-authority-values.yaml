@@ -1,0 +1,17 @@
+# ar_ credentials with RelayAuth as the credential authority (model B):
+# Relaycast verifies ar_ tags through RelayAuth's remote CredentialTagger.
+# Render-only fixture: ar_ custody needs a >=12.3.x engine image and the
+# chart's pinned default (12.2.1) predates it, so the default digest is
+# replaced with a sentinel that cannot be mistaken for a runnable build.
+image:
+  digest: sha256:1230000000000000000000000000000000000000000000000000000000000000
+baseUrl: http://ci-relaycast.ci.svc:8787
+allowInsecureBaseUrl: true
+existingSecret: relaycast-secrets
+credentials:
+  format: ar
+  authority: relayauth
+  relayauth:
+    url: http://relayauth.ci.svc:8787
+secretKeys:
+  relayauthToken: relaycast-relayauth-token

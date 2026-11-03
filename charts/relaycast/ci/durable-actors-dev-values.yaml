@@ -1,0 +1,31 @@
+# CI / kind: runtime.backend=durable-actors with the `durable-actors dev`
+# sidecar, a cluster-internal origin and S3-compatible (MinIO) files.
+# Never a production shape.
+baseUrl: http://relaycast.relaycast.svc:8787
+allowInsecureBaseUrl: true
+existingSecret: relaycast-secrets
+secretKeys:
+  credentialKeyring: credential-keyring
+credentials:
+  format: ar
+  authority: self
+runtime:
+  backend: durable-actors
+  durableActors:
+    gateway:
+      image:
+        tag: kind
+        pullPolicy: Never
+    fileStore:
+      driver: s3
+      bucket: relaycast
+      s3:
+        endpoint: http://minio:9000
+        forcePathStyle: true
+        existingSecret: relaycast-minio
+    devRuntime:
+      enabled: true
+      acknowledgeNonProduction: true
+      image:
+        tag: kind
+        pullPolicy: Never

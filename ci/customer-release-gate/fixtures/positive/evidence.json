@@ -1,0 +1,164 @@
+{
+  "desktop": {
+    "customerPlatforms": [
+      "linux/amd64"
+    ],
+    "evidence": "https://ci.example.com/runs/desktop-100",
+    "result": "pass",
+    "testedPlatforms": [
+      "linux/amd64"
+    ]
+  },
+  "licenses": {
+    "firstParty": [
+      {
+        "decision": "approved",
+        "evidence": "legal/helm-charts-license-decision.json",
+        "id": "helm-charts",
+        "spdx": "LicenseRef-AgentWorkforce-Commercial"
+      },
+      {
+        "decision": "approved",
+        "evidence": "legal/relayhistory-license-decision.json",
+        "id": "relayhistory",
+        "spdx": "LicenseRef-AgentWorkforce-Commercial"
+      }
+    ]
+  },
+  "operationalReadiness": {
+    "loadTest": {
+      "artifactSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "chartVersion": "1.0.0",
+      "evidence": "https://ci.example.com/runs/load-100",
+      "imageManifestSha256": "sha256:8526904db0b687d8b3203ad8aa798f2d47ed52ba329ea00d76514c6b438545a7",
+      "result": "pass",
+      "workloadProfile": "supported-100"
+    },
+    "observability": {
+      "alerts": {
+        "artifactSha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "evidence": "https://ci.example.com/runs/alerts-100",
+        "result": "pass"
+      },
+      "dashboards": {
+        "artifactSha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "evidence": "https://ci.example.com/runs/dashboards-100",
+        "result": "pass"
+      },
+      "runbooks": {
+        "artifactSha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "evidence": "https://ci.example.com/runs/runbooks-100",
+        "result": "pass"
+      }
+    },
+    "recovery": {
+      "artifactSha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "evidence": "https://ci.example.com/runs/recovery-100",
+      "result": "pass",
+      "rpoMinutes": 15,
+      "rtoMinutes": 240
+    },
+    "serviceLevel": {
+      "availabilityPercent": 99.9,
+      "errorBudgetPercent": 0.1,
+      "measurementWindow": "calendar-month"
+    },
+    "supportedTier": {
+      "concurrentAgents": 50,
+      "sessionsPerDay": 10000,
+      "users": 100
+    }
+  },
+  "relayHistoryMigrations": {
+    "evidence": "https://ci.example.com/runs/relayhistory-migrations-100",
+    "imageCount": 24,
+    "sourceCount": 24,
+    "sourceRevision": "1111111111111111111111111111111111111111"
+  },
+  "release": {
+    "branchControls": {
+      "branch": "main",
+      "protected": true,
+      "requiredApprovals": 2,
+      "requiredStatusChecks": [
+        "customer-release-gate"
+      ],
+      "requiresPullRequest": true
+    },
+    "chartVersion": "1.0.0",
+    "environmentControls": {
+      "name": "customer-release",
+      "preventsSelfReview": true,
+      "protected": true,
+      "requiredApprovals": 1
+    },
+    "imageManifestSha256": "sha256:8526904db0b687d8b3203ad8aa798f2d47ed52ba329ea00d76514c6b438545a7",
+    "valuesFile": "values.yaml"
+  },
+  "releaseDecision": "approved",
+  "schemaVersion": 1,
+  "upgradeRestore": {
+    "restore": {
+      "artifactSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "chartVersion": "1.0.0",
+      "evidence": "https://ci.example.com/runs/restore-100",
+      "imageManifestSha256": "sha256:8526904db0b687d8b3203ad8aa798f2d47ed52ba329ea00d76514c6b438545a7",
+      "result": "pass"
+    },
+    "upgrade": {
+      "artifactSha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "chartVersion": "1.0.0",
+      "evidence": "https://ci.example.com/runs/upgrade-100",
+      "imageManifestSha256": "sha256:8526904db0b687d8b3203ad8aa798f2d47ed52ba329ea00d76514c6b438545a7",
+      "result": "pass"
+    }
+  },
+  "versionCompatibility": {
+    "desktopCurrentVersion": "2.0.0",
+    "desktopPreviousVersion": "1.9.0",
+    "matrix": {
+      "serverCurrentDesktopCurrent": {
+        "artifactSha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "desktopVersion": "2.0.0",
+        "evidence": "https://ci.example.com/runs/compat-current-current",
+        "result": "pass",
+        "serverVersion": "1.0.0",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      },
+      "serverCurrentDesktopPrevious": {
+        "artifactSha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "desktopVersion": "1.9.0",
+        "evidence": "https://ci.example.com/runs/compat-current-previous",
+        "result": "pass",
+        "serverVersion": "1.0.0",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      },
+      "serverPreviousDesktopCurrent": {
+        "artifactSha256": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "desktopVersion": "2.0.0",
+        "evidence": "https://ci.example.com/runs/compat-previous-current",
+        "result": "pass",
+        "serverVersion": "0.9.0",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      },
+      "serverPreviousDesktopPrevious": {
+        "artifactSha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "desktopVersion": "1.9.0",
+        "evidence": "https://ci.example.com/runs/compat-previous-previous",
+        "result": "pass",
+        "serverVersion": "0.9.0",
+        "testedPlatforms": [
+          "linux/amd64"
+        ]
+      }
+    },
+    "serverCurrentVersion": "1.0.0",
+    "serverPreviousVersion": "0.9.0"
+  }
+}

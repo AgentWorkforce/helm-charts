@@ -5,7 +5,10 @@
 # cloudsql_migration_roles.sql, session_directory_search_worker.sql and
 # cloudsql_owner_function_default_revoke.sql as the migration owner, so there
 # are no in-cluster SQL Jobs. migrate still waits for the roles. The managed
-# bucket uses Workload Identity (podIdentity mode).
+# bucket is GCS through the services' native adapter (locker.provider=gcs)
+# with Workload Identity (podIdentity mode). gcs arms the services' data-path
+# readiness check, so extraEnv carries the Cloud SQL, Memorystore and Pub/Sub
+# settings the GCP stack passes (render-only values).
 global:
   tenant:
     orgId: org_ci
@@ -20,6 +23,7 @@ worker:
     existingSecret: 96bulls-gcp
     key: HOOPDB_URL
   locker:
+    provider: gcs
     endpoint: ""
     bucket: 96bulls-ci
     region: us-central1
@@ -27,6 +31,15 @@ worker:
       mode: podIdentity
   lockerInit:
     enabled: false
+  extraEnv: &gcsDataPath
+    - { name: CLOUD_SQL_CONNECTION_NAME, value: "ci-project:us-central1:ci-sessions" }
+    - { name: REDIS_HOST, value: "10.0.0.3" }
+    - { name: REDIS_PORT, value: "6378" }
+    - { name: REDIS_AUTH_ENABLED, value: "false" }
+    - { name: REDIS_TRANSIT_ENCRYPTION, value: SERVER_AUTHENTICATION }
+    - { name: REDIS_TLS_CA_PEM, value: "render-only CA bundle" }
+    - { name: PUBSUB_TOPIC, value: "projects/ci-project/topics/ci-sessions" }
+    - { name: PUBSUB_SUBSCRIPTION, value: "projects/ci-project/subscriptions/ci-sessions" }
   migrations:
     hoopdb:
       existingSecret: 96bulls-gcp
@@ -45,11 +58,13 @@ alleyoop:
     existingSecret: 96bulls-gcp
     key: HOOPDB_URL
   locker:
+    provider: gcs
     endpoint: ""
     bucket: 96bulls-ci
     region: us-central1
     credentials:
       mode: podIdentity
+  extraEnv: *gcsDataPath
   auth:
     jwksUrl: https://relayauth.example.com/.well-known/jwks.json
 hoopdb:

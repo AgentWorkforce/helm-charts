@@ -1,0 +1,80 @@
+# Capacity-planning overlay for the supported-100 workload profile:
+#   100 users, 50 concurrent agents, and 10,000 sessions/day.
+#
+# Apply after values-gcp.yaml. These are unvalidated starting hypotheses, not
+# benchmark results or a support claim. A release may use this profile only
+# after the load, recovery, and observability gates in docs/operations pass
+# for the exact chart and image manifest.
+#
+# This file sizes chart-managed pods and PVCs only. Cloud SQL, GCS, GKE nodes,
+# load balancers, and the observability backend remain customer-managed and
+# are sized with the formulas in docs/operations/capacity-and-load-test.md.
+
+relaycast:
+  # Relaycast remains a single-writer SQLite workload. Increasing resources
+  # does not remove that availability limitation.
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: "2", memory: 2Gi }
+  persistence:
+    size: 50Gi
+  # Relaycast backups are opt-in in the chart; this profile turns them on so
+  # the backup sizing below takes effect (a CronJob plus a second PVC).
+  backup:
+    enabled: true
+    size: 100Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
+
+relayauth:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  persistence:
+    size: 5Gi
+
+96bulls:
+  worker:
+    migrations:
+      resources:
+        requests: { cpu: 250m, memory: 256Mi }
+        limits: { cpu: "1", memory: 1Gi }
+    components:
+      hoopdb-indexer:
+        # This component is not leader-elected and must stay at one replica.
+        replicas: 1
+        resources:
+          requests: { cpu: 500m, memory: 1Gi }
+          limits: { cpu: "2", memory: 2Gi }
+      referee:
+        replicas: 1
+        resources:
+          requests: { cpu: 250m, memory: 512Mi }
+          limits: { cpu: "1", memory: 1Gi }
+      bob-costas:
+        replicas: 1
+        resources:
+          requests: { cpu: 500m, memory: 1Gi }
+          limits: { cpu: "2", memory: 2Gi }
+  alleyoop:
+    ingest:
+      replicas: 1
+      resources:
+        requests: { cpu: 500m, memory: 512Mi }
+        limits: { cpu: "2", memory: 2Gi }
+
+relayhistory:
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+relay-cloud-api:
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: "2", memory: 2Gi }
+
+relay-dashboard:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }

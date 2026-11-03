@@ -1,0 +1,30 @@
+dependencies:
+- name: relaycast
+  repository: file://../relaycast
+  version: 0.3.0
+- name: relayauth
+  repository: file://../relayauth
+  version: 0.1.2
+- name: 96bulls
+  repository: file://../96bulls
+  version: 0.5.4
+- name: relayhistory
+  repository: file://../relayhistory
+  version: 0.1.1
+- name: relay-cloud-api
+  repository: file://../relay-cloud-api
+  version: 0.2.1
+- name: relay-dashboard
+  repository: file://../relay-dashboard
+  version: 0.1.0
+- name: relayflows
+  repository: file://../relayflows
+  version: 0.2.4
+- name: durable-actors
+  repository: file://../durable-actors
+  version: 0.14.6
+- name: relayfile
+  repository: file://../relayfile
+  version: 0.2.0
+digest: sha256:e6d9824fd897eba81b899a299d825dcd2feebddd4c8a4f8e6745fa11530e8d9b
+generated: "2026-11-03T03:36:43.978729-08:00"

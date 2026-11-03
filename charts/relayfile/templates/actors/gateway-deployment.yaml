@@ -1,0 +1,146 @@
+{{- include "relayfile.actors.validate" . -}}
+{{- if include "relayfile.actors.enabled" . -}}
+{{- $ta := .Values.runtime.durableActors -}}
+{{- $dev := include "relayfile.actors.dev" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Same name and selector as the Go server: the Service, Ingress, HPA, PDB
+  # and NetworkPolicy in templates/server/ select the gateway unchanged.
+  name: {{ include "relayfile.server.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.server.labels" . | nindent 4 }}
+    agentworkforce.dev/relayfile-backend: durable-actors
+  {{- with .Values.podAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if $dev }}
+  replicas: 1
+  # One dev runtime owns its local state; never run two side by side.
+  strategy: { type: Recreate }
+  {{- else if not .Values.autoscaling.enabled }}
+  replicas: {{ $ta.gateway.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "relayfile.server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- include "relayfile.server.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "relayfile.serviceAccountName" . }}
+      # Internet-facing and never calls the Kubernetes API (GKE Workload
+      # Identity uses the metadata server, not the ServiceAccount token).
+      automountServiceAccountToken: false
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: gateway
+          image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.image "path" "runtime.durableActors.image") | quote }}
+          imagePullPolicy: {{ $ta.image.pullPolicy }}
+          args: [gateway]
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+              protocol: TCP
+          env:
+            {{- include "relayfile.actors.gatewayEnv" . | nindent 12 }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $ta.gateway.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+        {{- if $dev }}
+        {{- $dr := $ta.devRuntime }}
+        # kind/CI only: `durable-actors dev` binds 127.0.0.1 and hands out
+        # loopback routes, so it must share the gateway's network namespace.
+        - name: durable-actors-dev
+          image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.workspaceImage "path" "runtime.durableActors.workspaceImage") | quote }}
+          imagePullPolicy: {{ $ta.workspaceImage.pullPolicy }}
+          args: [dev]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10000
+            capabilities: { drop: [ALL] }
+          env:
+            - name: DURABLE_ACTORS_PORT
+              value: {{ $dr.port | quote }}
+            - name: DURABLE_ACTORS_PROJECT_ID
+              value: {{ $ta.projectId | quote }}
+            - name: DURABLE_ACTORS_DATA_DIR
+              value: /data
+            - name: HOME
+              value: /tmp
+            {{- include "relayfile.actors.secretEnv" (dict "name" "DURABLE_ACTORS_SECRET" "secret" $ta.existingSecret "key" $dr.secretKey) | nindent 12 }}
+          {{- with $dr.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - { name: dev-data, mountPath: /data }
+            - { name: dev-tmp, mountPath: /tmp }
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if $dev }}
+        - name: dev-tmp
+          emptyDir: {}
+        - name: dev-data
+          {{- if $ta.devRuntime.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ $ta.devRuntime.existingClaim | quote }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

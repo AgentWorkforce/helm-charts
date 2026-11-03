@@ -1,7 +1,7 @@
 apiVersion: v2
 name: 96bulls-worker
 type: application
-version: 0.5.1
+version: 0.5.3
 # appVersion tracks the default services image tag. Pin image.digest in
 # production values.
 appVersion: "0.1.0"
@@ -10,6 +10,9 @@ description: >
   bucket init Job, and the stage workers (hoopdb-indexer, referee,
   bob-costas). Hook-free: safe to render with `helm template --no-hooks` and
   apply with server-side apply (Alchemy Kubernetes.HelmChart).
+annotations:
+  artifacthub.io/license: Apache-2.0
+  agentworkforce.dev/license-scope: "First-party chart code only; dependencies and images retain their own licenses."
 home: https://github.com/AgentWorkforce/96BullSessions
 keywords:
   - 96bulls

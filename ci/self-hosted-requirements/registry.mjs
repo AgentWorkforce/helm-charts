@@ -286,6 +286,14 @@ checks.shipped = () => {
         }
         for (const k of asList(s.keys)) {
           const wk = perProfile(k.key, pid);
+          // An optional key with no default (key "<operator-chosen ...>"): the
+          // profile must leave key_path unset; the operator names the data key.
+          if (k.optional && String(wk).startsWith('<')) {
+            const got = k.key_path ? firstSet(pid, k.key_path) : undefined;
+            if (!k.key_path) err(c, `${e.id}: optional Secret key ${wk} needs a key_path`);
+            else if (got !== undefined && got !== null && got !== '') err(c, `${e.id}: optional Secret key ${k.key_path} in ${pid} defaults to ${JSON.stringify(got)}; record it as the key`);
+            continue;
+          }
           if (k.key_path) {
             const got = firstSet(pid, k.key_path);
             if (got !== wk) err(c, `${e.id}: Secret key in ${pid} resolves to ${JSON.stringify(got)} (${k.key_path}), registry says ${wk}`);
@@ -305,13 +313,20 @@ checks.shipped = () => {
 checks.planned = () => {
   const c = 'planned';
   for (const e of entries.filter((x) => x.status === 'planned')) {
-    for (const ch of CHARTS) {
+    // A planned env name may already be shipped by an unrelated chart (for
+    // example Relay History can use OPENAI_API_KEY while the 96Bulls model
+    // worker remains planned). Enforce absence only in the entry's chart
+    // family; normalized value paths still catch umbrella/subchart reads.
+    const plannedCharts = [...new Set(entryCharts(e).flatMap(chartFamily))];
+    for (const ch of plannedCharts) {
       for (const n of entryEnv(e)) if (scans[ch].env.has(n) || new RegExp(`\\b${n}\\b`).test(templateText[ch])) err(c, `${e.id} is planned, but charts/${ch}/templates references env ${n}: ship it (status: shipped) or remove the reference`);
-      // Paths are normalized (an umbrella .Values.worker.x is 96bulls-worker:x), so
-      // a planned path is caught in its own chart's templates and in any chart
-      // (the umbrella) that reads it through a subchart key.
-      for (const p of entryValues(e)) {
-        const want = p.replace(/\.\*$/, '');
+    }
+    // Paths are normalized (an umbrella .Values.worker.x is 96bulls-worker:x),
+    // so scan every chart: a planned 96bulls-worker path read only by the
+    // 96bulls umbrella templates (or any other consumer) is still caught.
+    for (const p of entryValues(e)) {
+      const want = p.replace(/\.\*$/, '');
+      for (const ch of CHARTS) {
         for (const [tp, where] of scans[ch].allPaths) if (tp === want || tp.startsWith(`${want}.`)) err(c, `${e.id} is planned, but charts/${ch}/templates reads ${tp} (${where[0]})`);
       }
     }
@@ -466,7 +481,9 @@ function renderDoc() {
   for (const r of comp.releases) {
     const charts = Object.entries(r.charts || {}).map(([c, v]) => `${c} ${v}`).join('<br>');
     const deps = r.depends ? `<br>(deps: ${Object.values(r.depends).flatMap((d) => Object.entries(d).map(([c, v]) => `${c} ${v}`)).join(', ')})` : '';
-    const imgs = Object.entries(r.images || {}).map(([c, i]) => `${c}: ${code(`${i.repository}${i.digest ? `@${short(i.digest)}` : `:${i.tag ?? r.app_versions?.[c] ?? ''}`}`)}`);
+    // digest_required: the chart ships no default digest and refuses to render
+    // without one, so there is no installable tag to show.
+    const imgs = Object.entries(r.images || {}).map(([c, i]) => `${c}: ${code(`${i.repository}${i.digest ? `@${short(i.digest)}` : i.digest_required ? '@sha256:<required>' : `:${i.tag ?? r.app_versions?.[c] ?? ''}`}`)}`);
     const image = imgs.length ? imgs.join('<br>') : cell(r.images_note);
     const svc = r.services ? `${code(r.services.source_commit.slice(0, 12))} / ${code(r.services.migration_generation.slice(0, 12))}` : '';
     const combos = asList(r.db_combos).map((k) => `${k.db_mode} + ${k.boundary ?? '(unset)'} (${k.hoopdb})${k.status && k.status !== 'shipped' ? ` (${k.status})` : ''}`).join('<br>');
@@ -524,7 +541,7 @@ function renderDoc() {
       if (entryEnv(e).length) L(`- Env: ${entryEnv(e).map(code).join(', ')}`);
       for (const s of asList(e.secrets)) {
         const name = typeof s.name === 'object' ? Object.entries(s.name).map(([k, v]) => `${code(v)} (${k})`).join(', ') : code(s.name);
-        const keys = asList(s.keys).map((k) => (typeof k.key === 'object' ? Object.entries(k.key).map(([pk, v]) => `${code(v)} (${pk})`).join(', ') : code(k.key)) + (k.key_path ? ` from ${code(k.key_path)}` : '')).join('; ');
+        const keys = asList(s.keys).map((k) => (typeof k.key === 'object' ? Object.entries(k.key).map(([pk, v]) => `${code(v)} (${pk})`).join(', ') : code(k.key)) + (k.key_path ? ` from ${code(k.key_path)}` : '') + (k.optional ? ` (optional: ${k.optional})` : '')).join('; ');
         L(`- Secret: ${name}${s.name_paths ? ` from ${asList(s.name_paths).map(code).join(' then ')}` : ''}; keys ${keys}${s.note ? `. ${s.note}` : ''}`);
       }
       const verify = typeof e.verify === 'object' ? Object.entries(e.verify).map(([k, v]) => `${k}: ${v}`).join(' / ') : e.verify;

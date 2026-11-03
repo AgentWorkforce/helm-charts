@@ -26,6 +26,49 @@ Fail early on missing required values (render time, not crash-loop time).
 {{- range $entry := .Values.ingest.env }}
 {{- if eq ($entry.name | default "") "ALLOW_INTERIM_RELAYAUTH_BEARER" }}{{ fail "alleyoop: configure auth.allowInterimRelayAuthBearer instead of ingest.env" }}{{ end -}}
 {{- end -}}
+{{- if not (has (toString .Values.allowInClusterHttp) (list "true" "false")) }}{{ fail "alleyoop: allowInClusterHttp must be true or false" }}{{ end -}}
+{{- with .Values.auth.historyOrigin }}
+{{- $origin := toString . -}}
+{{- $originError := "alleyoop: auth.historyOrigin must be a bare origin http(s)://host[:port]: a DNS hostname of RFC 1123 labels, an optional port 1-65535, and no path, query, fragment or credentials" -}}
+{{- if not (regexMatch "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$" $origin) }}{{ fail $originError }}{{ end -}}
+{{- $originHost := (urlParse $origin).hostname -}}
+{{- if or (gt (len $originHost) 253) (not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$" $originHost)) }}{{ fail $originError }}{{ end -}}
+{{- $originPort := regexFind ":[0-9]+$" $origin -}}
+{{- if and $originPort (or (lt (int (trimPrefix ":" $originPort)) 1) (gt (int (trimPrefix ":" $originPort)) 65535)) }}{{ fail $originError }}{{ end -}}
+{{- end -}}
+{{- $ingestEnvNames := list -}}
+{{- range concat (.Values.extraEnv | default list) (.Values.ingest.env | default list) }}{{ $ingestEnvNames = append $ingestEnvNames (.name | default "") }}{{ end -}}
+{{- if has "ALLOW_IN_CLUSTER_HTTP" $ingestEnvNames }}{{ fail "alleyoop: extraEnv/ingest.env must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" }}{{ end -}}
+{{- if and .Values.auth.historyOrigin (has "RELAYHISTORY_ORIGIN" $ingestEnvNames) }}{{ fail "alleyoop: set RELAYHISTORY_ORIGIN through auth.historyOrigin or extraEnv/ingest.env, not both" }}{{ end -}}
+{{- include "alleyoop.validateLocker" . }}
+{{- end }}
+
+{{/*
+Locker provider validation; runs last so the other value checks report first.
+*/}}
+{{- define "alleyoop.validateLocker" -}}
+{{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
+{{- /* Locker provider. The services image selects S3 (unset LOCKER_PROVIDER) or
+native GCS (LOCKER_PROVIDER=gcs, Workload Identity through the GKE metadata
+server). It refuses HMAC keys on GCS and refuses the S3 client against a
+Google Cloud Storage endpoint, so both shapes fail here at render time. */ -}}
+{{- $provider := .Values.locker.provider | default "s3" -}}
+{{- if not (has $provider (list "s3" "gcs")) }}{{ fail "alleyoop: locker.provider must be s3 or gcs" }}{{ end -}}
+{{- $gcs := eq $provider "gcs" -}}
+{{- $extraEnvNames := list -}}
+{{- range .Values.extraEnv }}{{ $extraEnvNames = append $extraEnvNames (.name | default "") }}{{ end -}}
+{{- $endpointHost := "" -}}
+{{- if .Values.locker.endpoint }}{{ $endpointHost = (urlParse .Values.locker.endpoint).hostname | lower }}{{ end -}}
+{{- if and (not $gcs) (or (eq $endpointHost "storage.googleapis.com") (hasSuffix ".storage.googleapis.com" $endpointHost) (eq $endpointHost "storage.google.com")) }}{{ fail "alleyoop: locker.endpoint is a Google Cloud Storage endpoint: set locker.provider=gcs (the services refuse GCS through the S3 client and HMAC keys)" }}{{ end -}}
+{{- if $gcs }}
+{{- if ne $credentialsMode "podIdentity" }}{{ fail "alleyoop: locker.provider=gcs requires locker.credentials.mode=podIdentity (GKE Workload Identity; the services refuse HMAC keys on GCS)" }}{{ end -}}
+{{- if not (has (.Values.locker.endpoint | default "") (list "" "https://storage.googleapis.com" "https://storage.googleapis.com/")) }}{{ fail "alleyoop: locker.provider=gcs requires locker.endpoint to be empty or https://storage.googleapis.com" }}{{ end -}}
+{{- if not .Values.locker.bucket }}{{ fail "alleyoop: locker.bucket is required with locker.provider=gcs" }}{{ end -}}
+{{- range $name := list "CLOUD_SQL_CONNECTION_NAME" "REDIS_HOST" "REDIS_PORT" "REDIS_AUTH_ENABLED" "REDIS_TRANSIT_ENCRYPTION" "REDIS_TLS_CA_PEM" "PUBSUB_TOPIC" "PUBSUB_SUBSCRIPTION" }}
+{{- if not (has $name $extraEnvNames) }}{{ fail (printf "alleyoop: locker.provider=gcs arms the services' GCS data-path readiness check, which needs %s in extraEnv (Cloud SQL connection name, Memorystore TLS and Pub/Sub settings); pods never become Ready without it" $name) }}{{ end -}}
+{{- end }}
+{{- end }}
+{{- range $name := list "LOCKER_PROVIDER" "PIPELINE_RAW_PROVIDER" }}{{ if has $name $extraEnvNames }}{{ fail (printf "alleyoop: extraEnv must not set %s: use locker.provider" $name) }}{{ end }}{{ end -}}
 {{- end }}
 
 {{/*
@@ -70,6 +113,12 @@ Usage: include "alleyoop.env" (dict "context" . "service" "referee")
   value: {{ $v.locker.bucket | quote }}
 - name: LOCKER_REGION
   value: {{ $v.locker.region | quote }}
+{{- if eq ($v.locker.provider | default "s3") "gcs" }}
+- name: LOCKER_PROVIDER
+  value: "gcs"
+- name: PIPELINE_RAW_PROVIDER
+  value: "gcs"
+{{- end }}
 {{- if eq ($v.locker.credentials.mode | default "secret") "secret" }}
 - name: LOCKER_ACCESS_KEY_ID
   valueFrom:

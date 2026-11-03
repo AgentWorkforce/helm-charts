@@ -1,0 +1,117 @@
+# durable-actors overlay for the GKE proof (awf-conformance-gke,
+# project agentrelay-96bulls-soc2-2610, release agent-relay in namespace
+# agent-relay). Apply after values-gcp-proof.yaml and values-gcp-proof-live.yaml:
+#
+#   helm upgrade --install agent-relay charts/agent-relay -n agent-relay \
+#     -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml \
+#     -f values-gcp-proof-durable-actors.yaml \
+#     [-f values-gcp-proof-relayfile.yaml]
+#
+# Image digests are pinned below (relay-briefs actor-images.md): the control
+# plane is durable-actors 0.14.6 plus the invoke-only key patch
+# (selfhost/scoped-credentials 7a7e9349, not upstream); relaycast gateway and
+# deployer are relaycast 9ad70e5d (PR #618, review fixes F1-F5).
+#
+# It switches Relaycast to runtime.backend=durable-actors (a FRESH-INSTALL
+# backend: SQLite workspaces are not migrated, and only ar_ credentials work),
+# adds Relayfile in durable-actors mode, and runs the durable-actors control
+# plane with actor sandboxes on the gvisor-pool node pool. The GCP resources and
+# Secrets it names are listed in docs/self-hosted-durable-actors.md
+# ("GCP provisioning"). No credential values appear here.
+components:
+  durableActors: true
+  # Relayfile in actor mode: add values-gcp-proof-relayfile.yaml.
+  relayfile: false
+
+gkeIngress:
+  hosts:
+    actors: actors.gcp-proof.agentrelay.com
+
+durable-actors:
+  publicUrl: https://actors.gcp-proof.agentrelay.com
+  placement:
+    # The zone of the gvisor-pool node pool.
+    zone: us-central1-a
+  storage:
+    # One Standard bucket (ownership, compiled code, state snapshots).
+    bucket: agentrelay-96bulls-soc2-2610-actors
+  # Keys: postgres-url, jwt-signing-key, api-key. One controller needs no Redis.
+  credentialsSecret: actors-credentials
+  # Patched control plane: accepts DURABLE_ACTORS_INVOKE_API_KEY (invoke and
+  # socket grants only) from credentialsSecret key invoke-api-key.
+  invokeApiKeySecretKey: invoke-api-key
+  images:
+    controlPlane:
+      repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/durable-actors-control-plane
+      digest: 317967053e09b1245a7bb65f3c962b488a3a21e4804f92808d9f63e06160ba00
+  serviceAccount:
+    googleServiceAccount: durable-actors@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+  # The umbrella Ingress (gkeIngress.hosts.actors) is the only edge.
+  ingress:
+    enabled: false
+  replicaCount: 1
+  actors:
+    # Keep idle actor hosts for 2 minutes (upstream default 10 s is shorter
+    # than relaycast's 15 s maintenance alarm, so idle workspaces would sleep
+    # and close every socket with 4012 on each wake).
+    hostIdleTimeoutMs: 120000
+    # Sized for the single e2-standard-4 gvisor-pool node.
+    warm: 2
+    maxStarting: 4
+    cpuMillis: 250
+    memoryMiB: 256
+  organizationLimits:
+    maxActiveActors: 50
+  # The Sessions stack's Cloud SQL proxy (96bulls namespace) holds the pool.
+  postgres:
+    maxConnections: 4
+
+relaycast:
+  credentials:
+    format: ar
+    authority: self
+  secretKeys:
+    credentialKeyring: relaycast-credential-keyring
+    # A separate key from the SQLite release's relaycast-internal-secret, so
+    # switching backends never rewrites a live secret. Must equal
+    # RELAYCAST_INTERNAL_SECRET in the sandbox Secret relaycast-actor-env.
+    internalSecret: relaycast-actors-internal-secret
+  serviceAccount:
+    annotations:
+      iam.gke.io/gcp-service-account: relaycast-files@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+  runtime:
+    backend: durable-actors
+    durableActors:
+      gateway:
+        image:
+          repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-gateway
+          digest: sha256:6e69e96cfc687b800a0a29a8a2c7b1402e51a4ee09106a5a9ef6e6781e4a59a8
+        replicaCount: 2
+      # Same value as actors-credentials/invoke-api-key: the control plane's
+      # invoke-only key (invoke + socket grants; no deploy, no admin APIs).
+      invocationSecret:
+        name: relaycast-durable-actors-invoke
+        key: durable-actors-invoke-key
+        scope: invoke-only
+      adminKeySecret:
+        name: actors-credentials
+        key: api-key
+      deployer:
+        image:
+          repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relaycast-actors-deployer
+          digest: sha256:2e08b649d7bd07be53df259b4f1dedce7f57e65c13f49cfefd67faedd53a7cde
+        artifactBucket: agentrelay-96bulls-soc2-2610-actors
+        # The control plane is created in the same upgrade (migrations, Cloud
+        # SQL proxy, cold image pull): pod-level retries with capped
+        # exponential backoff give it ~30 minutes instead of ~1.
+        backoffLimit: 10
+        serviceAccount:
+          annotations:
+            iam.gke.io/gcp-service-account: actors-deployer@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com
+      # In the sandbox namespace agent-relay-agent-relay, labelled
+      # terse.ai/customer-secret=true.
+      actorEnvSecrets: [relaycast-actor-env]
+      fileSigningSecretKey: relaycast-file-signing-secret
+      fileStore:
+        driver: gcs
+        bucket: agentrelay-96bulls-soc2-2610-relaycast-files

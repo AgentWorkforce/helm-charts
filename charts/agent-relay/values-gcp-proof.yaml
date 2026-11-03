@@ -1,0 +1,185 @@
+# Portable full-customer GKE proof shape. All suite components stay enabled.
+# This file contains Secret names and keys, but no credential values. Supply
+# the three immutable image digests and create the referenced Secrets.
+components:
+  relaycast: true
+  relayauth: true
+  sessionsPipeline: true
+  relayhistory: true
+  cloudApi: true
+  dashboard: true
+
+global:
+  tenant:
+    orgId: org_gcp_proof
+
+gkeIngress:
+  enabled: true
+  name: agent-relay-gcp-proof
+  staticIpName: agent-relay-gcp-proof-ingress
+  managedCertificateName: agent-relay-gcp-proof
+  frontendConfigName: agent-relay-gcp-proof
+  hosts:
+    root: gcp-proof.agentrelay.com
+    api: api.gcp-proof.agentrelay.com
+    cast: cast.gcp-proof.agentrelay.com
+    history: history.gcp-proof.agentrelay.com
+
+relaycast:
+  fullnameOverride: relaycast
+  baseUrl: https://cast.gcp-proof.agentrelay.com
+  existingSecret: agent-relay-gcp-proof
+  secretKeys:
+    internalSecret: relaycast-internal-secret
+    bootstrapSecret: relaycast-workspace-bootstrap-secret
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+    # Binds the gkeIngress cast BackendConfig (WebSocket timeout).
+    backendConfig: agent-relay-gcp-proof-cast
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+
+relayauth:
+  fullnameOverride: relayauth
+  baseUrl: http://relayauth:8787
+  issuer: http://relayauth:8787
+  existingSecret: agent-relay-gcp-proof
+  secretKeys:
+    internalSecret: relayauth-internal-secret
+    signingKey: relayauth-signing-key.pem
+    bootstrapApiKey: relayauth-bootstrap-api-key
+  jwksIngress: { enabled: false }
+  networkPolicy:
+    enabled: true
+
+96bulls:
+  worker:
+    image:
+      digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
+    existingSecret: agent-relay-gcp-proof
+    summaryEncryption:
+      existingSecret: agent-relay-gcp-proof
+    hoopdb:
+      existingSecret: agent-relay-gcp-proof
+      key: HOOPDB_URL
+    locker:
+      endpoint: ""
+      bucket: agent-relay-gcp-proof
+      region: us-central1
+      credentials: { mode: podIdentity }
+    lockerInit: { enabled: false }
+    migrations:
+      hoopdb:
+        existingSecret: agent-relay-gcp-proof
+        key: HOOPDB_MIGRATION_URL
+      databaseMode: cloudsql
+      supabaseShim: false
+      roleBootstrap: false
+      runtimeRole: bulls96_runtime
+      runtimeRoleLogin: true
+      functionBoundaryMode: global-default-revoke
+  alleyoop:
+    image:
+      digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
+    existingSecret: agent-relay-gcp-proof
+    hoopdb:
+      existingSecret: agent-relay-gcp-proof
+      key: HOOPDB_URL
+    locker:
+      endpoint: ""
+      bucket: agent-relay-gcp-proof
+      region: us-central1
+      credentials: { mode: podIdentity }
+    auth:
+      jwksUrl: http://relayauth:8787/.well-known/jwks.json
+  hoopdb: { enabled: false }
+  locker: { enabled: false }
+
+relayhistory:
+  fullnameOverride: relayhistory
+  image:
+    repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relayhistory
+    digest: ""
+  database:
+    existingSecret: agent-relay-gcp-proof
+  relayauth:
+    historyOrigin: https://history.gcp-proof.agentrelay.com
+    jwksUrl: http://relayauth:8787/.well-known/jwks.json
+    issuer: http://relayauth:8787
+  agentRelayCloud:
+    apiUrl: http://relay-cloud-api
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+    allowAllEgress: true
+
+relay-cloud-api:
+  fullnameOverride: relay-cloud-api
+  image:
+    repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/selfhost-api
+    digest: ""
+  database:
+    runtimeRole: control_api_runtime
+  publicUrl: https://api.gcp-proof.agentrelay.com
+  existingSecret: agent-relay-gcp-proof
+  services:
+    relayauthUrl: http://relayauth:8787
+    relaycastUrl: http://relaycast:8787
+    relaycastPublicUrl: https://cast.gcp-proof.agentrelay.com
+    relayhistoryUrl: http://relayhistory:8080
+    relayhistoryPublicUrl: https://history.gcp-proof.agentrelay.com
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+    # Binds the gkeIngress api BackendConfig (backend timeout for the flows
+    # worker queue SSE stream); the chart renders the annotation.
+    # Must be <gkeIngress.name>-api.
+    backendConfig: agent-relay-gcp-proof-api
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
+    allowAllEgress: true
+
+relay-dashboard:
+  fullnameOverride: relay-dashboard
+  image:
+    repository: us-central1-docker.pkg.dev/agentrelay-96bulls-soc2-2610/awf-conformance-images/relay-dashboard
+    digest: ""
+  runtime:
+    publicUrl: https://gcp-proof.agentrelay.com
+    appPath: /
+    apiBasePath: /cloud/api
+    loginPath: /login
+  api:
+    serviceName: relay-cloud-api
+  service:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }

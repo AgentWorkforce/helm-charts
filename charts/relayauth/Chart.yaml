@@ -2,8 +2,11 @@ apiVersion: v2
 name: relayauth
 description: RelayAuth identity and token issuer for self-hosted Agent Relay stacks
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "0.2.34"
+annotations:
+  artifacthub.io/license: Apache-2.0
+  agentworkforce.dev/license-scope: "First-party chart code only; dependencies and images retain their own licenses."
 home: https://github.com/AgentWorkforce/relayauth
 keywords:
   - relayauth

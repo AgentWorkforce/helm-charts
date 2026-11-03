@@ -10,6 +10,9 @@ Fail early on missing required values (render time, not crash-loop time).
 */}}
 {{- define "96bulls-worker.validate" -}}
 {{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
+{{- if not (has (toString .Values.allowInClusterHttp) (list "true" "false")) }}{{ fail "96bulls-worker: allowInClusterHttp must be true or false" }}{{ end -}}
+{{- range .Values.extraEnv }}{{ if eq (.name | default "") "ALLOW_IN_CLUSTER_HTTP" }}{{ fail "96bulls-worker: extraEnv must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" }}{{ end }}{{ end -}}
+{{- range $n, $c := .Values.components }}{{ range ($c.env | default list) }}{{ if eq (.name | default "") "ALLOW_IN_CLUSTER_HTTP" }}{{ fail (printf "96bulls-worker: components.%s.env must not set ALLOW_IN_CLUSTER_HTTP: use allowInClusterHttp" $n) }}{{ end }}{{ end }}{{ end -}}
 {{- $migrations := .Values.migrations | default dict -}}
 {{- $migrationHoopdb := get $migrations "hoopdb" | default dict -}}
 {{- if not (or (eq $credentialsMode "secret") (eq $credentialsMode "podIdentity")) }}{{ fail "96bulls-worker: locker.credentials.mode must be secret or podIdentity" }}{{ end -}}
@@ -34,6 +37,36 @@ unless a separate mark_pass step runs, which this chart does not have. */ -}}
 {{- range $entry := $bob.env }}
 {{- if or (eq ($entry.name | default "") "SUMMARY_MASTER_KEYS") (eq ($entry.name | default "") "SUMMARY_MASTER_KEYS_FILE") }}{{ fail "96bulls-worker: configure summaryEncryption instead of components.bob-costas.env SUMMARY_MASTER_KEYS/SUMMARY_MASTER_KEYS_FILE" }}{{ end -}}
 {{- end }}
+{{- include "96bulls-worker.validateLocker" . }}
+{{- end }}
+
+{{/*
+Locker provider validation; runs last so the other value checks report first.
+*/}}
+{{- define "96bulls-worker.validateLocker" -}}
+{{- $credentialsMode := .Values.locker.credentials.mode | default "secret" -}}
+{{- /* Locker provider. The services image selects S3 (unset LOCKER_PROVIDER) or
+native GCS (LOCKER_PROVIDER=gcs, Workload Identity through the GKE metadata
+server). It refuses HMAC keys on GCS and refuses the S3 client against a
+Google Cloud Storage endpoint, so both shapes fail here at render time. */ -}}
+{{- $provider := .Values.locker.provider | default "s3" -}}
+{{- if not (has $provider (list "s3" "gcs")) }}{{ fail "96bulls-worker: locker.provider must be s3 or gcs" }}{{ end -}}
+{{- $gcs := eq $provider "gcs" -}}
+{{- $extraEnvNames := list -}}
+{{- range .Values.extraEnv }}{{ $extraEnvNames = append $extraEnvNames (.name | default "") }}{{ end -}}
+{{- $endpointHost := "" -}}
+{{- if .Values.locker.endpoint }}{{ $endpointHost = (urlParse .Values.locker.endpoint).hostname | lower }}{{ end -}}
+{{- if and (not $gcs) (or (eq $endpointHost "storage.googleapis.com") (hasSuffix ".storage.googleapis.com" $endpointHost) (eq $endpointHost "storage.google.com")) }}{{ fail "96bulls-worker: locker.endpoint is a Google Cloud Storage endpoint: set locker.provider=gcs (the services refuse GCS through the S3 client and HMAC keys)" }}{{ end -}}
+{{- if $gcs }}
+{{- if ne $credentialsMode "podIdentity" }}{{ fail "96bulls-worker: locker.provider=gcs requires locker.credentials.mode=podIdentity (GKE Workload Identity; the services refuse HMAC keys on GCS)" }}{{ end -}}
+{{- if not (has (.Values.locker.endpoint | default "") (list "" "https://storage.googleapis.com" "https://storage.googleapis.com/")) }}{{ fail "96bulls-worker: locker.provider=gcs requires locker.endpoint to be empty or https://storage.googleapis.com" }}{{ end -}}
+{{- if not .Values.locker.bucket }}{{ fail "96bulls-worker: locker.bucket is required with locker.provider=gcs" }}{{ end -}}
+{{- if .Values.lockerInit.enabled }}{{ fail "96bulls-worker: lockerInit.enabled must be false with locker.provider=gcs: provision the GCS bucket outside the chart" }}{{ end -}}
+{{- range $name := list "CLOUD_SQL_CONNECTION_NAME" "REDIS_HOST" "REDIS_PORT" "REDIS_AUTH_ENABLED" "REDIS_TRANSIT_ENCRYPTION" "REDIS_TLS_CA_PEM" "PUBSUB_TOPIC" "PUBSUB_SUBSCRIPTION" }}
+{{- if not (has $name $extraEnvNames) }}{{ fail (printf "96bulls-worker: locker.provider=gcs arms the services' GCS data-path readiness check, which needs %s in extraEnv (Cloud SQL connection name, Memorystore TLS and Pub/Sub settings); pods never become Ready without it" $name) }}{{ end -}}
+{{- end }}
+{{- end }}
+{{- range $name := list "LOCKER_PROVIDER" "PIPELINE_RAW_PROVIDER" }}{{ if has $name $extraEnvNames }}{{ fail (printf "96bulls-worker: extraEnv must not set %s: use locker.provider" $name) }}{{ end }}{{ end -}}
 {{- end }}
 
 {{/*
@@ -74,6 +107,12 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ $v.locker.bucket | quote }}
 - name: LOCKER_REGION
   value: {{ $v.locker.region | quote }}
+{{- if eq ($v.locker.provider | default "s3") "gcs" }}
+- name: LOCKER_PROVIDER
+  value: "gcs"
+- name: PIPELINE_RAW_PROVIDER
+  value: "gcs"
+{{- end }}
 {{- if eq ($v.locker.credentials.mode | default "secret") "secret" }}
 - name: LOCKER_ACCESS_KEY_ID
   valueFrom:
@@ -96,6 +135,8 @@ Usage: include "96bulls-worker.env" (dict "context" . "service" "referee")
   value: {{ $v.deployment.id | default (printf "%s/%s" .context.Release.Namespace .context.Release.Name) | quote }}
 - name: ENVIRONMENT
   value: {{ $v.environment | quote }}
+- name: ALLOW_IN_CLUSTER_HTTP
+  value: {{ ternary "true" "false" (eq (toString $v.allowInClusterHttp) "true") | quote }}
 {{- if eq .service "bob-costas" }}
 # The Secret is projected as a file into Bob Costas only; the key material is
 # never copied into the Pod spec's environment values.

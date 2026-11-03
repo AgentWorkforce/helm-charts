@@ -1,0 +1,435 @@
+# Machine-readable image and source audit for the agent-relay GCP customer
+# profile. This file records evidence; it is not an image approval list.
+apiVersion: selfhost.agentrelay.com/v1alpha1
+kind: CustomerImageSourceManifest
+# Top-level per the gate schema (see the positive fixture in
+# ci/customer-release-gate); the release gate refuses anything but "ready".
+status: blocked
+metadata:
+  name: agent-relay-gcp
+  auditedAt: "2026-11-02"
+  chart:
+    name: agent-relay
+    version: 0.1.0
+    values:
+      - charts/agent-relay/values-gcp-proof.yaml
+
+scope:
+  description: >-
+    Unique images rendered by the full-customer GCP profile with all six
+    product components enabled. Known proof digests were supplied only to make
+    the fail-closed chart render for inventory; that does not approve them for
+    customer use.
+  activeUniqueImages: 7
+  excludedConditionalImages:
+    - image: cgr.dev/chainguard/minio
+      reason: 96bulls.locker.enabled=false in the GCP profile
+    - image: otel/opentelemetry-collector-contrib
+      reason: 96bulls.otel.enabled=false
+    - image: docker.io/alpine/k8s
+      reason: all three privileged SQL bootstrap Jobs are disabled
+    - image: ghcr.io/cloudnative-pg/postgresql
+      reason: >-
+        The HoopDb Cluster is disabled, but this image is still active below
+        as the Sessions migration wait-for-role init container.
+
+policy:
+  customerReadyRequires:
+    - immutable digest in customer values
+    - exact source repository and committed revision
+    - approved source and binary distribution license
+    - reviewed release workflow that builds the committed revision
+    - required linux platform manifests
+    - approved customer-accessible source registry or vendor promotion path
+    - recorded SBOM, provenance, vulnerability review, and release approval
+  proofRegistryIsCustomerChannel: false
+  mutableTagsAllowedInCustomerValues: false
+  unknownOrUnapprovedImageIsBlocking: true
+
+images:
+  - id: relaycast
+    active: true
+    firstParty: true
+    component: relaycast
+    workloads:
+      - Deployment/relaycast:relaycast
+    current:
+      repository: ghcr.io/agentworkforce/relaycast-self-host
+      digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
+      chartStatus: shipped
+    source:
+      repository: https://github.com/AgentWorkforce/relaycast
+      revision: bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49
+      path: Dockerfile
+      reproducibleReference: true
+    license:
+      status: approved
+      spdx: Apache-2.0
+      evidence: LICENSE at the source revision
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+    release:
+      workflow: https://github.com/AgentWorkforce/relaycast/blob/bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49/.github/workflows/publish-container.yml
+      run: https://github.com/AgentWorkforce/relaycast/actions/runs/41161384835
+      trigger: workflow_dispatch
+      buildsCommittedRevision: true
+      publishesSbom: false
+      # buildx default (mode=min, unsigned) attestation only; not verifiable.
+      publishesProvenance: false
+      provenanceMode: buildx-default
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: blocked
+      blockingReasons: [IMG-BLOCK-005]
+
+  - id: relayauth
+    active: true
+    firstParty: true
+    component: relayauth
+    workloads:
+      - Deployment/relayauth:relayauth
+    current:
+      repository: ghcr.io/agentworkforce/relayauth
+      digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288
+      chartStatus: shipped
+    source:
+      repository: https://github.com/AgentWorkforce/relayauth
+      revision: 784582ef983bb72b13b43512d9a4142ef5dfabb2
+      path: docker/Dockerfile
+      reproducibleReference: true
+    license:
+      status: approved
+      spdx: Apache-2.0
+      evidence: LICENSE at the source revision
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+    release:
+      workflow: https://github.com/AgentWorkforce/relayauth/blob/784582ef983bb72b13b43512d9a4142ef5dfabb2/.github/workflows/container.yml
+      run: https://github.com/AgentWorkforce/relayauth/actions/runs/41277442855
+      trigger: workflow_dispatch
+      buildsCommittedRevision: true
+      publishesSbom: true
+      publishesProvenance: true
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: approved
+      basis: >-
+        Public digest from a reviewed workflow at the recorded revision, with
+        SBOM, provenance and amd64+arm64 verified from the registry.
+      blockingReasons: []
+
+  - id: sessions-services
+    active: true
+    firstParty: true
+    component: 96bulls
+    workloads:
+      - Deployment/*-alleyoop-ingest:ingest
+      - Deployment/*-worker-hoopdb-indexer:hoopdb-indexer
+      - Deployment/*-worker-referee:referee
+      - Deployment/*-worker-bob-costas:bob-costas
+      - Job/*-worker-migrate-*:migrate
+    current:
+      repository: ghcr.io/agentworkforce/96bulls-services
+      digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
+      chartStatus: shipped-private
+    source:
+      repository: https://github.com/AgentWorkforce/sessions-pipeline
+      revision: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
+      path: docker/services.Dockerfile
+      reproducibleReference: true
+    license:
+      status: approved
+      spdx: Apache-2.0
+      evidence: Repository-owner decision and canonical root LICENSE.
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: []
+      status: unverified
+      note: >-
+        Expected from the workflow; not registry-verified (anonymous manifest
+        inspection returned unauthorized).
+    release:
+      workflow: https://github.com/AgentWorkforce/sessions-pipeline/blob/7d7229bb31c121ecb98cd4e35c248fc2cf5669ad/.github/workflows/publish-image.yml
+      run: https://github.com/AgentWorkforce/sessions-pipeline/actions/runs/41375745173
+      trigger: workflow_dispatch-with-approval-phrase
+      buildsCommittedRevision: true
+      publishesSbom: false
+      publishesProvenance: false
+      provenanceMode: buildx-default
+    customerAcquisition:
+      status: blocked
+      procedure: null
+      requiredAction: >-
+        Publish an anonymously customer-readable release or define a supported
+        entitlement and vendor-to-customer registry promotion process.
+    approval:
+      status: blocked
+      blockingReasons: [IMG-BLOCK-001, IMG-BLOCK-005]
+
+  - id: sessions-migration-postgresql
+    active: true
+    firstParty: false
+    component: 96bulls
+    workloads:
+      - Job/*-worker-migrate-*:wait-for-role
+    current:
+      repository: ghcr.io/cloudnative-pg/postgresql
+      digest: sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3
+      chartStatus: pinned-third-party
+    source:
+      repository: https://github.com/cloudnative-pg/postgres-containers
+      revision: null
+      path: Dockerfile
+      reproducibleReference: false
+      note: The image has no OCI source/revision labels and the exact source commit for this digest is not recorded.
+    license:
+      status: approved-upstream
+      spdx: Apache-2.0
+      evidence: Public upstream repository license
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+    release:
+      workflow: https://github.com/cloudnative-pg/postgres-containers/blob/main/.github/workflows/bake.yml
+      run: null
+      trigger: upstream-managed
+      buildsCommittedRevision: false
+      publishesSbom: false
+      publishesProvenance: false
+      note: Upstream-managed; the build run, SBOM and provenance for this digest are not recorded.
+    customerAcquisition:
+      status: available-public-review-required
+      procedure: Mirror the public upstream digest into the customer registry after third-party approval.
+    approval:
+      status: provenance-review-required
+      blockingReasons: [IMG-REVIEW-001]
+
+  - id: relayhistory
+    active: true
+    firstParty: true
+    component: relayhistory
+    workloads:
+      - Deployment/relayhistory:history
+      - Job/relayhistory-migrate-*:migrate
+    current:
+      repository: <private-proof-registry-not-for-customer-use>/relayhistory
+      digest: sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba
+      chartStatus: experimental-proof-only
+    source:
+      repository: https://github.com/AgentWorkforce/relayhistory-cloud
+      revision: 4b5839f17c5e0cd481e92712c2a1a340a1604e73
+      path: Dockerfile
+      reproducibleReference: true
+      note: The proof image was built locally from a clean checkout; the repository is private.
+    license:
+      status: approved
+      spdx: Apache-2.0
+      evidence: Repository-owner decision and canonical root LICENSE.
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+      verificationAccess: operator-credentials
+    release:
+      workflow: null
+      run: null
+      trigger: manual-local-buildx
+      # Built from the recorded commit by hand (manually observed), not by a
+      # reviewed release workflow.
+      buildsCommittedRevision: false
+      publishesSbom: true
+      publishesProvenance: true
+      note: The repository publish workflow releases an npm client, not this container.
+    customerAcquisition:
+      status: blocked
+      procedure: null
+      requiredAction: >-
+        Complete support review, add a reviewed container release workflow,
+        and publish to an approved customer-accessible channel.
+    approval:
+      status: blocked
+      blockingReasons: [IMG-BLOCK-002]
+
+  - id: selfhost-api
+    active: true
+    firstParty: true
+    component: relay-cloud-api
+    workloads:
+      - Deployment/relay-cloud-api:api
+      - Job/relay-cloud-api-migrate-*:migrate
+    current:
+      repository: ghcr.io/agentworkforce/selfhost-api
+      digest: sha256:48ba1877d97e47b523e859a0e532bc7f5c4a3920b999f0fbea86f3bbb04fee84
+      chartStatus: published-awaiting-visibility
+    source:
+      repository: https://github.com/AgentWorkforce/relaycontrol
+      revision: 10c069bb8adf15cae39f8d4e61a0a3b33fcb116c
+      baseRevision: 10c069bb8adf15cae39f8d4e61a0a3b33fcb116c
+      path: .
+      reproducibleReference: true
+      note: >-
+        Extracted from AgentWorkforce/cloud packages/selfhost-api into the
+        dedicated relaycontrol repository; the published image builds exactly
+        this committed revision (tags 0.1.0 and sha-10c069b...).
+    license:
+      status: approved
+      spdx: Apache-2.0
+      evidence: https://github.com/AgentWorkforce/relaycontrol/blob/10c069bb8adf15cae39f8d4e61a0a3b33fcb116c/LICENSE
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+    release:
+      workflow: release-selfhost-api-image.yml
+      run: https://github.com/AgentWorkforce/relaycontrol/actions/runs/41556195969
+      trigger: workflow_dispatch
+      buildsCommittedRevision: true
+      publishedTags: ["0.1.0", sha-10c069b]
+      publishesSbom: true
+      publishesProvenance: true
+      provenanceMode: max
+    customerAcquisition:
+      status: blocked
+      procedure: copy-by-digest
+      requiredAction: >-
+        The GHCR package is currently private (anonymous pull returns 401);
+        flip the package to public or copy the verified digest to the
+        customer's authorized registry, then pin it in the chart values.
+    approval:
+      status: blocked
+      blockingReasons: [IMG-BLOCK-003]
+
+  - id: relay-dashboard
+    active: true
+    firstParty: true
+    component: relay-dashboard
+    workloads:
+      - Deployment/relay-dashboard:copy-dashboard
+      - Deployment/relay-dashboard:dashboard
+    current:
+      repository: <private-proof-registry-not-for-customer-use>/relay-dashboard
+      digest: sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe
+      chartStatus: proof-only
+    source:
+      repository: https://github.com/AgentWorkforce/relay-dashboard
+      revision: null
+      baseRevision: f71af3ee19683891e4774affa4cf9185c7cc7dba
+      path: .
+      reproducibleReference: false
+      note: >-
+        The proof image was built from a working tree with modified and
+        untracked dashboard, replay, packaging, Docker, and workflow files.
+        The base revision does not reproduce the image.
+    license:
+      status: review-required
+      spdx: Apache-2.0
+      evidence: Public repository license; exact proof source snapshot is not committed.
+      note: Source license approved; binary distribution review blocked.
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+      verificationAccess: operator-credentials
+    release:
+      workflow: null
+      run: null
+      trigger: manual-local-buildx
+      buildsCommittedRevision: false
+      publishesSbom: true
+      publishesProvenance: true
+      note: The only committed workflow at the base revision is CI; the container workflow was untracked.
+    customerAcquisition:
+      status: blocked
+      procedure: null
+      requiredAction: >-
+        Commit and review the exact source and container workflow, build from
+        that commit, and publish through an approved customer channel.
+    approval:
+      status: blocked
+      blockingReasons: [IMG-BLOCK-004]
+
+promotionProcedure:
+  - order: 1
+    action: close-source-license-and-revision-gaps
+    gate: Every image has an exact committed revision and approved distribution terms.
+  - order: 2
+    action: build-in-reviewed-workflow
+    gate: The workflow checks out the recorded revision and emits immutable digest, SBOM, provenance, and required platforms.
+  - order: 3
+    action: approve-vendor-release
+    gate: Security, license, compatibility, and support reviews are recorded against the source revision and digest.
+  - order: 4
+    action: make-source-image-customer-accessible
+    gate: Use an approved public vendor repository or a documented customer entitlement; never use the proof registry as the contract.
+  - order: 5
+    action: copy-by-digest-to-customer-registry
+    gate: Copy from SOURCE@sha256 to the customer-owned repository, resolve the destination digest, and retain source-to-destination evidence.
+  - order: 6
+    action: verify-customer-copy
+    gate: Verify pull access, required platforms, signatures/provenance, SBOM, scan result, and runtime compatibility from the customer registry.
+  - order: 7
+    action: update-customer-values
+    gate: Pin the destination repository and digest; render and reject proof registries, private vendor-only references, mutable tags, or missing digests.
+
+blockers:
+  - id: IMG-BLOCK-001
+    severity: hard
+    images: [sessions-services]
+    summary: The Sessions image is private and has no approved customer acquisition or promotion procedure.
+    closeWhen:
+      - customer-readable release or supported entitlement exists
+      - required platforms and promoted digest are verified
+  - id: IMG-BLOCK-002
+    severity: hard
+    images: [relayhistory]
+    summary: RelayHistory is an experimental proof image with no supported container release/customer channel.
+    closeWhen:
+      - reviewed release workflow publishes from the recorded commit
+      - approved customer channel and promotion evidence exist
+  - id: IMG-BLOCK-003
+    severity: hard
+    images: [selfhost-api]
+    summary: >-
+      Source and release are now canonical (relaycontrol 10c069b, amd64+arm64,
+      SBOM+provenance, run 41556195969); the GHCR package is still private, so
+      a customer pull path and promotion evidence remain open.
+    closeWhen:
+      - complete source is committed and reviewed
+      - release workflow publishes amd64 and arm64 from that commit
+      - approved customer channel and promotion evidence exist
+    status: >-
+      partially resolved — first two closeWhen items done; blocked on GHCR
+      package visibility (org admin) or digest copy to a customer registry.
+  - id: IMG-BLOCK-004
+    severity: hard
+    images: [relay-dashboard]
+    summary: The Dashboard digest was built from uncommitted source and has no approved container release or customer channel.
+    closeWhen:
+      - exact proof source and workflow are committed and reviewed
+      - a new image is built from that commit
+      - approved customer channel and promotion evidence exist
+  - id: IMG-BLOCK-005
+    severity: hard
+    images: [relaycast, sessions-services]
+    summary: >-
+      The release workflows publish no SBOM and only buildx's default
+      (mode=min, unsigned) provenance, which is not verifiable provenance.
+    closeWhen:
+      - the release workflow publishes an SBOM and signed provenance for the recorded revision
+      - a new digest built that way is recorded here
+  - id: IMG-REVIEW-001
+    severity: review
+    images: [sessions-migration-postgresql]
+    summary: The public third-party digest is multi-arch and Apache-2.0, but its exact upstream source revision and release run are not recorded.
+    closeWhen:
+      - upstream digest-to-source revision and release evidence are recorded

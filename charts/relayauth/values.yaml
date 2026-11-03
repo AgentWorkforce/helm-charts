@@ -39,6 +39,18 @@ relayhistory:
   allowPrivateHttpOrigin: false
   bootstrapApiKeyOrg: org_selfhost
 
+# RelayAuth-issued relaycast credentials (model B): RelayAuth owns the ar_
+# credential tag keyring and pushes ar_ws_ workspace keys into Relaycast,
+# which verifies tags through RelayAuth's remote CredentialTagger. The wiring
+# is off unless secretKeys.relaycastCredentialKeyring and
+# secretKeys.relaycastInternalSecret are set together; url is where RelayAuth
+# reaches Relaycast's internal admin API (RELAYAUTH_RELAYCAST_URL). It has no
+# default and is required with the keyring: the Relaycast Service name
+# depends on its release and namespace, e.g. http://relaycast.<ns>.svc:8787
+# (or http://<release>-relaycast.<ns>.svc:8787 without a fullnameOverride).
+relaycast:
+  url: ""
+
 # Required pre-created Kubernetes Secret. The chart never renders secret or
 # key material. Each entry names one key in this Secret.
 existingSecret: ""
@@ -49,6 +61,12 @@ secretKeys:
   signingKeyNext: ""
   signingKeyPrevious: ""
   bootstrapApiKey: bootstrap-api-key
+  # Model-B relaycast credentials (all optional): the ar_ tag keyring,
+  # relaycast's internal admin secret for the push, and an optional service
+  # API key. Partial wiring is refused.
+  relaycastCredentialKeyring: ""
+  relaycastInternalSecret: ""
+  relaycastServiceApiKey: ""
 
 service:
   type: ClusterIP

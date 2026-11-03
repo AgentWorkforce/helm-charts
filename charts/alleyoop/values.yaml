@@ -49,8 +49,19 @@ hoopdb:
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).
 locker:
+  # s3 (default): S3-compatible store (MinIO, AWS S3). gcs: native Google Cloud
+  # Storage through GKE Workload Identity; renders LOCKER_PROVIDER=gcs and
+  # PIPELINE_RAW_PROVIDER=gcs and requires credentials.mode=podIdentity and an
+  # empty (or https://storage.googleapis.com) endpoint. The services refuse
+  # HMAC keys on GCS and the S3 client against storage.googleapis.com, so
+  # "GCS as S3 with HMAC keys" is not supported. gcs also arms the services'
+  # GCS data-path readiness check: extraEnv must carry
+  # CLOUD_SQL_CONNECTION_NAME, REDIS_HOST, REDIS_PORT, REDIS_AUTH_ENABLED
+  # ("false"), REDIS_TRANSIT_ENCRYPTION ("SERVER_AUTHENTICATION"),
+  # REDIS_TLS_CA_PEM, PUBSUB_TOPIC and PUBSUB_SUBSCRIPTION.
+  provider: s3
   # Required in secret mode, e.g. http://minio:9000. In podIdentity mode,
-  # leave empty to use the AWS SDK's native S3 endpoint for locker.region.
+  # leave empty to use the provider's native endpoint (S3: for locker.region).
   endpoint: ""
   bucket: locker
   region: us-east-1
@@ -81,12 +92,27 @@ automountServiceAccountToken: false
 auth:
   jwksUrl: ""
   localJwks: false
+  # Must be RelayAuth's issuer when jwksUrl points at RelayAuth.
   issuer: https://96bulls.local
   audience: relayhistory
   # Temporary compatibility for legacy RelayAuth bearer tokens. Fail-closed by
   # default and permitted only when environment=local. Hosted/customer
   # installs must use origin-bound migration assertions instead.
   allowInterimRelayAuthBearer: false
+  # Optional RelayHistory origin (RELAYHISTORY_ORIGIN): the bare origin the
+  # ingest expects as the History assertion audience. It must be byte-equal
+  # to the courier's RELAYAUTH_HISTORY_ORIGIN. Empty = not rendered.
+  historyOrigin: ""
+
+# ALLOW_IN_CLUSTER_HTTP. false (default): the validated destination URLs
+# (RelayAuth, Cloud, ingest, JWKS, history origin) must be https (or
+# loopback). true allows plain http only to in-cluster Service FQDNs
+# (<svc>.<ns>.svc or <svc>.<ns>.svc.cluster.local), never public hosts, IPs
+# or short names; e.g. auth.jwksUrl=http://relayauth.relayauth.svc:8787/.well-known/jwks.json.
+# LOCKER_ENDPOINT (the bundled MinIO's http://locker:9000) and the OTLP
+# endpoint are outside this policy (96BullSessions README, runtime
+# destinations), so the bundled Locker works with false.
+allowInClusterHttp: false
 
 ingest:
   replicas: 1

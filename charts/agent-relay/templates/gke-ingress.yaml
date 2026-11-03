@@ -1,0 +1,377 @@
+{{- include "agent-relay.validate" . -}}
+{{- if dig "enabled" false (.Values.gkeIngress | default dict) }}
+{{- $gke := .Values.gkeIngress | default dict -}}
+{{- $components := .Values.components | default dict -}}
+{{- $relaycast := .Values.relaycast | default dict -}}
+{{- $relayhistory := .Values.relayhistory | default dict -}}
+{{- $cloudApi := index .Values "relay-cloud-api" | default dict -}}
+{{- $dashboard := index .Values "relay-dashboard" | default dict -}}
+{{- if not (and $components.relaycast $components.relayhistory $components.cloudApi $components.dashboard) }}{{ fail "gkeIngress requires relaycast, relayhistory, cloudApi, and dashboard components" }}{{ end -}}
+{{- if or (dig "ingress" "enabled" false $relaycast) (dig "ingress" "enabled" false $relayhistory) (dig "ingress" "enabled" false $cloudApi) (dig "ingress" "enabled" false $dashboard) }}{{ fail "gkeIngress requires all leaf ingresses to be disabled" }}{{ end -}}
+{{- if and $components.relayauth (index ((.Values.relayauth | default dict).jwksIngress | default dict) "enabled" | default false) }}{{ fail "gkeIngress requires relayauth.jwksIngress.enabled=false" }}{{ end -}}
+{{- $apiBasePath := dig "runtime" "apiBasePath" "" $dashboard -}}
+{{- if and $apiBasePath (ne $apiBasePath "/cloud/api") }}{{ fail "gkeIngress routes /cloud/api to relay-cloud-api; relay-dashboard.runtime.apiBasePath must be /cloud/api" }}{{ end -}}
+{{- $loginPath := dig "runtime" "loginPath" "" $dashboard -}}
+{{- if and $loginPath (ne $loginPath "/login") }}{{ fail "gkeIngress routes /login to relay-cloud-api; relay-dashboard.runtime.loginPath must be /login" }}{{ end -}}
+{{- $policyBackends := dict "relaycast" $relaycast "relayhistory" $relayhistory "relay-cloud-api" $cloudApi "relay-dashboard" $dashboard -}}
+{{- if and (dig "hosts" "files" "" $gke) $components.relayfile }}
+{{- /* Relayfile behind the public files host gets the same GKE-only policy
+shape (hosts.files without components.relayfile fails further down). */ -}}
+{{- $_ := set $policyBackends "relayfile" (.Values.relayfile | default dict) -}}
+{{- if dig "networkPolicy" "allowExternalTraffic" true (.Values.relayfile | default dict) }}{{ fail "gkeIngress.hosts.files requires relayfile.networkPolicy.allowExternalTraffic=false and relayfile.networkPolicy.ingressFrom with same-namespace pods and the GKE ranges" }}{{ end -}}
+{{- end }}
+{{- range $name, $backendValues := $policyBackends }}
+{{- if not (dig "networkPolicy" "enabled" false $backendValues) }}{{ fail (printf "gkeIngress requires %s.networkPolicy.enabled=true" $name) }}{{ end -}}
+{{- $hasSameNamespace := false -}}
+{{- $hasGfePrimary := false -}}
+{{- $hasGfeSecondary := false -}}
+{{- range $peer := dig "networkPolicy" "ingressFrom" (list) $backendValues }}
+{{- if and (eq (len $peer) 1) (hasKey $peer "podSelector") (empty (get $peer "podSelector")) }}{{ $hasSameNamespace = true }}{{ end -}}
+{{- if and (eq (len $peer) 1) (eq (dig "ipBlock" "cidr" "" $peer) "35.191.0.0/16") (empty (dig "ipBlock" "except" (list) $peer)) }}{{ $hasGfePrimary = true }}{{ end -}}
+{{- if and (eq (len $peer) 1) (eq (dig "ipBlock" "cidr" "" $peer) "130.211.0.0/22") (empty (dig "ipBlock" "except" (list) $peer)) }}{{ $hasGfeSecondary = true }}{{ end -}}
+{{- end }}
+{{- if not $hasSameNamespace }}{{ fail (printf "gkeIngress requires %s.networkPolicy.ingressFrom to retain same-namespace pod access" $name) }}{{ end -}}
+{{- if not $hasGfePrimary }}{{ fail (printf "gkeIngress requires %s.networkPolicy.ingressFrom to allow GKE health checker/proxy range 35.191.0.0/16 without exclusions" $name) }}{{ end -}}
+{{- if not $hasGfeSecondary }}{{ fail (printf "gkeIngress requires %s.networkPolicy.ingressFrom to allow GKE health checker/proxy range 130.211.0.0/22 without exclusions" $name) }}{{ end -}}
+{{- end }}
+{{- $gkeName := required "gkeIngress.name is required when gkeIngress.enabled=true" (dig "name" "" $gke) -}}
+{{- $staticIpName := required "gkeIngress.staticIpName is required when gkeIngress.enabled=true" (dig "staticIpName" "" $gke) -}}
+{{- $managedCertificateName := required "gkeIngress.managedCertificateName is required when gkeIngress.enabled=true" (dig "managedCertificateName" "" $gke) -}}
+{{- $frontendConfigName := required "gkeIngress.frontendConfigName is required when gkeIngress.enabled=true" (dig "frontendConfigName" "" $gke) -}}
+{{- $hostRoot := dig "hosts" "root" "" $gke -}}
+{{- $hostApi := dig "hosts" "api" "" $gke -}}
+{{- $hostCast := dig "hosts" "cast" "" $gke -}}
+{{- $hostHistory := dig "hosts" "history" "" $gke -}}
+{{- range $name, $host := dict "root" $hostRoot "api" $hostApi "cast" $hostCast "history" $hostHistory }}
+{{- if not $host }}{{ fail (printf "gkeIngress.hosts.%s is required when gkeIngress.enabled=true" $name) }}{{ end -}}
+{{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
+{{- end }}
+{{- if ne (len (list $hostRoot $hostApi $hostCast $hostHistory | uniq)) 4 }}{{ fail "gkeIngress.hosts.root/api/cast/history must all be distinct" }}{{ end -}}
+{{- /* Optional hosts: the durable-actors public origin and Relayfile. */ -}}
+{{- $hostActors := dig "hosts" "actors" "" $gke -}}
+{{- $hostFiles := dig "hosts" "files" "" $gke -}}
+{{- $durableActors := index .Values "durable-actors" | default dict -}}
+{{- $relayfile := .Values.relayfile | default dict -}}
+{{- $optionalHosts := list -}}
+{{- if $hostActors }}
+{{- if not $components.durableActors }}{{ fail "gkeIngress.hosts.actors requires components.durableActors=true" }}{{ end -}}
+{{- if dig "ingress" "enabled" false $durableActors }}{{ fail "gkeIngress.hosts.actors routes the durable-actors control plane; set durable-actors.ingress.enabled=false (one edge only)" }}{{ end -}}
+{{- if ne (trimSuffix "/" (dig "publicUrl" "" $durableActors)) (printf "https://%s" $hostActors) }}{{ fail (printf "durable-actors.publicUrl must be https://%s (gkeIngress.hosts.actors): SDK follow-up calls and actor WebSocket URLs use it" $hostActors) }}{{ end -}}
+{{- $optionalHosts = append $optionalHosts $hostActors -}}
+{{- end }}
+{{- if $hostFiles }}
+{{- if not $components.relayfile }}{{ fail "gkeIngress.hosts.files requires components.relayfile=true" }}{{ end -}}
+{{- if dig "ingress" "enabled" false $relayfile }}{{ fail "gkeIngress.hosts.files requires relayfile.ingress.enabled=false" }}{{ end -}}
+{{- if ne (dig "service" "annotations" "cloud.google.com/neg" "" $relayfile | toString | nospace) "{\"ingress\":true}" }}{{ fail "gkeIngress.hosts.files requires relayfile.service.annotations[cloud.google.com/neg]={\"ingress\": true}" }}{{ end -}}
+{{- $optionalHosts = append $optionalHosts $hostFiles -}}
+{{- end }}
+{{- range $name, $host := dict "actors" $hostActors "files" $hostFiles }}
+{{- if and $host (not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host)) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
+{{- end }}
+{{- $allHosts := concat (list $hostRoot $hostApi $hostCast $hostHistory) $optionalHosts -}}
+{{- if ne (len ($allHosts | uniq)) (len $allHosts) }}{{ fail "gkeIngress.hosts must all be distinct" }}{{ end -}}
+{{- $actorsName := printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- $actorsTimeout := dig "actorsBackendTimeoutSec" 3600 $gke -}}
+{{- if or (kindIs "bool" $actorsTimeout) (kindIs "string" $actorsTimeout) (lt (int $actorsTimeout) 60) (gt (int $actorsTimeout) 86400) (ne (float64 $actorsTimeout) (float64 (int $actorsTimeout))) }}{{ fail "gkeIngress.actorsBackendTimeoutSec must be an integer from 60 to 86400" }}{{ end -}}
+{{- $actorsEdge := printf "%s-actors-edge" $gkeName | trunc 63 | trimSuffix "-" -}}
+{{- $filesService := "" -}}
+{{- if $hostFiles }}
+{{- $filesBase := dig "fullnameOverride" "" $relayfile | default (ternary .Release.Name (printf "%s-%s" .Release.Name (dig "nameOverride" "" $relayfile | default "relayfile")) (contains (dig "nameOverride" "" $relayfile | default "relayfile") .Release.Name)) | trunc 63 | trimSuffix "-" -}}
+{{- $filesService = printf "%s-server" $filesBase | trunc 63 | trimSuffix "-" -}}
+{{- $configured := dig "backends" "files" "serviceName" "" $gke -}}
+{{- if and $configured (ne $configured $filesService) }}{{ fail (printf "gkeIngress.backends.files.serviceName=%s does not match the relayfile Service %s; leave it empty to derive it" $configured $filesService) }}{{ end -}}
+{{- if ne (int (dig "backends" "files" "servicePort" 0 $gke)) (int (dig "service" "port" 8080 $relayfile)) }}{{ fail "gkeIngress.backends.files.servicePort must equal relayfile.service.port" }}{{ end -}}
+{{- end }}
+{{- /* Backend Service names are derived from each child's fullname rules, so
+the Ingress always targets the Services the children actually render. An
+explicit backends.<name>.serviceName must equal that derived name. */ -}}
+{{- $castName := dig "nameOverride" "" $relaycast | default "relaycast" -}}
+{{- $castService := dig "fullnameOverride" "" $relaycast | default (ternary .Release.Name (printf "%s-%s" .Release.Name $castName) (contains $castName .Release.Name)) -}}
+{{- $children := dict
+  "dashboard" (list "relay-dashboard" $dashboard (dig "fullnameOverride" "" $dashboard | default (printf "%s-%s" .Release.Name (dig "nameOverride" "" $dashboard | default "relay-dashboard"))))
+  "api" (list "relay-cloud-api" $cloudApi (dig "fullnameOverride" "" $cloudApi | default (printf "%s-%s" .Release.Name (dig "nameOverride" "" $cloudApi | default "relay-cloud-api"))))
+  "cast" (list "relaycast" $relaycast $castService)
+  "history" (list "relayhistory" $relayhistory (dig "fullnameOverride" "" $relayhistory | default (printf "%s-%s" .Release.Name (dig "nameOverride" "" $relayhistory | default "relayhistory"))))
+-}}
+{{- $backendNames := dict -}}
+{{- range $name, $child := $children }}
+{{- $backend := dig "backends" $name (dict) $gke -}}
+{{- $expected := index $child 2 | trunc 63 | trimSuffix "-" -}}
+{{- $configured := dig "serviceName" "" $backend -}}
+{{- if and $configured (ne $configured $expected) }}{{ fail (printf "gkeIngress.backends.%s.serviceName=%s does not match the %s Service %s; leave it empty to derive it" $name $configured (index $child 0) $expected) }}{{ end -}}
+{{- $_ := set $backendNames $name $expected -}}
+{{- if not (dig "servicePort" 0 $backend) }}{{ fail (printf "gkeIngress.backends.%s.servicePort is required" $name) }}{{ end -}}
+{{- $childPort := dig "service" "port" 0 (index $child 1) -}}
+{{- if and $childPort (ne (int $childPort) (int (dig "servicePort" 0 $backend))) }}{{ fail (printf "gkeIngress.backends.%s.servicePort must equal %s.service.port (%v)" $name (index $child 0) $childPort) }}{{ end -}}
+{{- end }}
+{{- /* The flows worker queue is a long-lived SSE stream through the api
+backend. GCE's default 30s backend timeout cuts every response at 30s, so
+the api Service gets a BackendConfig with a longer timeout, bound through the
+Service's cloud.google.com/backend-config annotation. relay-cloud-api renders
+that annotation from relay-cloud-api.service.backendConfig; a parent chart
+cannot template a child's values, so the name is checked here against the one
+derived from gkeIngress.name. The name is truncated to 59 characters before
+-api is appended, so the <name>-api contract holds for long names. */ -}}
+{{- $apiBackendConfig := printf "%s-api" ($gkeName | trunc 59 | trimSuffix "-") -}}
+{{- $apiTimeout := int (dig "backends" "api" "timeoutSec" 0 $gke) -}}
+{{- if lt $apiTimeout 60 }}{{ fail "gkeIngress.backends.api.timeoutSec must be at least 60: the flows worker queue SSE stream needs a backend timeout above GCE's 30s default" }}{{ end -}}
+{{- if gt $apiTimeout 86400 }}{{ fail "gkeIngress.backends.api.timeoutSec must be at most 86400" }}{{ end -}}
+{{- $queuePing := dig "flows" "queuePingMs" "" $cloudApi | toString | default "20000" -}}
+{{- if and (regexMatch "^[0-9]+$" $queuePing) (ge (int64 $queuePing) (mul $apiTimeout 1000)) }}{{ fail "relay-cloud-api.flows.queuePingMs must be below gkeIngress.backends.api.timeoutSec" }}{{ end -}}
+{{- $wantBackendConfig := printf "{\"default\": \"%s\"}" $apiBackendConfig -}}
+{{- $haveBackendConfig := dig "service" "backendConfig" "" $cloudApi | toString -}}
+{{- if $haveBackendConfig }}
+{{- if ne $haveBackendConfig $apiBackendConfig }}{{ fail (printf "gkeIngress requires relay-cloud-api.service.backendConfig=%s (<gkeIngress.name>-api) so the api backend gets the BackendConfig timeout; got %s" $apiBackendConfig $haveBackendConfig) }}{{ end -}}
+{{- else }}
+{{- /* Legacy: a hand-written annotation is still accepted when it matches. */ -}}
+{{- $haveAnnotation := dig "service" "annotations" "cloud.google.com/backend-config" "" $cloudApi -}}
+{{- if ne (toString $haveAnnotation | nospace) (nospace $wantBackendConfig) }}{{ fail (printf "gkeIngress requires relay-cloud-api.service.backendConfig=%s (<gkeIngress.name>-api) so the api backend gets the BackendConfig timeout" $apiBackendConfig) }}{{ end -}}
+{{- end }}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ $apiBackendConfig }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  timeoutSec: {{ $apiTimeout }}
+---
+{{- /* Relaycast WebSockets (/v1/ws, /v1/node/ws) through the cast backend are
+cut at GCE's 30 s default backend timeout, so the relaycast Service gets its
+own BackendConfig, bound by relaycast.service.backendConfig (both the sqlite
+and durable-actors backends serve sockets on that Service). */ -}}
+{{- $castBackendConfig := printf "%s-cast" ($gkeName | trunc 58 | trimSuffix "-") -}}
+{{- $castTimeout := int (dig "backends" "cast" "timeoutSec" 3600 $gke) -}}
+{{- if lt $castTimeout 60 }}{{ fail "gkeIngress.backends.cast.timeoutSec must be at least 60: relaycast WebSockets need a backend timeout above GCE's 30s default" }}{{ end -}}
+{{- if gt $castTimeout 86400 }}{{ fail "gkeIngress.backends.cast.timeoutSec must be at most 86400" }}{{ end -}}
+{{- $haveCastBackendConfig := dig "service" "backendConfig" "" $relaycast | toString -}}
+{{- if $haveCastBackendConfig }}
+{{- if ne $haveCastBackendConfig $castBackendConfig }}{{ fail (printf "gkeIngress requires relaycast.service.backendConfig=%s (<gkeIngress.name>-cast) so relaycast WebSockets get the BackendConfig timeout" $castBackendConfig) }}{{ end -}}
+{{- else }}
+{{- /* Legacy: a hand-written annotation is accepted when it matches. */ -}}
+{{- $haveCastAnnotation := dig "service" "annotations" "cloud.google.com/backend-config" "" $relaycast | toString | nospace -}}
+{{- if ne $haveCastAnnotation (nospace (printf "{\"default\": \"%s\"}" $castBackendConfig)) }}{{ fail (printf "gkeIngress requires relaycast.service.backendConfig=%s (<gkeIngress.name>-cast) so relaycast WebSockets get the BackendConfig timeout" $castBackendConfig) }}{{ end -}}
+{{- end }}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ $castBackendConfig }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  timeoutSec: {{ $castTimeout }}
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: {{ $managedCertificateName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  domains:
+    - {{ $hostRoot | quote }}
+    - {{ $hostApi | quote }}
+    - {{ $hostCast | quote }}
+    - {{ $hostHistory | quote }}
+    {{- range $optionalHosts }}
+    - {{ . | quote }}
+    {{- end }}
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: {{ $frontendConfigName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
+# Deliberately has no selector. Sensitive Relaycast paths, and /internal on
+# the api host, are routed here so the edge returns an error instead of
+# forwarding them to the public backend.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: edge-deny
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $gke.backends.cast.servicePort }}
+      protocol: TCP
+{{- if $hostActors }}
+---
+# The durable-actors control plane behind the suite's load balancer. The
+# vendored chart's Service is not annotated for NEGs, so this edge Service
+# (same pods, port 7100) carries the NEG and a BackendConfig whose timeout
+# keeps actor WebSockets open. GCE health checks use the pods' /healthz
+# readiness probe.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ $actorsEdge }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: actors-edge
+spec:
+  timeoutSec: {{ $actorsTimeout | int }}
+  healthCheck:
+    type: HTTP
+    requestPath: /healthz
+    port: 7100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $actorsEdge }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: actors-edge
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: {{ printf "{\"default\": \"%s\"}" $actorsEdge | squote }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ $actorsName }}
+  ports:
+    - name: http
+      port: 7100
+      targetPort: 7100
+      protocol: TCP
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $gkeName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: {{ $staticIpName | quote }}
+    networking.gke.io/managed-certificates: {{ $managedCertificateName | quote }}
+    networking.gke.io/v1beta1.FrontendConfig: {{ $frontendConfigName | quote }}
+spec:
+  rules:
+    - host: {{ $hostRoot | quote }}
+      http:
+        paths:
+          - path: /cloud/api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "api" }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+          - path: /login
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "api" }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "dashboard" }}
+                port: { number: {{ $gke.backends.dashboard.servicePort }} }
+    - host: {{ $hostApi | quote }}
+      http:
+        paths:
+          # relay-cloud-api /internal/v1 is for in-cluster callers holding
+          # SELFHOST_INTERNAL_TOKEN only. GCE expands this Prefix path to
+          # /internal and /internal/*, which covers /internal/.
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "api" }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+    - host: {{ $hostCast | quote }}
+      http:
+        paths:
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /v1/workspaces
+            pathType: Exact
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /v1/workspaces/
+            pathType: Exact
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "cast" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
+    - host: {{ $hostHistory | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "history" }}
+                port: { number: {{ $gke.backends.history.servicePort }} }
+    {{- if $hostActors }}
+    - host: {{ $hostActors | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $actorsEdge }}
+                port: { number: 7100 }
+    {{- end }}
+    {{- if $hostFiles }}
+    - host: {{ $hostFiles | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $filesService }}
+                port: { number: {{ $gke.backends.files.servicePort }} }
+    {{- end }}
+{{- end }}

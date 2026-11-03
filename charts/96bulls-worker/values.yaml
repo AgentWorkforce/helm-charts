@@ -51,8 +51,19 @@ summaryEncryption:
 # Non-secret environment shared by every component (names are the services'
 # env contract; do not rename).
 locker:
+  # s3 (default): S3-compatible store (MinIO, AWS S3). gcs: native Google Cloud
+  # Storage through GKE Workload Identity; renders LOCKER_PROVIDER=gcs and
+  # PIPELINE_RAW_PROVIDER=gcs and requires credentials.mode=podIdentity and an
+  # empty (or https://storage.googleapis.com) endpoint. The services refuse
+  # HMAC keys on GCS and the S3 client against storage.googleapis.com, so
+  # "GCS as S3 with HMAC keys" is not supported. gcs also arms the services'
+  # GCS data-path readiness check: extraEnv must carry
+  # CLOUD_SQL_CONNECTION_NAME, REDIS_HOST, REDIS_PORT, REDIS_AUTH_ENABLED
+  # ("false"), REDIS_TRANSIT_ENCRYPTION ("SERVER_AUTHENTICATION"),
+  # REDIS_TLS_CA_PEM, PUBSUB_TOPIC and PUBSUB_SUBSCRIPTION.
+  provider: s3
   # Required in secret mode, e.g. http://minio:9000. In podIdentity mode,
-  # leave empty to use the AWS SDK's native S3 endpoint for locker.region.
+  # leave empty to use the provider's native endpoint (S3: for locker.region).
   endpoint: ""
   bucket: locker
   region: us-east-1
@@ -68,6 +79,14 @@ deployment:
   name: selfhost      # DEPLOYMENT
   id: ""              # DEPLOYMENT_ID; defaults to the release namespace/name
 environment: production
+# ALLOW_IN_CLUSTER_HTTP for every component. false (default): the validated
+# destination URLs (RelayAuth, Cloud, ingest, JWKS, model endpoint) must be
+# https (or loopback). true allows plain http only to in-cluster Service FQDNs
+# (<svc>.<ns>.svc[.cluster.local]), never public hosts, IPs or short names.
+# LOCKER_ENDPOINT (the bundled MinIO's http://locker:9000) and the OTLP
+# endpoint are outside this policy (96BullSessions README, runtime
+# destinations), so the bundled Locker works with false.
+allowInClusterHttp: false
 # Extra env for every component: [{ name: X, value: y }].
 extraEnv: []
 
@@ -244,6 +263,46 @@ terminationGracePeriodSeconds: 30
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Network isolation is opt-in for portable installs because the chart cannot
+# infer the CIDRs of an external database/object store or a cluster's DNS and
+# workload-identity endpoints. When enabled, every destination the worker and
+# migration pods need must be listed explicitly; egress is otherwise denied.
+# An empty `to` would match every destination, so rendering fails when dns,
+# database or objectStorage (plus workloadIdentity in podIdentity mode and
+# observability when global.otel.endpoint is set) has no `to` entries. Rules
+# with destinations but no ports allow every port to those destinations.
+#
+# Kubernetes NetworkPolicy has no FQDN matching. For GCS, use customer DNS
+# that maps googleapis.com to private.googleapis.com (199.36.153.8/30) or
+# restricted.googleapis.com (199.36.153.4/30), then allow that chosen VIP.
+# Cloud SQL private-service-access ranges and cluster DNS addresses are
+# customer/VPC specific and must never be guessed here.
+networkPolicy:
+  enabled: false
+  dns:
+    to: []
+    ports:
+      - { protocol: UDP, port: 53 }
+      - { protocol: TCP, port: 53 }
+  database:
+    to: []
+    ports:
+      - { protocol: TCP, port: 5432 }
+  objectStorage:
+    to: []
+    ports:
+      - { protocol: TCP, port: 443 }
+  # Required in podIdentity mode. GKE Dataplane V1 commonly uses
+  # 169.254.169.252/32:988; Dataplane V2 uses 169.254.169.254/32:80.
+  # Select the endpoint actually used by the customer cluster.
+  workloadIdentity:
+    to: []
+    ports: []
+  # Optional OTLP destination. Required when global.otel.endpoint is nonempty.
+  observability:
+    to: []
+    ports: []
 
 # OPTIONAL: External Secrets Operator (e.g. a 1Password ClusterSecretStore).
 # Off by default; customers create existingSecret themselves. When enabled the

@@ -1,0 +1,40 @@
+# Proof-cluster overlay: enable standalone Relayflows with a deterministic
+# smoke flow. Apply after values-gcp-proof.yaml and values-gcp-proof-live.yaml.
+# The flow needs no model credentials: each step probes one in-cluster suite
+# service and fails on a non-2xx response.
+components:
+  relayflows: true
+
+relayflows:
+  mode: standalone
+  runtimeInstaller:
+    enabled: true
+    relayflowsVersion: "2.0.50"
+  standalone:
+    backoffLimit: 0
+    ttlSecondsAfterFinished: 86400
+    activeDeadlineSeconds: 900
+    flow:
+      content: |
+        version: "0.1.0"
+        name: agent-relay-suite-smoke
+        description: Probe the self-hosted suite services from inside the cluster.
+        steps:
+          - id: relaycast
+            type: deterministic
+            command: >-
+              node -e 'fetch("http://relaycast:8787/health").then(r=>{console.log("relaycast",r.status);process.exit(r.ok?0:1)}).catch(e=>{console.error(e.cause?.code||e.message);process.exit(1)})'
+          - id: control-api
+            type: deterministic
+            command: >-
+              node -e 'fetch("http://relay-cloud-api/healthz").then(r=>{console.log("control-api",r.status);process.exit(r.ok?0:1)}).catch(e=>{console.error(e.cause?.code||e.message);process.exit(1)})'
+          - id: relayhistory
+            type: deterministic
+            command: >-
+              node -e 'fetch("http://relayhistory:8080/healthz").then(r=>{console.log("relayhistory",r.status);process.exit(r.ok?0:1)}).catch(e=>{console.error(e.cause?.code||e.message);process.exit(1)})'
+          - id: gate
+            type: deterministic
+            command: printf 'suite-smoke-verified\n'
+            verification:
+              type: steps_green
+              ids: [relaycast, control-api, relayhistory]

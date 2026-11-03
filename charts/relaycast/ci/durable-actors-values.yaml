@@ -1,0 +1,43 @@
+# CI: runtime.backend=durable-actors, GKE shape: two gateway replicas, GCS
+# file store, deployer Job, edge ingress. Placeholder identities only.
+baseUrl: https://cast.example.com
+existingSecret: relaycast-secrets
+secretKeys:
+  credentialKeyring: credential-keyring
+credentials:
+  format: ar
+  authority: self
+runtime:
+  backend: durable-actors
+  durableActors:
+    gateway:
+      image:
+        digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+      replicaCount: 2
+    invocationSecret:
+      name: relaycast-durable-actors-invoke
+    deployer:
+      image:
+        digest: sha256:3333333333333333333333333333333333333333333333333333333333333333
+      artifactBucket: example-actor-state
+      serviceAccount:
+        annotations:
+          iam.gke.io/gcp-service-account: relaycast-deployer@example-project.iam.gserviceaccount.com
+    fileStore:
+      driver: gcs
+      bucket: example-relaycast-files
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: relaycast@example-project.iam.gserviceaccount.com
+ingress:
+  enabled: true
+  className: nginx
+  hosts: [cast.example.com]
+  tls:
+    - secretName: cast-tls
+      hosts: [cast.example.com]
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx

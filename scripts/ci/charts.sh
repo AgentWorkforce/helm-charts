@@ -19,7 +19,12 @@ err() { echo "::error::$*"; fail=1; }
 
 render() { # chart valuesfile [extra helm args]
   local chart=$1 v=$2 args=(); shift 2
-  [ -n "$v" ] && args=(-f "$v")
+  if [ -n "$v" ]; then
+    args=(-f "$v")
+    # The umbrella CI fixture supplies immutable proof/render image identities
+    # on the operator-facing GCP proof values.
+    [ "$chart" = agent-relay ] && args=(-f "charts/agent-relay/values-gcp-proof.yaml" -f "$v")
+  fi
   helm template ci "charts/$chart" --namespace ci --no-hooks --include-crds "${args[@]}" "$@"
 }
 
@@ -37,6 +42,12 @@ expect_render_failure() { # chart valuesfile label expected-error [extra helm ar
 for chart in "${charts[@]}"; do
   [ -f "charts/$chart/Chart.yaml" ] || { err "$chart: no Chart.yaml"; continue; }
   if [ -f "charts/$chart/Chart.lock" ] || grep -q '^dependencies:' "charts/$chart/Chart.yaml"; then
+    # Helm does not recursively vendor dependencies of a file:// dependency.
+    # Build the sessions umbrella first so agent-relay always contains its
+    # 96bulls-worker/alleyoop/third-party children, even in an isolated check.
+    if [ "$chart" = agent-relay ]; then
+      helm dependency build charts/96bulls >/dev/null || { err "$chart: nested 96bulls dependency build failed"; continue; }
+    fi
     # helm dependency build only resolves https repositories that are added.
     for repo in $(sed -n 's/^ *repository: *\(https:.*\)/\1/p' "charts/$chart/Chart.yaml" | sort -u); do
       helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
@@ -50,7 +61,11 @@ for chart in "${charts[@]}"; do
     echo "--- $mode: $label"
     case $mode in
       static)
-        args=(); [ -n "$v" ] && args=(-f "$v")
+        args=()
+        if [ -n "$v" ]; then
+          args=(-f "$v")
+          [ "$chart" = agent-relay ] && args=(-f "charts/agent-relay/values-gcp-proof.yaml" -f "$v")
+        fi
         helm lint --strict "charts/$chart" "${args[@]}" >/dev/null || { helm lint --strict "charts/$chart" "${args[@]}"; err "$label: helm lint --strict failed"; continue; }
         out=$(render "$chart" "$v") || { err "$label: render failed"; continue; }
         if [[ "$v" == *numeric-extra-env-values.yaml ]]; then
@@ -114,8 +129,34 @@ for chart in "${charts[@]}"; do
         kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version "${KUBE_VERSION:-1.33.0}" <<<"$out" || err "$label: kubeconform failed"
         ;;
       dryrun)
-        render "$chart" "$v" | kubectl apply --server-side --dry-run=server --field-manager=ci -n ci -f - >/dev/null \
+        dryrun_out=$(render "$chart" "$v")
+        # Generic CI clusters do not install GKE's ManagedCertificate,
+        # FrontendConfig and BackendConfig CRDs. Their schemas are covered by static rendering;
+        # dry-run the portable Kubernetes objects here.
+        if [ "$chart" = agent-relay ]; then
+          dryrun_out=$(yq 'select(.kind != "ManagedCertificate" and .kind != "FrontendConfig" and .kind != "BackendConfig")' <<<"$dryrun_out")
+        fi
+        # A server-side dry run does not create a Namespace it applies, so
+        # objects a chart places in a namespace it renders itself (the
+        # durable-actors sandbox namespace) would fail as NotFound. Create
+        # rendered Namespaces for real first; CI clusters are disposable.
+        rendered_ns=$(yq 'select(.kind == "Namespace")' <<<"$dryrun_out")
+        if [ -n "$(tr -d '[:space:]-' <<<"$rendered_ns")" ]; then
+          kubectl apply --server-side --field-manager=ci -f - <<<"$rendered_ns" >/dev/null \
+            || err "$label: creating rendered Namespaces failed"
+        fi
+        # kubectl refuses an object whose metadata.namespace differs from -n,
+        # so apply objects the chart places in another namespace (the
+        # durable-actors sandbox namespace <release>-<ns>) per namespace.
+        other_ns=$(yq -N 'select(.metadata.namespace != null and .metadata.namespace != "ci") | .metadata.namespace' <<<"$dryrun_out" | sort -u)
+        kubectl apply --server-side --dry-run=server --field-manager=ci -n ci -f - \
+          <<<"$(yq 'select(.metadata.namespace == null or .metadata.namespace == "ci")' <<<"$dryrun_out")" >/dev/null \
           || err "$label: server-side dry-run apply failed"
+        for ns in $other_ns; do
+          kubectl apply --server-side --dry-run=server --field-manager=ci -n "$ns" -f - \
+            <<<"$(NS="$ns" yq 'select(.metadata.namespace == strenv(NS))' <<<"$dryrun_out")" >/dev/null \
+            || err "$label: server-side dry-run apply in namespace $ns failed"
+        done
         ;;
       *) echo "unknown mode $mode" >&2; exit 2 ;;
     esac
@@ -139,6 +180,8 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing summary Secret" "summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" --set summaryEncryption.existingSecret=
         expect_render_failure "$chart" "$v" "duplicate summary key env" "configure summaryEncryption instead of components.bob-costas.env" --set-json 'components.bob-costas.env=[{"name":"SUMMARY_MASTER_KEYS","value":"not-a-real-key"}]'
         expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
+        expect_render_failure "$chart" "$v" "extraEnv in-cluster http" "extraEnv must not set ALLOW_IN_CLUSTER_HTTP" --set-json 'extraEnv=[{"name":"ALLOW_IN_CLUSTER_HTTP","value":"true"}]'
+        expect_render_failure "$chart" "$v" "component in-cluster http" "components.referee.env must not set ALLOW_IN_CLUSTER_HTTP" --set-json 'components.referee.env=[{"name":"ALLOW_IN_CLUSTER_HTTP","value":"true"}]'
         ;;
       alleyoop)
         v=charts/alleyoop/ci/pod-identity-values.yaml
@@ -148,6 +191,7 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "local JWKS without Secret" "existingSecret is required when auth.localJwks=true" --set auth.jwksUrl= --set auth.localJwks=true
         expect_render_failure "$chart" "$v" "interim bearer in production" "auth.allowInterimRelayAuthBearer=true is allowed only when environment=local" --set auth.allowInterimRelayAuthBearer=true
         expect_render_failure "$chart" "$v" "interim bearer through raw env" "configure auth.allowInterimRelayAuthBearer instead of ingest.env" --set-json 'ingest.env=[{"name":"ALLOW_INTERIM_RELAYAUTH_BEARER","value":"true"}]'
+        expect_render_failure "$chart" "$v" "interim bearer through extraEnv" "configure auth.allowInterimRelayAuthBearer instead of extraEnv" --set-json 'extraEnv=[{"name":"ALLOW_INTERIM_RELAYAUTH_BEARER","value":"true"}]'
         expect_render_failure "$chart" "$v" "non-boolean interim bearer" "auth.allowInterimRelayAuthBearer must be a boolean" --set-string auth.allowInterimRelayAuthBearer=true
         default_auth=$(render "$chart" "$v")
         grep -A1 -F -- '- name: ALLOW_INTERIM_RELAYAUTH_BEARER' <<<"$default_auth" | grep -Fq 'value: "false"' \
@@ -155,6 +199,12 @@ for chart in "${charts[@]}"; do
         local_auth=$(render "$chart" "$v" --set environment=local --set auth.allowInterimRelayAuthBearer=true)
         grep -A1 -F -- '- name: ALLOW_INTERIM_RELAYAUTH_BEARER' <<<"$local_auth" | grep -Fq 'value: "true"' \
           || err "$chart: explicit local interim RelayAuth bearer opt-in did not render true"
+        for origin in https://history.example.com/x https://history.example.com:99999 https://history.example.com:8a https://user@history.example.com 'https://history..example.com' https://-history.example.com ftp://history.example.com; do
+          expect_render_failure "$chart" "$v" "history origin $origin" "auth.historyOrigin must be a bare origin" --set "auth.historyOrigin=$origin"
+        done
+        for origin in https://history.gcp-proof.agentrelay.com http://relayhistory.relayhistory.svc:8080; do
+          render "$chart" "$v" --set "auth.historyOrigin=$origin" >/dev/null || err "$chart: valid auth.historyOrigin $origin rejected"
+        done
         ;;
       relayauth)
         v=charts/relayauth/ci/default-values.yaml
@@ -166,6 +216,9 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "JWKS ingress without host" "jwksIngress.enabled=true requires at least one host" --set jwksIngress.enabled=true
         expect_render_failure "$chart" "$v" "public JWKS with private discovery URL" "jwksIngress.enabled=true requires an explicit externally reachable baseUrl" --set jwksIngress.enabled=true --set jwksIngress.hosts[0]=auth.example.com
         expect_render_failure "$chart" "$v" "blocked JWKS ingress" "jwksIngress with networkPolicy requires networkPolicy.ingressFrom" --set jwksIngress.enabled=true --set jwksIngress.hosts[0]=auth.example.com --set baseUrl=https://auth.example.com --set networkPolicy.enabled=true
+        expect_render_failure "$chart" "$v" "keyring without relaycast secret" "secretKeys.relaycastInternalSecret is required when secretKeys.relaycastCredentialKeyring is set" --set secretKeys.relaycastCredentialKeyring=relaycast-credential-keyring
+        expect_render_failure "$chart" "$v" "relaycast secret without keyring" "secretKeys.relaycastInternalSecret requires secretKeys.relaycastCredentialKeyring" --set secretKeys.relaycastInternalSecret=relaycast-internal-secret
+        expect_render_failure "$chart" "$v" "service key without keyring" "secretKeys.relaycastServiceApiKey requires secretKeys.relaycastCredentialKeyring" --set secretKeys.relaycastServiceApiKey=relaycast-service-api-key
         ;;
       relaycast)
         v=charts/relaycast/ci/default-values.yaml
@@ -200,6 +253,15 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "boolean mailbox TTL" "mailbox.ttlMs must be a positive integer" --set mailbox.ttlMs=true
         expect_render_failure "$chart" "$v" "zero mailbox depth" "mailbox.depthCap must be a positive integer" --set mailbox.depthCap=0
         expect_render_failure "$chart" "$v" "boolean mailbox depth" "mailbox.depthCap must be a positive integer" --set mailbox.depthCap=true
+        expect_render_failure "$chart" "$v" "unknown credential format" "credentials.format must be legacy or ar" --set credentials.format=jwt
+        expect_render_failure "$chart" "$v" "ar format without authority" "credentials.authority is required when credentials.format=ar" --set credentials.format=ar
+        expect_render_failure "$chart" "$v" "relayauth authority without URL" "credentials.relayauth.url is required when credentials.authority=relayauth" --set credentials.authority=relayauth --set secretKeys.relayauthToken=relaycast-relayauth-token
+        expect_render_failure "$chart" "$v" "relayauth authority without token" "secretKeys.relayauthToken is required when credentials.authority=relayauth" --set credentials.authority=relayauth --set credentials.relayauth.url=http://relayauth:8787
+        expect_render_failure "$chart" "$v" "self authority without keyring" "secretKeys.credentialKeyring is required when credentials.authority=self" --set credentials.authority=self
+        expect_render_failure "$chart" "$v" "tagger URL without token" "secretKeys.relayauthToken is required when credentials.relayauth.url is set" --set credentials.relayauth.url=http://relayauth:8787
+        expect_render_failure "$chart" "$v" "tagger token without URL" "credentials.relayauth.url is required when secretKeys.relayauthToken is set" --set secretKeys.relayauthToken=relaycast-relayauth-token
+        expect_render_failure "$chart" "$v" "tagger token via extraEnv" "RELAYCAST_RELAYAUTH_TOKEN_FILE is managed by structured chart values" --set-json 'extraEnv=[{"name":"RELAYCAST_RELAYAUTH_TOKEN_FILE","value":"/tmp/t"}]'
+        expect_render_failure "$chart" "$v" "keyring via extraEnv" "RELAYCAST_CREDENTIAL_KEYRING_FILE is managed by structured chart values" --set-json 'extraEnv=[{"name":"RELAYCAST_CREDENTIAL_KEYRING_FILE","value":"/tmp/k"}]'
         v=charts/relaycast/ci/full-values.yaml
         expect_render_failure "$chart" "$v" "ingress with public create" "ingress.enabled requires publicWorkspaceCreate=false" --set publicWorkspaceCreate=true
         expect_render_failure "$chart" "$v" "ingress with insecure origin" "ingress.enabled requires an HTTPS public baseUrl" --set allowInsecureBaseUrl=true
@@ -211,7 +273,7 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "ingress without TLS" "ingress.enabled=true requires ingress.tls" --set-json 'ingress.tls=[]'
         # Long release names: suffixed names stay distinct and within limits.
         long=$(render "$chart" "$v" --set fullnameOverride="$(printf 'a%.0s' $(seq 63))")
-        [ "$(yq 'select(.kind == "Service") | .metadata.name' <<<"$long" | grep -v '^---' | sort -u | wc -l)" = 2 ] || err "$chart: long fullname collapses the app and deny Services"
+        [ "$(yq 'select(.kind == "Service") | .metadata.name' <<<"$long" | grep -v '^---' | sort -u | wc -l | tr -d " ")" = 2 ] || err "$chart: long fullname collapses the app and deny Services"
         [ "$(yq 'select(.kind == "CronJob") | .metadata.name | length' <<<"$long")" -le 52 ] || err "$chart: long fullname makes the CronJob name exceed 52 characters"
         # Rendered-contract checks: secrets only as files, edge denials routed
         # to the endpoint-less Service, public create off.
@@ -229,6 +291,152 @@ for chart in "${charts[@]}"; do
           || err "$chart: the deny Service must have no selector"
         [ "$(yq 'select(.kind == "CronJob") | .spec.jobTemplate.spec.template.metadata.labels["app.kubernetes.io/name"]' <<<"$out")" = relaycast-backup ] \
           || err "$chart: backup pods must not carry the Service selector labels"
+        # runtime.backend=durable-actors (env contract v1).
+        v=charts/relaycast/ci/durable-actors-values.yaml
+        expect_render_failure "$chart" "$v" "actors without ar_ credentials" "requires credentials.format=ar" --set credentials.format=legacy --set credentials.authority=
+        expect_render_failure "$chart" "$v" "actors without keyring" "requires secretKeys.credentialKeyring" --set secretKeys.credentialKeyring=
+        expect_render_failure "$chart" "$v" "actors with insecure origin" "requires an HTTPS public baseUrl" --set allowInsecureBaseUrl=true --set ingress.enabled=false
+        expect_render_failure "$chart" "$v" "actors gateway with admin Secret" "must not be the admin key Secret" --set runtime.durableActors.invocationSecret.name=actors-credentials
+        expect_render_failure "$chart" "$v" "actors gateway key in existingSecret" "must be its own Secret" --set runtime.durableActors.invocationSecret.name=relaycast-secrets
+        expect_render_failure "$chart" "$v" "actors without invocation Secret" "invocationSecret.name is required" --set runtime.durableActors.invocationSecret.name=
+        expect_render_failure "$chart" "$v" "actors local files with replicas" "requires fileStore.driver gcs or s3" --set runtime.durableActors.fileStore.driver=local
+        expect_render_failure "$chart" "$v" "actors without file bucket" "fileStore.bucket is required" --set runtime.durableActors.fileStore.bucket=
+        expect_render_failure "$chart" "$v" "actors with SQLite backup" "backup.enabled backs up the SQLite volume" --set backup.enabled=true
+        expect_render_failure "$chart" "$v" "actors with SQLite retention" "retention.* and mailbox.* configure the SQLite image" --set retention.messageTtlDays=7
+        expect_render_failure "$chart" "$v" "actors deployer without bucket" "deployer.artifactBucket is required" --set runtime.durableActors.deployer.artifactBucket=
+        expect_render_failure "$chart" "$v" "actors deployer without actor env" "actorEnvSecrets is required" --set-json 'runtime.durableActors.actorEnvSecrets=[]'
+        expect_render_failure "$chart" "$v" "actors unpinned gateway" "runtime.durableActors.gateway.image.digest (or, for local proofs" --set runtime.durableActors.gateway.image.digest=
+        expect_render_failure "$chart" "$v" "actors dev runtime unacknowledged" "requires devRuntime.acknowledgeNonProduction=true" --set runtime.durableActors.devRuntime.enabled=true
+        out=$(render "$chart" "$v")
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SECRET") | .valueFrom.secretKeyRef.name' <<<"$out")" = relaycast-durable-actors-invoke ] \
+          || err "$chart: the actors gateway must read DURABLE_ACTORS_SECRET from the invocation Secret"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SECRET") | .valueFrom.secretKeyRef.name' <<<"$out")" = actors-credentials ] \
+          || err "$chart: the deployer must read the admin api-key Secret"
+        ! yq 'select(.kind == "Deployment") | .. | select(has("secretKeyRef")) | .secretKeyRef.name' <<<"$out" | grep -qx actors-credentials \
+          || err "$chart: the actors gateway can read the durable-actors admin api-key"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "RELAYCAST_PUBLIC_WORKSPACE_CREATE") | .value' <<<"$out")" = false ] \
+          || err "$chart: the actors gateway allows public workspace create"
+        ! yq 'select(.kind == "PersistentVolumeClaim") | .metadata.name' <<<"$out" | grep -q . \
+          || err "$chart: the actors gateway with an object file store renders a PVC"
+        ;;
+      relayfile)
+        v=charts/relayfile/ci/durable-actors-values.yaml
+        expect_render_failure "$chart" "$v" "unknown backend" "runtime.backend must be go or durable-actors" --set runtime.backend=bogus
+        expect_render_failure "$chart" "$v" "actors without Secret" "runtime.durableActors.existingSecret is required" --set runtime.durableActors.existingSecret=
+        expect_render_failure "$chart" "$v" "actors with Go inline secrets" "are Go-server values" --set secrets.jwtSecret=not-a-real-secret
+        expect_render_failure "$chart" "$v" "actors without token verification" "secretKeys.jwtSecret or auth.jwksUrl is required" --set runtime.durableActors.secretKeys.jwtSecret= --set auth.jwksUrl=
+        expect_render_failure "$chart" "$v" "actors inline blobs in production" "driver=inline is only allowed with devRuntime" --set runtime.durableActors.blobStore.driver=inline
+        expect_render_failure "$chart" "$v" "actors gateway sharing the admin Secret" "must be a different Secret" --set runtime.durableActors.adminKeySecret.name=relayfile-actors
+        expect_render_failure "$chart" "$v" "actors without broker token" "secretKeys.brokerToken is required" --set runtime.durableActors.secretKeys.brokerToken=
+        expect_render_failure "$chart" "$v" "actors deployer without bucket" "deployer.artifactBucket is required" --set runtime.durableActors.deployer.artifactBucket=
+        expect_render_failure "$chart" "$v" "actors unpinned image" "runtime.durableActors.image.digest is required" --set runtime.durableActors.image.digest=
+        expect_render_failure "$chart" "$v" "actors tag-only image" "runtime.durableActors.image.digest is required (image tags are only allowed with devRuntime)" --set runtime.durableActors.image.digest= --set runtime.durableActors.image.tag=v1
+        expect_render_failure "$chart" "$v" "actors tag-only workspace image" "runtime.durableActors.workspaceImage.digest is required" --set runtime.durableActors.workspaceImage.digest= --set runtime.durableActors.workspaceImage.tag=v1
+        expect_render_failure "$chart" "$v" "actors fractional replicas" "gateway.replicaCount must be a positive integer" --set runtime.durableActors.gateway.replicaCount=1.5
+        expect_render_failure "$chart" "$v" "actors fractional inline max" "inlineMaxBytes must be a non-negative integer" --set runtime.durableActors.blobStore.inlineMaxBytes=10.5
+        expect_render_failure "$chart" "$v" "actors extraEnv override" "is set by the durable-actors gateway and must not appear in extraEnv" --set-json 'extraEnv=[{"name":"DURABLE_ACTORS_CONTROL_PLANE_URL","value":"http://x"}]'
+        expect_render_failure "$chart" "$v" "ingressFrom with external traffic" "networkPolicy.ingressFrom requires networkPolicy.allowExternalTraffic=false" --set networkPolicy.enabled=true --set-json 'networkPolicy.ingressFrom=[{"podSelector":{}}]'
+        v=charts/relayfile/ci/durable-actors-dev-values.yaml
+        expect_render_failure "$chart" "$v" "dev runtime unacknowledged" "requires devRuntime.acknowledgeNonProduction=true" --set runtime.durableActors.devRuntime.acknowledgeNonProduction=false
+        expect_render_failure "$chart" "$v" "dev runtime autoscaled" "devRuntime forces one replica" --set autoscaling.enabled=true
+        out=$(render "$chart" charts/relayfile/ci/durable-actors-values.yaml)
+        ! yq 'select(.kind == "Deployment" and .metadata.name == "ci-relayfile-server") | .. | select(has("secretKeyRef")) | .secretKeyRef.name' <<<"$out" | grep -qx actors-credentials \
+          || err "$chart: the internet-facing gateway can read the durable-actors admin api-key"
+        [ "$(yq 'select(.kind == "Deployment" and .metadata.name == "ci-relayfile-session-broker") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SECRET") | .valueFrom.secretKeyRef.name' <<<"$out")" = actors-credentials ] \
+          || err "$chart: the session broker must read the admin api-key Secret"
+        [ "$(yq 'select(.kind == "NetworkPolicy" and .metadata.name == "ci-relayfile-session-broker") | .spec.ingress[0].from[0].podSelector.matchLabels["app.kubernetes.io/component"]' <<<"$out")" = server ] \
+          || err "$chart: the session broker NetworkPolicy must admit only gateway pods"
+        dev=$(render "$chart" charts/relayfile/ci/durable-actors-dev-values.yaml)
+        [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$dev")" = 1 ] || err "$chart: devRuntime must force one replica"
+        ! yq 'select(.kind == "Job" or (.kind == "Deployment" and .metadata.name == "ci-relayfile-session-broker")) | .metadata.name' <<<"$dev" | grep -q . \
+          || err "$chart: devRuntime must not render the broker or the deploy Job"
+        ;;
+      relay-dashboard)
+        v=charts/relay-dashboard/ci/default-values.yaml
+        expect_render_failure "$chart" "$v" "mutable image" "image.digest is required" --set image.digest=
+        expect_render_failure "$chart" "$v" "malformed digest" "image.digest must be sha256:<64 lowercase hex characters>" --set image.digest=sha256:abc
+        expect_render_failure "$chart" "$v" "public Service" "service.type must be ClusterIP" --set service.type=LoadBalancer
+        expect_render_failure "$chart" "$v" "missing API backend" "api.serviceName is required" --set api.serviceName=
+        expect_render_failure "$chart" "$v" "invalid public URL" "runtime.publicUrl must be an HTTPS origin" --set runtime.publicUrl=http://gcp-proof.agentrelay.com
+        expect_render_failure "$chart" "$v" "ingress without TLS" "ingress.enabled=true requires ingress.tls" --set-json 'ingress.tls=[]'
+        out=$(render "$chart" "$v")
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.initContainers[0].name' <<<"$out")" = copy-dashboard ] \
+          || err "$chart: writable dashboard content must be prepared by the hardened init container"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].volumeMounts[] | select(.mountPath == "/usr/share/nginx/html") | .name' <<<"$out")" = html ] \
+          || err "$chart: runtime-config.js cannot be written with a read-only root filesystem"
+        ;;
+      relay-cloud-api)
+        v=charts/relay-cloud-api/ci/default-values.yaml
+        expect_render_failure "$chart" "$v" "mutable image" "image.digest is required" --set image.digest=
+        expect_render_failure "$chart" "$v" "malformed digest" "image.digest must be sha256:<64 lowercase hex characters>" --set image.digest=sha256:abc
+        expect_render_failure "$chart" "$v" "missing Secret" "existingSecret is required" --set existingSecret=
+        expect_render_failure "$chart" "$v" "multiple replicas" "replicaCount must be 1" --set replicaCount=2
+        expect_render_failure "$chart" "$v" "missing runtime database role" "database.runtimeRole must be a valid PostgreSQL role name" --set database.runtimeRole=
+        expect_render_failure "$chart" "$v" "invalid public URL" "publicUrl must be an HTTPS origin with no path" --set publicUrl=https://gcp-proof.agentrelay.com/cloud
+        expect_render_failure "$chart" "$v" "invalid internal History origin" "services.relayhistoryUrl must be an HTTP(S) origin" --set services.relayhistoryUrl=http://relayhistory:8080/v1
+        expect_render_failure "$chart" "$v" "plaintext public Relaycast origin" "services.relaycastPublicUrl must be a public HTTPS origin" --set services.relaycastPublicUrl=http://cast.gcp-proof.agentrelay.com
+        expect_render_failure "$chart" "$v" "private public History origin" "services.relayhistoryPublicUrl must be a public HTTPS origin" --set services.relayhistoryPublicUrl=https://relayhistory
+        out=$(render "$chart" "$v")
+        grep -q 'name: SELFHOST_PUBLIC_URL' <<<"$out" || err "$chart: SELFHOST_PUBLIC_URL is not rendered"
+        grep -q 'name: RELAYCAST_PUBLIC_URL' <<<"$out" || err "$chart: RELAYCAST_PUBLIC_URL is not rendered"
+        grep -q 'name: RELAYHISTORY_PUBLIC_URL' <<<"$out" || err "$chart: RELAYHISTORY_PUBLIC_URL is not rendered"
+        grep -q 'name: DATABASE_MIGRATIONS_URL_FILE' <<<"$out" || err "$chart: migration owner URL is not file-backed"
+        ! yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[].name' <<<"$out" | grep -q '^DATABASE_MIGRATIONS_URL_FILE$' \
+          || err "$chart: API Deployment can read the migration owner URL"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].command | join(" ")' <<<"$out")" = node ] \
+          || err "$chart: migration Job must invoke node directly"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].args | join(" ")' <<<"$out")" = node_modules/@cloud/selfhost-api/dist/migrate-cli.js ] \
+          || err "$chart: migration Job must invoke the packaged migrate CLI directly"
+        ! grep -q 'export DATABASE_URL_FILE' <<<"$out" || err "$chart: obsolete migration DATABASE_URL_FILE adapter is still rendered"
+        ! grep -Eq 'CLOUD_EDITION|NEXT_PUBLIC_APP_URL|OIDC_|AUTH_SESSION_SECRET|NEXT_CACHE' <<<"$out" \
+          || err "$chart: full-Cloud/Next environment leaked into the selfhost API chart"
+        ;;
+      relayhistory)
+        v=charts/relayhistory/ci/default-values.yaml
+        expect_render_failure "$chart" "$v" "mutable image" "image.digest is required" --set image.digest=
+        expect_render_failure "$chart" "$v" "malformed digest" "image.digest must be sha256:<64 lowercase hex characters>" --set image.digest=sha256:abc
+        expect_render_failure "$chart" "$v" "missing database Secret" "database.existingSecret is required" --set database.existingSecret=
+        expect_render_failure "$chart" "$v" "missing origin" "relayauth.historyOrigin must be an HTTPS origin" --set relayauth.historyOrigin=
+        expect_render_failure "$chart" "$v" "plaintext origin" "relayauth.historyOrigin must be an HTTPS origin" --set relayauth.historyOrigin=http://history.example.com
+        expect_render_failure "$chart" "$v" "ingress without TLS" "ingress.enabled=true requires ingress.tls" --set-json 'ingress.tls=[]'
+        expect_render_failure "$chart" "$v" "drain without write hold" "migrations.drainForWriteHold requires migrations.allowWriteHold=true" --set migrations.drainForWriteHold=true
+        expect_render_failure "$chart" "$v" "drain without migrations" "migrations.drainForWriteHold requires migrations.enabled=true" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set migrations.enabled=false
+        expect_render_failure "$chart" "$v" "replicaCount 0" "set migrations.drainForWriteHold=true instead" --set replicaCount=0
+        # Write-hold step 1 drains History to zero replicas and runs the Job with the hold;
+        # default and step 2 keep one replica and no hold.
+        wh=$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v" --set migrations.allowWriteHold=true --set migrations.drainForWriteHold=true) \
+          || err "$chart: write-hold step 1 failed to render"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$wh")" = 0 ] || err "$chart: drainForWriteHold did not render replicas 0"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "ALLOW_WRITE_HOLD") | .value' <<<"$wh")" = yes ] \
+          || err "$chart: write-hold step 1 Job does not take the write hold"
+        # The Job must not start migrating while a History pod still terminates:
+        # an init container polls the API for this release's History pods.
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.initContainers[0].name' <<<"$wh")" = wait-for-history-drain ] \
+          || err "$chart: write-hold step 1 Job does not wait for History to drain"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.initContainers[0].env[] | select(.name == "HISTORY_SELECTOR") | .value' <<<"$wh")" = "app.kubernetes.io/name=relayhistory,app.kubernetes.io/instance=ci,app.kubernetes.io/component=history" ] \
+          || err "$chart: drain wait selector is not release-scoped"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].volumeMounts[].name' <<<"$wh" | grep -c drain-wait-token || true)" = 0 ] \
+          || err "$chart: the migrate container must not mount the drain-wait token"
+        [ "$(yq 'select(.kind == "Role") | .rules[0].verbs | join(",")' <<<"$wh")" = list ] \
+          || err "$chart: drain-wait Role must only list pods"
+        expect_render_failure "$chart" "$v" "drain without API egress" "requires migrations.drainWaitApiServerEgress" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set networkPolicy.allowAllEgress=false --set-json 'networkPolicy.additionalEgress=[{"to":[{"ipBlock":{"cidr":"10.0.0.5/32"}}]}]'
+        expect_render_failure "$chart" "$v" "fractional drain wait" "migrations.drainWaitSeconds must be a positive integer" --set migrations.drainWaitSeconds=1.5
+        expect_render_failure "$chart" "$v" "drain wait over the Job deadline" "migrations.drainWaitSeconds must be below migrations.activeDeadlineSeconds" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set migrations.drainWaitSeconds=3600
+        expect_render_failure "$chart" "$v" "drain wait on the default ServiceAccount" "requires serviceAccount.name" --set migrations.drainForWriteHold=true --set migrations.allowWriteHold=true --set serviceAccount.create=false
+        [ "$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v" --set migrations.allowWriteHold=true --set migrations.drainForWriteHold=true --set networkPolicy.allowAllEgress=false --set-json 'networkPolicy.additionalEgress=[{"to":[{"ipBlock":{"cidr":"10.0.0.5/32"}}]}]' --set-json 'migrations.drainWaitApiServerEgress=[{"ipBlock":{"cidr":"10.0.0.1/32"}}]' --set migrations.drainWaitApiServerPort=6443 | yq 'select(.kind == "NetworkPolicy" and (.metadata.name | test("migration$"))) | .spec.egress[-1].ports[0].port')" = 6443 ] \
+          || err "$chart: drainWaitApiServerPort is not rendered in the migration policy"
+        dflt=$(helm template ci "charts/$chart" -n ci --no-hooks -f "$v") || err "$chart: default render failed"
+        [ "$(yq 'select(.kind == "Role") | .metadata.name' <<<"$dflt")" = "" ] || err "$chart: default render must not grant pod list"
+        [ "$(yq 'select(.kind == "Deployment") | .spec.replicas' <<<"$dflt")" = 1 ] || err "$chart: default render is not one replica"
+        [ "$(yq 'select(.kind == "Job") | .spec.template.spec.containers[0].env[] | select(.name == "ALLOW_WRITE_HOLD") | .value' <<<"$dflt")" = no ] \
+          || err "$chart: default Job takes a write hold"
+        ;;
+      agent-relay)
+        v=charts/agent-relay/ci/gcp-proof-values.yaml
+        expect_render_failure "$chart" "$v" "missing History image" "image.digest is required" --set relayhistory.image.digest=
+        expect_render_failure "$chart" "$v" "missing API image" "image.digest is required" --set relay-cloud-api.image.digest=
+        expect_render_failure "$chart" "$v" "missing dashboard image" "image.digest is required" --set relay-dashboard.image.digest=
+        expect_render_failure "$chart" "$v" "ar_ authority without relayauth" "relaycast.credentials.authority=relayauth requires components.relayauth=true" --set components.relayauth=false --set relaycast.credentials.format=ar --set relaycast.credentials.authority=relayauth --set relaycast.credentials.relayauth.url=http://relayauth:8787 --set relaycast.secretKeys.relayauthToken=relaycast-relayauth-token
         ;;
     esac
   fi

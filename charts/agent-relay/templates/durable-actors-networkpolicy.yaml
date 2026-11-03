@@ -1,0 +1,46 @@
+{{- include "agent-relay.validate" . -}}
+{{- $components := .Values.components | default dict -}}
+{{- $policy := .Values.durableActorsNetworkPolicy | default dict -}}
+{{- if and (dig "durableActors" false $components) (dig "enabled" true $policy) }}
+{{- $da := index .Values "durable-actors" | default dict -}}
+{{- $name := printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- $sandbox := dig "sandboxNamespace" "" $da | default (printf "%s-%s" .Release.Namespace .Release.Name | trunc 63 | trimSuffix "-") -}}
+# The vendored durable-actors chart restricts only the sandbox namespace. This
+# policy limits who reaches the control plane and pool manager (port 7100): pods of this
+# release namespace (gateways, session broker, deployers), actor sandboxes, and
+# the GKE load balancer ranges when gkeIngress.hosts.actors is set. Egress is
+# not restricted (GCS, Postgres, Redis, the Kubernetes API).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-control-plane" $name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: durable-actors
+spec:
+  # Both control-plane workloads: <name> and <name>-pool-manager (the vendored
+  # chart's actors.poolManagerName).
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [{{ $name | quote }}, {{ printf "%s-pool-manager" ($name | trunc 50 | trimSuffix "-") | quote }}]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $sandbox | quote }}
+        {{- if dig "hosts" "actors" "" (.Values.gkeIngress | default dict) }}
+        - ipBlock: { cidr: 35.191.0.0/16 }
+        - ipBlock: { cidr: 130.211.0.0/22 }
+        {{- end }}
+        {{- range dig "extraIngressFrom" (list) $policy }}
+        - {{- toYaml . | nindent 10 }}
+        {{- end }}
+      ports:
+        - { port: 7100, protocol: TCP }
+{{- end }}
