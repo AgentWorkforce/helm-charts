@@ -189,6 +189,11 @@ async function createRelaycastWorkspace(label) {
   const ms = Date.now() - started;
   must(rc.status === 201, `relaycast internal create (${label}) status=${rc.status} error=${errorCode(rc)} after ${ms}ms`);
   const workspace = rcData(rc);
+  // Record the id for cleanup as soon as the 201 names it, before any
+  // further validation can fail.
+  if (rc.status === 201 && typeof workspace?.workspace_id === "string" && workspace.workspace_id.length > 0) {
+    state[label] = { relaycastWorkspaceId: workspace.workspace_id };
+  }
   must(typeof workspace?.workspace_id === "string" && workspace.workspace_id.length > 0, `relaycast create (${label}) returned no workspace id`);
   must(typeof workspace.api_key === "string" && workspace.api_key.length >= 16, `relaycast create (${label}) returned no workspace key`);
   return { workspaceId: workspace.workspace_id, apiKey: workspace.api_key, ms };
@@ -256,9 +261,7 @@ async function phaseBootstrap() {
   // Both Relaycast workspaces are created concurrently; each is recorded for
   // cleanup as soon as it exists, even if the other create fails.
   const created = await Promise.allSettled(["a", "b"].map(async (label) => {
-    const workspace = await createRelaycastWorkspace(label);
-    state[label] = { relaycastWorkspaceId: workspace.workspaceId };
-    return workspace;
+    return createRelaycastWorkspace(label);
   }));
   const failed = created.find((result) => result.status === "rejected");
   if (failed) throw failed.reason;
