@@ -1,9 +1,0 @@
-{{- /*
-Existing-cluster path for the session directory search Worker role
-(96BullSessions runbooks/session-directory-search-worker-bootstrap.md): its
-bootstrap file, as `postgres`, in the HoopDb database. New clusters also get it
-from initdb (hoopdb.cluster.initdb.postInitApplicationSQL).
-*/ -}}
-{{- if .Values.searchWorkerRole.bootstrapJob.enabled }}
-{{- include "96bulls.privilegedSqlJob" (dict "c" .Values.searchWorkerRole.bootstrapJob "root" . "component" "search-worker-role-bootstrap" "suffix" "search-worker-role" "what" "session_directory_search_worker" "psqlVars" list) }}
-{{- end }}

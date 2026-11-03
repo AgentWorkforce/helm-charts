@@ -1,5 +1,11 @@
 # Self-hosted Agent Relay — architecture diagram (GCP)
 
+Start with the overview: [agent-relay-architecture.png](agent-relay-architecture.png)
+([SVG](agent-relay-architecture.svg), source [agent-relay-architecture.mmd](agent-relay-architecture.mmd))
+and the request flow [agent-relay-request-flow.png](agent-relay-request-flow.png)
+([SVG](agent-relay-request-flow.svg), source [agent-relay-request-flow.mmd](agent-relay-request-flow.mmd)).
+This page is the detailed view: ports, routes, Secrets and the Relayflows run modes.
+
 Rendered exports of the diagrams below: [architecture SVG](self-hosted-architecture.svg) ·
 [architecture PNG](self-hosted-architecture.png) ·
 [relayflows modes SVG](self-hosted-relayflows-modes.svg) ·
@@ -18,14 +24,14 @@ ranges. Inside the namespace, Relaycast serves agent messaging over
 WebSocket and REST, the control API serves sign-in, tenancy, and credential
 exchange, RelayAuth issues scoped JWTs (and, in the model-B layout, pushes
 `ar_ws_` workspace keys into Relaycast), AlleyOop ingests session chunks into
-the GCS Locker bucket for the 96Bulls workers to index into PostgreSQL, and
+the GCS Locker bucket for the Sessions Pipeline workers to index into PostgreSQL, and
 RelayHistory receives the Desktop's durable delivery batches directly and
 serves search and replay over them. AlleyOop is `ClusterIP`-only with no
 ingress route, so it accepts chunks only from in-cluster callers. Durable state
 is split deliberately: Cloud SQL holds per-service PostgreSQL databases with a
 runtime/migration-owner role split, reached through connection URLs held in
 Kubernetes Secrets (no IAM database authentication); GCS holds session
-objects, reached by the 96Bulls workers and AlleyOop through the services'
+objects, reached by the Sessions Pipeline workers and AlleyOop through the services'
 native GCS adapter (`locker.provider: gcs`, `LOCKER_PROVIDER=gcs`) with GKE
 Workload Identity on their Kubernetes service accounts, so no storage key is
 stored; and retained RWO PVCs hold the Relaycast and RelayAuth SQLite stores. The
@@ -35,7 +41,7 @@ off by default: PVC snapshots are operator-run per the
 via existing Secrets, never values, with one exception: the optional
 Relayflows `credentials.enrollmentToken` can be set inline and the chart
 renders it into a Secret (prefer `credentials.existingSecret`). The bridge that
-would feed 96Bulls Sessions into RelayHistory for search and replay is planned,
+would feed Sessions Pipeline sessions into RelayHistory for search and replay is planned,
 not implemented. Relayflows is an opt-in add-on; a Terse durable-actors
 backend for Relaycast is designed but not yet shipped.
 
@@ -67,7 +73,7 @@ flowchart TB
     Hist["relayhistory<br/>durable delivery · search · replay · :8080"]
     AO["alleyoop<br/>session-chunk ingest · :8080<br/>verifies RelayAuth JWKS<br/>ClusterIP only · no ingress route"]
     Producer["in-cluster callers only<br/>courier JWT<br/>external ingest: planned"]
-    Worker["96bulls sessions workers<br/>index · summarize · eval · health :8081"]
+    Worker["sessions-pipeline sessions workers<br/>index · summarize · eval · health :8081"]
     Flows["relayflows runner<br/>Job / CronJob · optional"]
 
     subgraph Planned["opt-in durable-actors backend (runtime.backend=durable-actors)"]
@@ -161,8 +167,8 @@ flowchart LR
 | relaycast | `charts/relaycast` | 8787 WSS + REST | retained RWO PVC: `relaycast.db` + uploaded files; operator-run VolumeSnapshots (backup CronJob off by default) |
 | relayauth | `charts/relayauth` (optional) | 8787 | retained RWO PVC: `relayauth.db`; signing key from Secret |
 | relayhistory | `charts/relayhistory` | 8080 | dedicated Cloud SQL DB + migration ledger (never shares hoopdb) |
-| alleyoop | `charts/96bulls` → `alleyoop` | 8080 (ClusterIP only, no ingress route) | GCS Locker bucket (native GCS, Workload Identity) + hoopdb (PG 17, `pg_trgm`) |
-| 96bulls workers | `charts/96bulls-worker` | 8081 health | hoopdb + GCS Locker via native GCS and Workload Identity |
+| alleyoop | `charts/sessions-pipeline` → `alleyoop` | 8080 (ClusterIP only, no ingress route) | GCS Locker bucket (native GCS, Workload Identity) + hoopdb (PG 17, `pg_trgm`) |
+| sessions-pipeline workers | `charts/sessions-pipeline-worker` | 8081 health | hoopdb + GCS Locker via native GCS and Workload Identity |
 | relayflows | `charts/relayflows` (optional) | — | run-journal `ReadWriteOncePod` PVC |
 | Cloud SQL | customer-provisioned | 5432 | per-service databases; runtime vs migration-owner role split; connection URLs from Secrets |
 | GCS | customer-provisioned buckets | HTTPS, native GCS API | sessions Locker objects, recovery/backup prefixes; no stored key |
@@ -184,7 +190,7 @@ flowchart LR
 - **Sessions:** session chunks from in-cluster callers → alleyoop :8080
   (courier JWT verified against RelayAuth JWKS; `ClusterIP` only, with no
   ingress route, so external agents cannot reach it today) → objects in the
-  GCS Locker bucket + metadata in hoopdb → 96Bulls workers index/summarize
+  GCS Locker bucket + metadata in hoopdb → Sessions Pipeline workers index/summarize
   into PostgreSQL. **Planned, not implemented:** a bridge from hoopdb into
   RelayHistory so these sessions appear in Dashboard search and replay. No
   chart wires hoopdb into RelayHistory or the control API today.
@@ -193,5 +199,5 @@ flowchart LR
   verifies tags through RelayAuth's remote CredentialTagger.
 - **Durable delivery:** the Desktop sends durable delivery batches
   (`/v1/delivery/batches`) directly to the `history` host → RelayHistory
-  :8080 → its dedicated Cloud SQL database. This, not the Sessions pipeline,
+  :8080 → its dedicated Cloud SQL database. This, not the Sessions Pipeline,
   is what Dashboard search and replay read today.

@@ -1,13 +1,13 @@
 dependencies:
 - name: relaycast
   repository: file://../relaycast
-  version: 0.3.0
+  version: 0.3.1
 - name: relayauth
   repository: file://../relayauth
   version: 0.1.2
-- name: 96bulls
-  repository: file://../96bulls
-  version: 0.5.5
+- name: sessions-pipeline
+  repository: file://../sessions-pipeline
+  version: 0.6.0
 - name: relayhistory
   repository: file://../relayhistory
   version: 0.1.1
@@ -26,5 +26,5 @@ dependencies:
 - name: relayfile
   repository: file://../relayfile
   version: 0.2.0
-digest: sha256:572674fea2327950790b7d2efa27aaf4f6af272b2fcf97f4b48e11c4e8c67ef8
-generated: "2026-11-03T09:55:24.293665004-08:00"
+digest: sha256:43e0b3923627f7f49faa25042f7cb5b6cb58063dd20f8c99bbddd4e37c704bd0
+generated: "2026-11-03T10:18:40.215577-08:00"

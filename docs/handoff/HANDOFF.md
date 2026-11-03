@@ -1,5 +1,19 @@
 # Agent Relay self-hosted GCP handoff
 
+## Architecture
+
+- [Architecture overview](../diagrams/agent-relay-architecture.png)
+  ([SVG](../diagrams/agent-relay-architecture.svg), [source](../diagrams/agent-relay-architecture.mmd)):
+  what the `agent-relay` umbrella deploys on GKE. Dashed borders mark preview
+  components and the optional telemetry egress; Relayflows is opt-in and
+  labelled so.
+- [Request flow](../diagrams/agent-relay-request-flow.png)
+  ([SVG](../diagrams/agent-relay-request-flow.svg), [source](../diagrams/agent-relay-request-flow.mmd)):
+  Desktop sign-in and device approval, session upload, Dashboard read, and
+  agent messaging.
+- [Reference architecture](../self-hosted-reference-architecture.md) and the
+  [detailed GKE shape](../diagrams/self-hosted-architecture.md).
+
 ## Deliverables
 
 `scripts/package-customer-handoff.sh build` produces three files for one source
@@ -19,9 +33,9 @@ Both archives unpack to one `agent-relay-customer-handoff/` directory:
 | Path | Contents |
 | --- | --- |
 | `charts/agent-relay/` | Umbrella chart source, with `values.yaml` and the structural `values-gcp.yaml` example |
-| `charts/relaycast/`, `charts/relayauth/`, `charts/96bulls/`, `charts/96bulls-worker/`, `charts/alleyoop/`, `charts/relayhistory/`, `charts/relay-cloud-api/`, `charts/relay-dashboard/` | Leaf chart sources the umbrella depends on |
-| `.cursor/skills/setting-up-self-hosted-agent-relay-gcp/` | Setup, safety, preflight, deployment, Desktop, pre-upgrade, and public-verification skill |
-| `docs/` | Reference architecture, image supply chain, backup/restore runbook, conformance contract, and licenses |
+| `charts/relaycast/`, `charts/relayauth/`, `charts/sessions-pipeline/`, `charts/sessions-pipeline-worker/`, `charts/alleyoop/`, `charts/relayhistory/`, `charts/relay-cloud-api/`, `charts/relay-dashboard/`, `charts/relayflows/`, `charts/durable-actors/`, `charts/relayfile/` | Leaf chart sources the umbrella depends on (Relayflows opt-in; durable-actors and Relayfile preview) |
+| `.agents/skills/setting-up-self-hosted-agent-relay-gcp/` | Setup, safety, preflight, deployment, Desktop, pre-upgrade, and public-verification skill |
+| `docs/` | Reference architecture, architecture and request-flow diagrams (`docs/diagrams/`), image supply chain, backup/restore runbook, conformance contract, and licenses |
 | `scripts/selfhost/`, `scripts/release/`, `scripts/conformance/` | Read-only verification, pre-upgrade gate, release validator, and conformance tests |
 | `self-hosted/` | Customer image manifest and release evidence |
 | `deps/`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Dependency pins and license notices |

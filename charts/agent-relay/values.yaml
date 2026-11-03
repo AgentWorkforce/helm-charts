@@ -64,7 +64,7 @@ relayauth:
   # relayauth's public JWKS ingress (gkeIngress refuses jwksIngress.enabled).
   jwksIngress:
     enabled: false
-96bulls: {}
+sessions-pipeline: {}
 relayhistory: {}
 # relay-cloud-api: see charts/relay-cloud-api/values.yaml. encryption.keyId is
 # required; optional: encryption.previousKeyId, secretKeys.previousEncryptionKey,

@@ -34,42 +34,42 @@ expect_pass "clean copy (planned)" planned
 
 # (c) A planned subchart value read from the UMBRELLA templates (.Values.worker.<x>).
 fresh
-echo '{{- if .Values.worker.sessionBrief.enabled }}{{ end }}' >> "$WORK/r/charts/96bulls/templates/NOTES.txt"
+echo '{{- if .Values.worker.sessionBrief.enabled }}{{ end }}' >> "$WORK/r/charts/sessions-pipeline/templates/NOTES.txt"
 expect_fail "planned: umbrella reads .Values.worker.sessionBrief.enabled" planned \
-  "opt.96bulls.session-briefs is planned, but charts/96bulls/templates reads 96bulls-worker:sessionBrief.enabled"
+  "opt.sessions-pipeline.session-briefs is planned, but charts/sessions-pipeline/templates reads sessions-pipeline-worker:sessionBrief.enabled"
 
 # (c) The same through index (a key a dotted path cannot spell).
 fresh
-echo '{{- if index .Values.worker "sessionBrief" "enabled" }}{{ end }}' >> "$WORK/r/charts/96bulls/templates/NOTES.txt"
+echo '{{- if index .Values.worker "sessionBrief" "enabled" }}{{ end }}' >> "$WORK/r/charts/sessions-pipeline/templates/NOTES.txt"
 expect_fail "planned: umbrella index .Values.worker \"sessionBrief\"" planned \
-  "charts/96bulls/templates reads 96bulls-worker:sessionBrief.enabled"
+  "charts/sessions-pipeline/templates reads sessions-pipeline-worker:sessionBrief.enabled"
 
 # (c) A planned umbrella value read from the umbrella's own templates.
 fresh
-echo '{{- if .Values.search.backend }}{{ end }}' >> "$WORK/r/charts/96bulls/templates/NOTES.txt"
+echo '{{- if .Values.search.backend }}{{ end }}' >> "$WORK/r/charts/sessions-pipeline/templates/NOTES.txt"
 expect_fail "planned: umbrella reads .Values.search.backend" planned \
-  "opt.96bulls.search-backend is planned, but charts/96bulls/templates reads 96bulls:search.backend"
+  "opt.sessions-pipeline.search-backend is planned, but charts/sessions-pipeline/templates reads sessions-pipeline:search.backend"
 
-# (c) A planned entry owned by a SUBCHART (chart: 96bulls-worker) whose path is
+# (c) A planned entry owned by a SUBCHART (chart: sessions-pipeline-worker) whose path is
 # read only by the umbrella templates: every chart's reads are scanned.
 fresh
-yq -i '(.entries[] | select(.id == "opt.96bulls.session-briefs")) |= (.chart = "96bulls-worker" | .values = ["sessionBrief.enabled"])' "$WORK/r/self-hosted/requirements.yaml"
-echo '{{- if .Values.worker.sessionBrief.enabled }}{{ end }}' >> "$WORK/r/charts/96bulls/templates/NOTES.txt"
+yq -i '(.entries[] | select(.id == "opt.sessions-pipeline.session-briefs")) |= (.chart = "sessions-pipeline-worker" | .values = ["sessionBrief.enabled"])' "$WORK/r/self-hosted/requirements.yaml"
+echo '{{- if .Values.worker.sessionBrief.enabled }}{{ end }}' >> "$WORK/r/charts/sessions-pipeline/templates/NOTES.txt"
 expect_fail "planned: subchart entry read only by the umbrella" planned \
-  "opt.96bulls.session-briefs is planned, but charts/96bulls/templates reads 96bulls-worker:sessionBrief.enabled"
+  "opt.sessions-pipeline.session-briefs is planned, but charts/sessions-pipeline/templates reads sessions-pipeline-worker:sessionBrief.enabled"
 
 # A template comment that names a planned env or value is not a reference.
 fresh
 printf '%s\n' '{{/* SESSION_BRIEF_ENABLED and .Values.worker.sessionBrief.enabled come with the re-pin */}}' \
-  '{{- /* .Values.search.backend: planned */ -}}' >> "$WORK/r/charts/96bulls/templates/NOTES.txt"
+  '{{- /* .Values.search.backend: planned */ -}}' >> "$WORK/r/charts/sessions-pipeline/templates/NOTES.txt"
 expect_pass "planned: template comments are not references" planned
 
 # Shipped env whose only mention left is a values.yaml COMMENT.
 fresh
-sed -i 's/^      - name: BOB_COSTAS_MODEL$/      # - name: BOB_COSTAS_MODEL (BOB_COSTAS_MODEL is set by the image)/; /^        value: "off"$/d' "$WORK/r/charts/96bulls-worker/values.yaml"
-grep -q 'BOB_COSTAS_MODEL' "$WORK/r/charts/96bulls-worker/values.yaml" || err "fixture: BOB_COSTAS_MODEL comment missing"
+sed -i 's/^      - name: BOB_COSTAS_MODEL$/      # - name: BOB_COSTAS_MODEL (BOB_COSTAS_MODEL is set by the image)/; /^        value: "off"$/d' "$WORK/r/charts/sessions-pipeline-worker/values.yaml"
+grep -q 'BOB_COSTAS_MODEL' "$WORK/r/charts/sessions-pipeline-worker/values.yaml" || err "fixture: BOB_COSTAS_MODEL comment missing"
 expect_fail "shipped: env only in a values.yaml comment" shipped \
-  "opt.96bulls.bob-costas-model: env BOB_COSTAS_MODEL is neither rendered"
+  "opt.sessions-pipeline.bob-costas-model: env BOB_COSTAS_MODEL is neither rendered"
 
 # Shipped env whose only mention left is a template COMMENT.
 fresh

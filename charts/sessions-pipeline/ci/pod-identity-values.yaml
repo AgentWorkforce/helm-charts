@@ -1,0 +1,43 @@
+# AWS EKS, external Supabase HoopDb (stacks/aws/eks.ts, hoopdb backend
+# "external"): supabase mode, no shim, no wait-for-role, no in-cluster SQL
+# Jobs, S3 Locker through Pod Identity.
+global:
+  tenant:
+    orgId: org_ci
+worker:
+  migrations:
+    databaseMode: supabase
+    supabaseShim: false
+    runtimeRole: sessions_pipeline_runtime
+    runtimeRoleLogin: true
+    waitForRole:
+      enabled: false
+  existingSecret: ""
+  summaryEncryption:
+    existingSecret: sessions-pipeline-summary
+  hoopdb:
+    existingSecret: hoopdb-app
+    key: uri
+  locker:
+    endpoint: ""
+    bucket: sessions-pipeline-ci
+    region: us-west-2
+    credentials:
+      mode: podIdentity
+alleyoop:
+  existingSecret: ""
+  hoopdb:
+    existingSecret: hoopdb-app
+    key: uri
+  locker:
+    endpoint: ""
+    bucket: sessions-pipeline-ci
+    region: us-west-2
+    credentials:
+      mode: podIdentity
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+hoopdb:
+  enabled: false
+locker:
+  enabled: false

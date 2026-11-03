@@ -1,0 +1,72 @@
+# AWS EKS CNPG proof stage (stacks/aws/eks.ts, hoopdb backend "cnpg"): the
+# in-cluster HoopDb in selfhosted mode with the privileged runtime-role and
+# function-default Jobs, S3 Locker through Pod Identity, otel collector on.
+# Pinned services image: the immutable ECR digest (sessions-dev) built from
+# sessions-pipeline main 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad (tag
+# sha-7d7229b..., publish-image-ecr run 41375747474), generation eff8b3be...259b.
+# The Secret (96bulls-runtime) and bucket (96bulls-ci) are the names the
+# upstream AWS stack provisions; they stay as is until that stack renames them.
+global:
+  imageRegistry: ""
+  tenant:
+    orgId: org_ci
+  otel:
+    endpoint: http://otel-collector:4318
+worker:
+  image:
+    repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
+    digest: "sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9"
+  existingSecret: ""
+  summaryEncryption:
+    existingSecret: 96bulls-runtime
+    key: SUMMARY_MASTER_KEYS
+  locker:
+    endpoint: ""
+    bucket: 96bulls-ci
+    region: us-west-2
+    credentials:
+      mode: podIdentity
+  lockerInit:
+    enabled: false
+  deployment:
+    name: hosted
+    id: ci
+  migrations:
+    databaseMode: selfhosted
+    supabaseShim: true
+    runtimeRole: sessions_pipeline_runtime
+    runtimeRoleLogin: true
+    functionBoundaryMode: global-default-revoke
+    waitForRole:
+      enabled: true
+      functionDefault: true
+alleyoop:
+  image:
+    repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
+    digest: "sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9"
+  existingSecret: ""
+  locker:
+    endpoint: ""
+    bucket: 96bulls-ci
+    region: us-west-2
+    credentials:
+      mode: podIdentity
+  auth:
+    jwksUrl: https://relayauth.example.com/.well-known/jwks.json
+  deployment:
+    name: hosted
+    id: ci
+locker:
+  enabled: false
+otel:
+  enabled: true
+runtimeRole:
+  bootstrapJob:
+    enabled: true
+functionDefaultRevoke:
+  bootstrapJob:
+    enabled: true
+privilegedSql:
+  sqlImage:
+    repository: 500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
+    digest: "sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9"

@@ -4,7 +4,7 @@
 # layout): Relaycast messaging, control-plane bootstrap and device auth,
 # RelayHistory durable delivery, dashboard reads, the sessions API, workspace
 # isolation, restart durability, RelayAuth token verification, erasure, the
-# 96bulls Sessions pipeline, the public HTTPS edge, workspace admin (env vars,
+# Sessions Pipeline, the public HTTPS edge, workspace admin (env vars,
 # /internal edge denial), Relayflows on a registered worker, and the dashboard
 # SPA.
 #
@@ -34,7 +34,7 @@ set -uo pipefail
 PROGRAM="${0##*/}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DRIVER="$HERE/e2e-gcp-proof-driver.mjs"
-BULLS_PROBE="$HERE/e2e-gcp-proof-96bulls.ts"
+BULLS_PROBE="$HERE/e2e-gcp-proof-sessions-pipeline.ts"
 
 CONTEXT=""
 NAMESPACE="agent-relay"
@@ -42,7 +42,7 @@ BULLS_NAMESPACE="96bulls"
 SECRET_NAME="agent-relay-gcp-proof"
 BASE_DOMAIN=""
 SKIP_RESTART=false
-SKIP_96BULLS=false
+SKIP_SESSIONS_PIPELINE=false
 SKIP_PUBLIC=false
 REQUIRE_PUBLIC=false
 CERT_WAIT=0
@@ -60,7 +60,7 @@ WORKER_IMAGE="node:22.23.3-bookworm-slim"
 AGENT_RELAY_VERSION="12.4.1"
 WORKER_POD=""
 WORKER_SECRET=""
-VERIFY_PUBLIC="$HERE/../../.cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/verify-public.sh"
+VERIFY_PUBLIC="$HERE/../../.agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/verify-public.sh"
 
 usage() {
   cat <<'EOF'
@@ -72,17 +72,22 @@ Required:
 
 Options:
   -n, --namespace NAME        agent-relay namespace (default: agent-relay)
-      --bulls-namespace NAME  96bulls namespace (default: 96bulls)
+      --sessions-namespace NAME
+                              Sessions Pipeline namespace (default: 96bulls,
+                              the live proof's namespace; --bulls-namespace is
+                              an alias)
       --secret NAME           release Secret holding the Relaycast internal secret
                               (default: agent-relay-gcp-proof)
       --base-domain DOMAIN    public base domain (default: derived from the
                               relay-cloud-api SELFHOST_PUBLIC_URL)
       --skip-restart          do not restart relayhistory/relaycast (case 6 SKIP)
-      --skip-96bulls          skip the Sessions pipeline (case 8 SKIP)
+      --skip-sessions-pipeline
+                              skip the Sessions Pipeline (case 8 SKIP;
+                              --skip-96bulls is a deprecated alias)
       --skip-public           skip the public HTTPS checks (case 10 SKIP)
       --require-public        fail (not skip) case 10 when the cert is not Active
       --cert-wait SECONDS     wait up to this long for the ManagedCertificate
-      --pipeline-timeout SEC  how long to wait for 96bulls workers (default 300)
+      --pipeline-timeout SEC  how long to wait for sessions-pipeline workers (default 300)
       --skip-flows            skip the Relayflows worker case (case 13 SKIP)
       --edge-wait SECONDS     how long to poll for the api-host /internal edge
                               denial (default 900)
@@ -123,17 +128,17 @@ need_value() {
 
 while (($#)); do
   case "$1" in
-    --context|-n|--namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap|--relaycast-secret-key|--relaycast-create-timeout)
+    --context|-n|--namespace|--sessions-namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap|--relaycast-secret-key|--relaycast-create-timeout)
       need_value "$1" "$#" ;;
   esac
   case "$1" in
     --context) CONTEXT="$2"; shift 2 ;;
     -n|--namespace) NAMESPACE="$2"; shift 2 ;;
-    --bulls-namespace) BULLS_NAMESPACE="$2"; shift 2 ;;
+    --sessions-namespace|--bulls-namespace) BULLS_NAMESPACE="$2"; shift 2 ;;
     --secret) SECRET_NAME="$2"; shift 2 ;;
     --base-domain) BASE_DOMAIN="$2"; shift 2 ;;
     --skip-restart) SKIP_RESTART=true; shift ;;
-    --skip-96bulls) SKIP_96BULLS=true; shift ;;
+    --skip-sessions-pipeline|--skip-96bulls) SKIP_SESSIONS_PIPELINE=true; shift ;;
     --skip-public) SKIP_PUBLIC=true; shift ;;
     --require-public) REQUIRE_PUBLIC=true; shift ;;
     --cert-wait) CERT_WAIT="$2"; shift 2 ;;
@@ -210,7 +215,7 @@ cleanup_exit() {
     "${KN[@]}" exec "$API_POD" -- rm -f /tmp/e2e-gcp-proof-driver.mjs >/dev/null 2>&1 || true
   fi
   if [[ -n "$BULLS_POD" ]]; then
-    "${KB[@]}" exec "$BULLS_POD" -- rm -f /tmp/e2e-gcp-proof-96bulls.ts >/dev/null 2>&1 || true
+    "${KB[@]}" exec "$BULLS_POD" -- rm -f /tmp/e2e-gcp-proof-sessions-pipeline.ts >/dev/null 2>&1 || true
   fi
   rm -rf "$WORK"
 }
@@ -559,9 +564,9 @@ case_end 7 "auth: JWKS, RelayAuth assertion signature, token verification"
 
 # ---------------------------------------------------------------- case 8
 
-case_begin 8 "96bulls pipeline"
-if $SKIP_96BULLS; then
-  case_skip "--skip-96bulls"
+case_begin 8 "Sessions Pipeline"
+if $SKIP_SESSIONS_PIPELINE; then
+  case_skip "--skip-sessions-pipeline"
 else
   BULLS_POD="$(find_pod "$BULLS_NAMESPACE" 'app.kubernetes.io/name=alleyoop')"
   if [[ -z "$BULLS_POD" ]]; then
@@ -579,20 +584,20 @@ else
     [[ -n "$(state_get marker)" ]] || state_set_json marker "\"$marker\""
     # Remove any helper left by an earlier run first, so a failed copy can
     # never execute a stale probe.
-    if ! "${KB[@]}" exec -i "$BULLS_POD" -- sh -c 'umask 077; rm -f /tmp/e2e-gcp-proof-96bulls.ts && cat > /tmp/e2e-gcp-proof-96bulls.ts' <"$BULLS_PROBE"; then
+    if ! "${KB[@]}" exec -i "$BULLS_POD" -- sh -c 'umask 077; rm -f /tmp/e2e-gcp-proof-sessions-pipeline.ts && cat > /tmp/e2e-gcp-proof-sessions-pipeline.ts' <"$BULLS_PROBE"; then
       emit FAIL pipeline.install_probe "could not copy the probe into $BULLS_POD; skipping the rest of case 8"
     else
     pushed_at="$(date -u +%FT%TZ)"
-    run_phase mint-96bulls
+    run_phase mint-sessions-pipeline
     state_pop_to_file bullsAssertion "$WORK/assertion"
-    push_out="$("${KB[@]}" exec -i "$BULLS_POD" -- sh -c "cd /app && bun run /tmp/e2e-gcp-proof-96bulls.ts push '$marker' '$machine'" \
+    push_out="$("${KB[@]}" exec -i "$BULLS_POD" -- sh -c "cd /app && bun run /tmp/e2e-gcp-proof-sessions-pipeline.ts push '$marker' '$machine'" \
       <"$WORK/assertion" 2>/dev/null)"
     push_rc=$?
     rm -f "$WORK/assertion"
     emit_probe_output push "$push_rc" "$push_out" pipeline.courier_push
     bulls_session="$(sed -n 's/^SESSION_ID=//p' <<<"$push_out")"
     if [[ -n "$bulls_session" ]]; then
-      verify_out="$("${KB[@]}" exec "$BULLS_POD" -- sh -c "cd /app && bun run /tmp/e2e-gcp-proof-96bulls.ts verify '$marker' '$bulls_session' '$PIPELINE_TIMEOUT'" 2>/dev/null)"
+      verify_out="$("${KB[@]}" exec "$BULLS_POD" -- sh -c "cd /app && bun run /tmp/e2e-gcp-proof-sessions-pipeline.ts verify '$marker' '$bulls_session' '$PIPELINE_TIMEOUT'" 2>/dev/null)"
       verify_rc=$?
       emit_probe_output verify "$verify_rc" "$verify_out" \
         pipeline.hoopdb_indexer pipeline.referee_state pipeline.referee_verdict \
@@ -618,7 +623,7 @@ else
     fi
   fi
 fi
-case_end 8 "96bulls Sessions pipeline: courier push, indexer, referee, bob-costas, bucket"
+case_end 8 "Sessions Pipeline: courier push, indexer, referee, bob-costas, bucket"
 
 # ---------------------------------------------------------------- case 9
 

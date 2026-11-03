@@ -18,7 +18,7 @@ namespace, base domain, DNS authority, static IP, Cloud SQL databases and
 roles, GCS bucket, Artifact Registry repositories, image digests, Workload
 Identity service accounts, and existing Kubernetes Secret names.
 
-The required product scope is Relaycast, RelayAuth, 96Bulls Sessions,
+The required product scope is Relaycast, RelayAuth, Sessions Pipeline,
 RelayHistory, the headless control-plane API, Relay Dashboard, and Agent Relay
 Desktop using a custom deployment origin. Relayflows, Relayfile, billing,
 provider integrations, and hosted fleet are out of scope.

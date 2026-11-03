@@ -43,7 +43,7 @@ Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.y
 
 ## Compatibility matrix
 
-Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
+Services image (sessions-pipeline-worker, alleyoop and the privileged SQL Jobs):
 
 | registry | image | source | migration generation |
 | --- | --- | --- | --- |
@@ -52,18 +52,19 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 
 | row | status | charts | image | services source / generation | supported dbMode + boundary | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 96bulls-0.5.5 | unreleased | 96bulls 0.5.5<br>96bulls-worker 0.5.3<br>alleyoop 0.3.7<br>(deps: worker 0.5.3, alleyoop 0.3.7, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | alleyoop 0.3.7 adds auth.allowInterimRelayAuthBearer (ALLOW_INTERIM_RELAYAUTH_BEARER, default false, environment=local only). Same services image and db combos as 0.5.4. |
-| 96bulls-0.5.4 | shipped | 96bulls 0.5.4<br>96bulls-worker 0.5.3<br>alleyoop 0.3.6<br>(deps: worker 0.5.3, alleyoop 0.3.6, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | allowInClusterHttp (ALLOW_IN_CLUSTER_HTTP, default false) for alleyoop and the worker, and the optional alleyoop auth.historyOrigin (RELAYHISTORY_ORIGIN). Same services image and db combos. 96bulls 0.5.3 / alleyoop 0.3.5 were reserved for the interim-bearer PR and never released; it shipped as 0.5.5 / 0.3.7. Superseded by 0.5.5. |
+| sessions-pipeline-0.6.0 | unreleased | sessions-pipeline 0.6.0<br>sessions-pipeline-worker 0.6.0<br>alleyoop 0.3.8<br>(deps: worker 0.6.0, alleyoop 0.3.8, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | sessions-pipeline-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | Rename: the umbrella and worker charts were published as 96bulls (last 0.5.4) and 96bulls-worker (last 0.5.3); they continue here as sessions-pipeline 0.6.0 and sessions-pipeline-worker 0.6.0 (96bulls 0.5.5 was never released). alleyoop 0.3.8 only relabels part-of. Includes alleyoop 0.3.7 auth.allowInterimRelayAuthBearer (ALLOW_INTERIM_RELAYAUTH_BEARER, default false, environment=local only). Same services image and db combos as 0.5.4. Upgrade path: helm upgrade <existing 96bulls release> agentworkforce/sessions-pipeline keeps the release, resource names and selectors (the worker alias is unchanged; only chart and part-of labels change). A standalone 96bulls-worker release keeps its selectors only with nameOverride: 96bulls-worker. |
+| 96bulls-0.5.4 | shipped | 96bulls 0.5.4<br>96bulls-worker 0.5.3<br>alleyoop 0.3.6<br>(deps: worker 0.5.3, alleyoop 0.3.6, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | allowInClusterHttp (ALLOW_IN_CLUSTER_HTTP, default false) for alleyoop and the worker, and the optional alleyoop auth.historyOrigin (RELAYHISTORY_ORIGIN). Same services image and db combos. 96bulls 0.5.3 / alleyoop 0.3.5 were reserved for the interim-bearer PR and never released; it shipped as 0.5.5 / 0.3.7. Superseded by sessions-pipeline 0.6.0. |
 | 96bulls-0.5.2 | shipped | 96bulls 0.5.2<br>96bulls-worker 0.5.2<br>alleyoop 0.3.4<br>(deps: worker 0.5.2, alleyoop 0.3.4, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | License-annotation patch bump of 0.5.1; same services image and db combos. Superseded by 0.5.4. |
 | 96bulls-0.5.1 | shipped | 96bulls 0.5.1<br>96bulls-worker 0.5.1<br>alleyoop 0.3.3<br>(deps: worker 0.5.1, alleyoop 0.3.3, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | sessions-pipeline main 7d7229b (#124 session list RPC, #125 Supabase event-trigger boundary, #139 its manifest sync, #137 exact sessions function ACL). The AWS path pins the ECR digest of the same build. Superseded by 0.5.2. |
-| 96bulls-next | **planned** | 96bulls next | not built for the charts yet | `475d503216a2` / `5ed119133e36` |  | Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/96bulls-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped. |
-| relaycast-0.3.0 | unreleased | relaycast 0.3.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | License-annotation bump of 0.2.0 (unreleased 0.2.1) plus runtime.backend=durable-actors (env contract v1): relaycast-actors-gateway and relaycast-actors-deployer images, digests supplied by the operator; the SQLite image above is unchanged and remains the default. |
+| sessions-pipeline-next | **planned** | sessions-pipeline next | not built for the charts yet | `475d503216a2` / `5ed119133e36` |  | Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/sessions-pipeline-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped. |
+| relaycast-0.3.1 | unreleased | relaycast 0.3.1 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | README-only bump of 0.3.0 for the sessions-pipeline rename. |
+| relaycast-0.3.0 | shipped | relaycast 0.3.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | License-annotation bump of 0.2.0 (unreleased 0.2.1) plus runtime.backend=durable-actors (env contract v1): relaycast-actors-gateway and relaycast-actors-deployer images, digests supplied by the operator; the SQLite image above is unchanged and remains the default. Superseded by 0.3.1. |
 | relaycast-0.2.0 | shipped | relaycast 0.2.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md. Superseded by 0.3.0. |
 | relaycast-0.1.0 | shipped | relaycast 0.1.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:5c86c095a335…` |  |  | image 8.0.0; superseded by 0.2.0. ci/relaycast/smoke.sh upgrades from it. |
 | relayauth-0.1.2 | unreleased | relayauth 0.1.2 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | License-annotation patch bump of 0.1.1. |
 | relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2. |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
-| agent-relay-0.2.1 | unreleased | agent-relay 0.2.1<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.0, relayauth 0.1.2, 96bulls 0.5.5, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf (relayhistory-cloud 74a6e526, erasure fix). The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe and RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.level defaults to errors (scrubbed error metadata and health only; it takes effect once the install is registered with installId, install key and endpoint, so a default render stays off and a partial registration fails), telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. 0.2.1 moves to 96bulls 0.5.5 (interim RelayAuth bearer stays off by default) and supersedes the never-released 0.2.0. |
+| agent-relay-0.3.0 | unreleased | agent-relay 0.3.0<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.1, relayauth 0.1.2, sessions-pipeline 0.6.0, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | agent-relay 0.3.0 renames the Sessions subchart values key from 96bulls: to sessions-pipeline: (move your overrides; resource names under the umbrella are unchanged). relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf (relayhistory-cloud 74a6e526, erasure fix). The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe and RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.level defaults to errors (scrubbed error metadata and health only; it takes effect once the install is registered with installId, install key and endpoint, so a default render stays off and a partial registration fails), telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. 0.2.1 moved to 96bulls 0.5.5 (interim RelayAuth bearer stays off by default) and supersedes the never-released 0.2.0. |
 | relayfile-0.2.0 | unreleased | relayfile 0.2.0 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker: ghcr.io/agentworkforce/relayfile-actors by digest; deploy Job and dev sidecar: relayfile-actors-workspace by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged. |
 | durable-actors-0.14.6 | unreleased | durable-actors 0.14.6 |  |  |  | Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee) with the local patches listed in charts/durable-actors/UPSTREAM.md (root global, invoke-only key, host idle timeout, pool-manager name length, zero-valued bounds, lowercase ingress host, schema patterns, README links). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md). |
 | relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. Superseded by 0.2.0. |
@@ -95,7 +96,7 @@ Each profile lists what the operator must provide (requirements) and what they c
 
 **New self-host install, in-cluster CloudNativePG HoopDb.** initdb creates the search Worker role; the runtime-role and function-default Jobs run as postgres before migrate on every deploy; in-cluster MinIO Locker.
 
-chart `96bulls` · values [`profiles/selfhost-postgres.yaml`](../charts/96bulls/profiles/selfhost-postgres.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb cnpg · services image GHCR · install: `helm install bulls agentworkforce/96bulls -f profiles/selfhost-postgres.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>`
+chart `sessions-pipeline` · values [`profiles/selfhost-postgres.yaml`](../charts/sessions-pipeline/profiles/selfhost-postgres.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb cnpg · services image GHCR · install: `helm install sessions-pipeline agentworkforce/sessions-pipeline -f profiles/selfhost-postgres.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>`
 
 **Requirements (provide these)**
 
@@ -103,21 +104,21 @@ chart `96bulls` · values [`profiles/selfhost-postgres.yaml`](../charts/96bulls/
 | --- | --- | --- | --- | --- |
 | shipped | [CloudNativePG operator installed](#req-k8s-cnpg-operator) | operator | values `hoopdb.enabled` | kubectl get crd clusters.postgresql.cnpg.io && kubectl get deploy -A -l app.kubernetes.io/name=cloudnative-pg |
 | shipped | [A default StorageClass for the in-cluster HoopDb and Locker volumes](#req-k8s-storage) | operator | values `hoopdb.cluster.storage.size`, `locker.persistence.size` | kubectl get storageclass (one marked default), then kubectl get pvc -n <ns> all Bound |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
 | shipped | [Pull Secret for the private GHCR services image](#req-secret-image-pull) | operator | values `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`; Secret `<pull secret>` (type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services) | kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff |
-| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `96bulls-locker` keys `rootUser`, `rootPassword`; Secret `96bulls-locker` (the bundled MinIO's root credential) | kubectl get secret 96bulls-locker -o jsonpath='{.data}' has rootUser and rootPassword |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `sessions-pipeline-locker` keys `rootUser`, `rootPassword`; Secret `sessions-pipeline-locker` (the bundled MinIO's root credential) | kubectl get secret sessions-pipeline-locker -o jsonpath='{.data}' has rootUser and rootPassword |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `sessions-pipeline-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
 | shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | chart | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `hoopdb-app` keys `uri` | kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | chart | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [A database dedicated to HoopDb](#req-db-dedicated-database) | chart | values `hoopdb.cluster.initdb.database`, `hoopdb.cluster.initdb.owner` | psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | chart | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | chart | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | psql "$HOOPDB_URL" -Atc "select rolcanlogin, rolconfig from pg_roles where rolname='session_directory_search_worker'" is f\|{statement_timeout=2s} |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | chart | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | chart | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | chart | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | the function-default Job completes and migrate's wait-for-role logs "present: ... + owner function default" |
-| shipped | [The services image digest for the privileged SQL Jobs](#req-96bulls-privileged-sql-image) | chart | values `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*` | helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/96bulls-profiles/matrix.sh asserts the image |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [The services image digest for the privileged SQL Jobs](#req-sessions-pipeline-privileged-sql-image) | chart | values `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*` | helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/sessions-pipeline-profiles/matrix.sh asserts the image |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -125,33 +126,33 @@ chart `96bulls` · values [`profiles/selfhost-postgres.yaml`](../charts/96bulls/
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: migration
 
 **Existing self-host release, in-cluster CloudNativePG HoopDb created before the search Worker role.** selfhost-postgres plus searchWorkerRole.bootstrapJob, because initdb never runs again on an existing cluster.
 
-chart `96bulls` · values [`profiles/migration.yaml`](../charts/96bulls/profiles/migration.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb cnpg · services image GHCR · install: `helm upgrade bulls agentworkforce/96bulls -f profiles/migration.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>`
+chart `sessions-pipeline` · values [`profiles/migration.yaml`](../charts/sessions-pipeline/profiles/migration.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb cnpg · services image GHCR · install: `helm upgrade <existing release> agentworkforce/sessions-pipeline -f profiles/migration.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>`
 
 **Requirements (provide these)**
 
@@ -159,21 +160,21 @@ chart `96bulls` · values [`profiles/migration.yaml`](../charts/96bulls/profiles
 | --- | --- | --- | --- | --- |
 | shipped | [CloudNativePG operator installed](#req-k8s-cnpg-operator) | operator | values `hoopdb.enabled` | kubectl get crd clusters.postgresql.cnpg.io && kubectl get deploy -A -l app.kubernetes.io/name=cloudnative-pg |
 | shipped | [A default StorageClass for the in-cluster HoopDb and Locker volumes](#req-k8s-storage) | operator | values `hoopdb.cluster.storage.size`, `locker.persistence.size` | kubectl get storageclass (one marked default), then kubectl get pvc -n <ns> all Bound |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
 | shipped | [Pull Secret for the private GHCR services image](#req-secret-image-pull) | operator | values `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`; Secret `<pull secret>` (type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services) | kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff |
-| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `96bulls-locker` keys `rootUser`, `rootPassword`; Secret `96bulls-locker` (the bundled MinIO's root credential) | kubectl get secret 96bulls-locker -o jsonpath='{.data}' has rootUser and rootPassword |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `sessions-pipeline-locker` keys `rootUser`, `rootPassword`; Secret `sessions-pipeline-locker` (the bundled MinIO's root credential) | kubectl get secret sessions-pipeline-locker -o jsonpath='{.data}' has rootUser and rootPassword |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `sessions-pipeline-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
 | shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | chart | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `hoopdb-app` keys `uri` | kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | chart | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [A database dedicated to HoopDb](#req-db-dedicated-database) | chart | values `hoopdb.cluster.initdb.database`, `hoopdb.cluster.initdb.owner` | psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | chart | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | chart | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | psql "$HOOPDB_URL" -Atc "select rolcanlogin, rolconfig from pg_roles where rolname='session_directory_search_worker'" is f\|{statement_timeout=2s} |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | chart | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | chart | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | chart | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | the function-default Job completes and migrate's wait-for-role logs "present: ... + owner function default" |
-| shipped | [The services image digest for the privileged SQL Jobs](#req-96bulls-privileged-sql-image) | chart | values `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*` | helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/96bulls-profiles/matrix.sh asserts the image |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [The services image digest for the privileged SQL Jobs](#req-sessions-pipeline-privileged-sql-image) | chart | values `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*` | helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/sessions-pipeline-profiles/matrix.sh asserts the image |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -181,52 +182,52 @@ chart `96bulls` · values [`profiles/migration.yaml`](../charts/96bulls/profiles
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: external-selfhosted
 
 **External operator-controlled plain Postgres (RDS, your own Postgres 17) dedicated to HoopDb.** No in-cluster SQL Jobs (the chart cannot exec into an external database); a superuser runs three bootstrap files first; migrate waits for the roles.
 
-chart `96bulls` · values [`profiles/external-selfhosted.yaml`](../charts/96bulls/profiles/external-selfhosted.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb external · services image GHCR · install: `helm install bulls agentworkforce/96bulls -f profiles/external-selfhosted.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set worker.migrations.runtimeRole=<role> --set worker.migrations.runtimeRoleLogin=<true|false>`
+chart `sessions-pipeline` · values [`profiles/external-selfhosted.yaml`](../charts/sessions-pipeline/profiles/external-selfhosted.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb external · services image GHCR · install: `helm install sessions-pipeline agentworkforce/sessions-pipeline -f profiles/external-selfhosted.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set worker.migrations.runtimeRole=<role> --set worker.migrations.runtimeRoleLogin=<true|false>`
 
 **Requirements (provide these)**
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
 | shipped | [Pull Secret for the private GHCR services image](#req-secret-image-pull) | operator | values `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`; Secret `<pull secret>` (type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services) | kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff |
-| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `96bulls-locker` keys `rootUser`, `rootPassword`; Secret `96bulls-locker` (the bundled MinIO's root credential) | kubectl get secret 96bulls-locker -o jsonpath='{.data}' has rootUser and rootPassword |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
-| shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | operator | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `96bulls-hoopdb` keys `HOOPDB_URL` | kubectl get secret 96bulls-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select 1' |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `sessions-pipeline-locker` keys `rootUser`, `rootPassword`; Secret `sessions-pipeline-locker` (the bundled MinIO's root credential) | kubectl get secret sessions-pipeline-locker -o jsonpath='{.data}' has rootUser and rootPassword |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `sessions-pipeline-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | operator | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `sessions-pipeline-hoopdb` keys `HOOPDB_URL` | kubectl get secret sessions-pipeline-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select 1' |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | operator | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [A database dedicated to HoopDb](#req-db-dedicated-database) | operator | values `hoopdb.cluster.initdb.database`, `hoopdb.cluster.initdb.owner` | psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | migrator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | run supabase/bootstrap/session_directory_search_worker.sql as a superuser; then the same query |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | operator | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | the function-default Job completes and migrate's wait-for-role logs "present: ... + owner function default" |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -234,51 +235,51 @@ chart `96bulls` · values [`profiles/external-selfhosted.yaml`](../charts/96bull
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: external-supabase
 
 **External Supabase project as HoopDb (fail-closed).** Held by supabaseActivation.hold until the pinned image is confirmed as the production-Supabase pin and the live Supabase activation steps are approved. No shim, no wait-for-role, no privileged Jobs.
 
-chart `96bulls` · values [`profiles/external-supabase.yaml`](../charts/96bulls/profiles/external-supabase.yaml) · dbMode `supabase` · boundary `event-trigger` · HoopDb external · services image GHCR · install: `helm install bulls agentworkforce/96bulls -f profiles/external-supabase.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set supabaseActivation.hold=false`
+chart `sessions-pipeline` · values [`profiles/external-supabase.yaml`](../charts/sessions-pipeline/profiles/external-supabase.yaml) · dbMode `supabase` · boundary `event-trigger` · HoopDb external · services image GHCR · install: `helm install sessions-pipeline agentworkforce/sessions-pipeline -f profiles/external-supabase.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set supabaseActivation.hold=false`
 
 **Requirements (provide these)**
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
 | shipped | [Pull Secret for the private GHCR services image](#req-secret-image-pull) | operator | values `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`; Secret `<pull secret>` (type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services) | kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff |
-| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `96bulls-locker` keys `rootUser`, `rootPassword`; Secret `96bulls-locker` (the bundled MinIO's root credential) | kubectl get secret 96bulls-locker -o jsonpath='{.data}' has rootUser and rootPassword |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
-| shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | operator | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `96bulls-hoopdb` keys `HOOPDB_URL` | kubectl get secret 96bulls-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select current_user' |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Locker credential Secret (MinIO root / S3 static keys)](#req-secret-locker-credentials) | operator | values `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`; env `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`; Secret `sessions-pipeline-locker` keys `rootUser`, `rootPassword`; Secret `sessions-pipeline-locker` (the bundled MinIO's root credential) | kubectl get secret sessions-pipeline-locker -o jsonpath='{.data}' has rootUser and rootPassword |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | operator | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `sessions-pipeline-locker` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | operator | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `sessions-pipeline-hoopdb` keys `HOOPDB_URL` | kubectl get secret sessions-pipeline-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select current_user' |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | operator | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | run supabase/bootstrap/session_directory_search_worker_supabase.sql as postgres; then the same query |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | operator | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | migrate.ts --activation-check with HOOPDB_DB_MODE=supabase HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger reports event_trigger.verified true |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -286,34 +287,34 @@ chart `96bulls` · values [`profiles/external-supabase.yaml`](../charts/96bulls/
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `supabase` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `event-trigger` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `false` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `false` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
-| shipped | [External-Supabase activation hold](#opt-96bulls-supabase-activation-hold) | `true`, `false` | `true` | values `supabaseActivation.hold` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `supabase` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `event-trigger` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `false` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `false` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [External-Supabase activation hold](#opt-sessions-pipeline-supabase-activation-hold) | `true`, `false` | `true` | values `supabaseActivation.hold` |
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: aws-cnpg
 
 **AWS EKS proof stage, in-cluster CNPG HoopDb, S3 Locker via Pod Identity.** The stacks/aws/eks.ts shape with hoopdb backend cnpg (isolated proof and sandbox stages only). ECR image, S3 bucket through EKS Pod Identity, bundled OTel collector.
 
-chart `96bulls` · values [`ci/aws-cnpg-values.yaml`](../charts/96bulls/ci/aws-cnpg-values.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb cnpg · services image ECR
+chart `sessions-pipeline` · values [`ci/aws-cnpg-values.yaml`](../charts/sessions-pipeline/ci/aws-cnpg-values.yaml) · dbMode `selfhosted` · boundary `global-default-revoke` · HoopDb cnpg · services image ECR
 
 **Requirements (provide these)**
 
@@ -322,19 +323,19 @@ chart `96bulls` · values [`ci/aws-cnpg-values.yaml`](../charts/96bulls/ci/aws-c
 | shipped | [CloudNativePG operator installed](#req-k8s-cnpg-operator) | stack | values `hoopdb.enabled` | kubectl get crd clusters.postgresql.cnpg.io && kubectl get deploy -A -l app.kubernetes.io/name=cloudnative-pg |
 | shipped | [A default StorageClass for the in-cluster HoopDb and Locker volumes](#req-k8s-storage) | stack | values `hoopdb.cluster.storage.size`, `locker.persistence.size` | kubectl get storageclass (one marked default), then kubectl get pvc -n <ns> all Bound |
 | shipped | [Workload identity for the Locker bucket (EKS Pod Identity / GKE Workload Identity)](#req-k8s-workload-identity) | stack | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode`, `worker.serviceAccount.annotations`, `alleyoop.serviceAccount.annotations` | aws eks list-pod-identity-associations --cluster-name <c> (one per worker/alleyoop ServiceAccount); then the locker-init Job (or a worker) reaches the bucket |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | stack | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-runtime` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | stack | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-runtime` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
 | shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | chart | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `hoopdb-app` keys `uri` | kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | chart | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [A database dedicated to HoopDb](#req-db-dedicated-database) | chart | values `hoopdb.cluster.initdb.database`, `hoopdb.cluster.initdb.owner` | psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | chart | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | chart | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | psql "$HOOPDB_URL" -Atc "select rolcanlogin, rolconfig from pg_roles where rolname='session_directory_search_worker'" is f\|{statement_timeout=2s} |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | chart | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | chart | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | chart | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | the function-default Job completes and migrate's wait-for-role logs "present: ... + owner function default" |
-| shipped | [The services image digest for the privileged SQL Jobs](#req-96bulls-privileged-sql-image) | chart | values `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*` | helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/96bulls-profiles/matrix.sh asserts the image |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [The services image digest for the privileged SQL Jobs](#req-sessions-pipeline-privileged-sql-image) | chart | values `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*` | helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/sessions-pipeline-profiles/matrix.sh asserts the image |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -342,51 +343,51 @@ chart `96bulls` · values [`ci/aws-cnpg-values.yaml`](../charts/96bulls/ci/aws-c
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `true` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ecr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `http://otel-collector:4318` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ecr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `http://otel-collector:4318` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: aws-supabase
 
 **AWS EKS, external Supabase HoopDb, S3 Locker via Pod Identity.** The stacks/aws/eks.ts shape with hoopdb backend external. supabase mode with no function boundary set, so migrate fails closed (function_boundary_unproven) until one is selected and installed.
 
-chart `96bulls` · values [`ci/pod-identity-values.yaml`](../charts/96bulls/ci/pod-identity-values.yaml) · dbMode `supabase` · boundary (unset) · HoopDb external · services image GHCR
+chart `sessions-pipeline` · values [`ci/pod-identity-values.yaml`](../charts/sessions-pipeline/ci/pod-identity-values.yaml) · dbMode `supabase` · boundary (unset) · HoopDb external · services image GHCR
 
 **Requirements (provide these)**
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
 | shipped | [Workload identity for the Locker bucket (EKS Pod Identity / GKE Workload Identity)](#req-k8s-workload-identity) | stack | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode`, `worker.serviceAccount.annotations`, `alleyoop.serviceAccount.annotations` | aws eks list-pod-identity-associations --cluster-name <c> (one per worker/alleyoop ServiceAccount); then the locker-init Job (or a worker) reaches the bucket |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
 | shipped | [Pull Secret for the private GHCR services image](#req-secret-image-pull) | operator | values `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`; Secret `<pull secret>` (type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services) | kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | stack | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-summary` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | stack | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `sessions-pipeline-summary` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
 | shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | stack | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `hoopdb-app` keys `uri` | kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | operator | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | psql "$HOOPDB_URL" -Atc "select rolcanlogin, rolconfig from pg_roles where rolname='session_directory_search_worker'" is f\|{statement_timeout=2s} |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | operator | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | no boundary is selected in this shape; migrate refuses with function_boundary_unproven until one is |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -394,53 +395,53 @@ chart `96bulls` · values [`ci/pod-identity-values.yaml`](../charts/96bulls/ci/p
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `supabase` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | (no default) | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `false` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `false` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `supabase` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | (no default) | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `false` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | (no default) | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `false` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: gcp-cloudsql
 
 **GKE + Google Cloud SQL, GCS Locker via Workload Identity.** The stacks/gcp/config.ts shape. cloudsql mode, shim off, roleBootstrap false, a separate migration-owner URL; the operator runs the Cloud SQL bootstrap files as the migration owner.
 
-chart `96bulls` · values [`ci/gcp-cloudsql-values.yaml`](../charts/96bulls/ci/gcp-cloudsql-values.yaml) · dbMode `cloudsql` · boundary `global-default-revoke` · HoopDb external · services image GHCR
+chart `sessions-pipeline` · values [`ci/gcp-cloudsql-values.yaml`](../charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml) · dbMode `cloudsql` · boundary `global-default-revoke` · HoopDb external · services image GHCR
 
 **Requirements (provide these)**
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
 | shipped | [Workload identity for the Locker bucket (EKS Pod Identity / GKE Workload Identity)](#req-k8s-workload-identity) | stack | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode`, `worker.serviceAccount.annotations`, `alleyoop.serviceAccount.annotations` | aws eks list-pod-identity-associations --cluster-name <c> (one per worker/alleyoop ServiceAccount); then the locker-init Job (or a worker) reaches the bucket |
-| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
+| shipped | [External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)](#req-k8s-external-secrets-operator) | operator | values `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*` | kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready |
 | shipped | [Pull Secret for the private GHCR services image](#req-secret-image-pull) | operator | values `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`; Secret `<pull secret>` (type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services) | kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff |
-| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | stack | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-gcp` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex> |
+| shipped | [Summary encryption keyring (SUMMARY_MASTER_KEYS)](#req-secret-summary-master-keys) | stack | values `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`; env `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`; Secret `96bulls-gcp` keys `SUMMARY_MASTER_KEYS` | kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex> |
 | shipped | [HoopDb connection Secret (HOOPDB_URL)](#req-secret-hoopdb-url) | stack | values `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`; env `HOOPDB_URL`; Secret `96bulls-gcp` keys `HOOPDB_URL` | kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready |
 | shipped | [Separate migration-owner connection Secret (HOOPDB_MIGRATION_URL)](#req-secret-hoopdb-migration-url) | stack | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key`; Secret `96bulls-gcp` keys `HOOPDB_MIGRATION_URL` | kubectl get secret 96bulls-gcp -o jsonpath='{.data.HOOPDB_MIGRATION_URL}' connects as the migration owner (select current_user) |
-| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-96bulls-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
-| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-96bulls-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
+| shipped | [Agent Relay org id (TENANT_ORG_ID)](#req-sessions-pipeline-tenant-org-id) | operator | values `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`; env `TENANT_ORG_ID` | helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise) |
+| shipped | [A RelayAuth JWKS URL reachable from alleyoop](#req-sessions-pipeline-relayauth-jwks) | operator | values `alleyoop.auth.jwksUrl`; env `RELAYAUTH_JWKS_URL` | kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]} |
 | shipped | [PostgreSQL 17 with pg_trgm and btree_gin (and vector) available](#req-db-postgres-17-extensions) | stack | values `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL` | psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000 |
 | shipped | [A database dedicated to HoopDb](#req-db-dedicated-database) | stack | values `hoopdb.cluster.initdb.database`, `hoopdb.cluster.initdb.owner` | psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas |
 | shipped | [Supabase compatibility roles (anon, authenticated, service_role)](#req-db-compat-roles) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim` | psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3 |
 | shipped | [The session directory search Worker role (session_directory_search_worker)](#req-db-search-worker-role) | operator | values `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role` | run supabase/bootstrap/session_directory_search_worker.sql as the migration owner; then the same query |
-| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
+| shipped | [The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)](#req-db-runtime-role) | operator | values `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`; env `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN` | psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise |
 | shipped | [The durable function boundary installed before the first migrate](#req-db-function-boundary) | operator | values `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault` | the function-default Job completes and migrate's wait-for-role logs "present: ... + owner function default" |
-| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-96bulls-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
+| shipped | [migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)](#req-sessions-pipeline-role-verify) | chart | env `HOOPDB_ROLE_VERIFY` | kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate |
 | **planned** | [Model API key Secret for session briefs (OPENAI_API_KEY)](#req-secret-model-api-key) | operator | values `worker.sessionBrief.existingSecret`, `worker.sessionBrief.secretKeys.*`; env `OPENAI_API_KEY`; Secret `<model key Secret>` keys `OPENAI_API_KEY` | not applicable until charted |
 
 **Options (choose)**
@@ -448,26 +449,26 @@ chart `96bulls` · values [`ci/gcp-cloudsql-values.yaml`](../charts/96bulls/ci/g
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
-| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-sessions-pipeline-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
 | shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [Interim RelayAuth bearer compatibility (local only)](#opt-alleyoop-interim-relayauth-bearer) | `false`, `true` | `false` | values `alleyoop.auth.allowInterimRelayAuthBearer`; env `ALLOW_INTERIM_RELAYAUTH_BEARER` |
-| shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
-| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `cloudsql` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
-| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
-| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-96bulls-supabase-shim) | `true`, `false` | `false` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
-| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-96bulls-role-bootstrap) | `true`, `false`, `unset` | `false` | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
-| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-96bulls-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
-| shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
-| shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
-| shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
-| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `gcs` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
-| shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
-| shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
-| shipped | [Stage worker health server](#opt-96bulls-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
-| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-96bulls-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
-| **planned** | [Transcript search backend (search.backend)](#opt-96bulls-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
-| **planned** | [Model session briefs](#opt-96bulls-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
+| shipped | [HoopDb backend](#opt-sessions-pipeline-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
+| shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-sessions-pipeline-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `cloudsql` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
+| shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-sessions-pipeline-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
+| shipped | [Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)](#opt-sessions-pipeline-supabase-shim) | `true`, `false` | `false` | values `worker.migrations.supabaseShim`; env `HOOPDB_SUPABASE_SHIM` |
+| shipped | [Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)](#opt-sessions-pipeline-role-bootstrap) | `true`, `false`, `unset` | `false` | values `worker.migrations.roleBootstrap`; env `HOOPDB_ROLE_BOOTSTRAP` |
+| shipped | [Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)](#opt-sessions-pipeline-runtime-workload-role) | `""`, `<role>` | `""` | values `worker.migrations.runtimeWorkloadRole`; env `HOOPDB_RUNTIME_WORKLOAD_ROLE` |
+| shipped | [migrate's wait-for-role ordering](#opt-sessions-pipeline-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
+| shipped | [Locker object store](#opt-sessions-pipeline-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
+| shipped | [Locker credentials mode](#opt-sessions-pipeline-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-sessions-pipeline-locker-provider) | `s3`, `gcs` | `gcs` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
+| shipped | [Services image registry](#opt-sessions-pipeline-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
+| shipped | [OpenTelemetry export](#opt-sessions-pipeline-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| shipped | [Workspace, deployment and environment labels](#opt-sessions-pipeline-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
+| shipped | [Stage worker health server](#opt-sessions-pipeline-worker-health) | `true`, `false` | `true` | values `worker.workerHealth.*`; env `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS` |
+| shipped | [Bob Costas summariser model (BOB_COSTAS_MODEL)](#opt-sessions-pipeline-bob-costas-model) | `off` | `off` | values `worker.components.bob-costas.env`; env `BOB_COSTAS_MODEL` |
+| **planned** | [Transcript search backend (search.backend)](#opt-sessions-pipeline-search-backend) | `postgres`, `clickhouse` (**planned**) | `postgres` | values `search.backend`, `search.clickhouse.*` |
+| **planned** | [Model session briefs](#opt-sessions-pipeline-session-briefs) | `false`, `true` (**planned**) | `false` | values `worker.sessionBrief.enabled`, `worker.sessionBrief.model`; env `SESSION_BRIEF_ENABLED`, `SESSION_BRIEF_MODEL` |
 
 ### Profile: relaycast
 
@@ -572,7 +573,7 @@ chart `relay-dashboard` · values [`ci/default-values.yaml`](../charts/relay-das
 
 ### Profile: agent-relay
 
-**GCP messaging and Sessions suite.** Relaycast, RelayAuth, 96Bulls, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
+**GCP messaging and Sessions suite.** Relaycast, RelayAuth, Sessions Pipeline, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
 
 chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm install agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml --set relay-cloud-api.image.digest=sha256:<digest>`
 
@@ -713,7 +714,7 @@ chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/va
 
 <a id="req-k8s-cnpg-operator"></a>
 
-**CloudNativePG operator installed** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg
+**CloudNativePG operator installed** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg
 
 The in-cluster HoopDb is a CloudNativePG Cluster (cnpg/cluster 0.9.0), so the
 CNPG operator and its CRDs must be installed before the release. Pinned
@@ -722,13 +723,13 @@ operator values are in deps/cnpg-operator-values.yaml.
 - Provided by: default: operator, aws-cnpg: stack
 - Values: `hoopdb.enabled`
 - Verify: kubectl get crd clusters.postgresql.cnpg.io && kubectl get deploy -A -l app.kubernetes.io/name=cloudnative-pg
-- Sources: [`charts/96bulls/Chart.yaml:12`](../charts/96bulls/Chart.yaml#L12), [`charts/96bulls/values.yaml:85`](../charts/96bulls/values.yaml#L85), [`deps/pins.txt:4`](../deps/pins.txt#L4), `sessions-pipeline@7d7229b:stacks/aws/hardening.ts:375`
+- Sources: [`charts/sessions-pipeline/Chart.yaml:12`](../charts/sessions-pipeline/Chart.yaml#L12), [`charts/sessions-pipeline/values.yaml:85`](../charts/sessions-pipeline/values.yaml#L85), [`deps/pins.txt:4`](../deps/pins.txt#L4), `sessions-pipeline@7d7229b:stacks/aws/hardening.ts:375`
 
 #### req.k8s.storage
 
 <a id="req-k8s-storage"></a>
 
-**A default StorageClass for the in-cluster HoopDb and Locker volumes** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg
+**A default StorageClass for the in-cluster HoopDb and Locker volumes** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg
 
 The CNPG HoopDb claims hoopdb.cluster.storage.size (10Gi) and the MinIO Locker
 locker.persistence.size (20Gi) through the default StorageClass.
@@ -736,13 +737,13 @@ locker.persistence.size (20Gi) through the default StorageClass.
 - Provided by: default: operator, aws-cnpg: stack
 - Values: `hoopdb.cluster.storage.size`, `locker.persistence.size`
 - Verify: kubectl get storageclass (one marked default), then kubectl get pvc -n <ns> all Bound
-- Sources: [`charts/96bulls/values.yaml:102`](../charts/96bulls/values.yaml#L102), [`charts/96bulls/values.yaml:155`](../charts/96bulls/values.yaml#L155)
+- Sources: [`charts/sessions-pipeline/values.yaml:102`](../charts/sessions-pipeline/values.yaml#L102), [`charts/sessions-pipeline/values.yaml:155`](../charts/sessions-pipeline/values.yaml#L155)
 
 #### req.k8s.workload-identity
 
 <a id="req-k8s-workload-identity"></a>
 
-**Workload identity for the Locker bucket (EKS Pod Identity / GKE Workload Identity)** · shipped · chart `96bulls` · profiles aws-cnpg, aws-supabase, gcp-cloudsql
+**Workload identity for the Locker bucket (EKS Pod Identity / GKE Workload Identity)** · shipped · chart `sessions-pipeline` · profiles aws-cnpg, aws-supabase, gcp-cloudsql
 
 With locker.credentials.mode=podIdentity the charts omit LOCKER_ACCESS_KEY_ID and
 LOCKER_SECRET_ACCESS_KEY and the SDK uses the workload identity chain. Install
@@ -755,28 +756,28 @@ lockerInit is disabled.
 - Provided by: stack
 - Values: `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode`, `worker.serviceAccount.annotations`, `alleyoop.serviceAccount.annotations`
 - Verify: aws eks list-pod-identity-associations --cluster-name <c> (one per worker/alleyoop ServiceAccount); then the locker-init Job (or a worker) reaches the bucket
-- Sources: [`README.md:152`](../README.md#L152), [`charts/96bulls-worker/values.yaml:60`](../charts/96bulls-worker/values.yaml#L60), [`charts/96bulls-worker/templates/_env.tpl:77`](../charts/96bulls-worker/templates/_env.tpl#L77)
+- Sources: [`README.md:152`](../README.md#L152), [`charts/sessions-pipeline-worker/values.yaml:60`](../charts/sessions-pipeline-worker/values.yaml#L60), [`charts/sessions-pipeline-worker/templates/_env.tpl:77`](../charts/sessions-pipeline-worker/templates/_env.tpl#L77)
 
 #### req.k8s.external-secrets-operator
 
 <a id="req-k8s-external-secrets-operator"></a>
 
-**External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)** · shipped · chart `96bulls-worker`, `alleyoop` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**External Secrets Operator and a ClusterSecretStore (only with externalSecrets.enabled)** · shipped · chart `sessions-pipeline-worker`, `alleyoop` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 externalSecrets.enabled renders an ExternalSecret (external-secrets.io/v1) whose
 target is existingSecret. The ESO CRDs and the named secretStoreRef must exist,
 and every consumed key must be mapped in externalSecrets.data.
 
 - Provided by: operator
-- Values: `96bulls-worker:externalSecrets.*`, `alleyoop:externalSecrets.*`
+- Values: `sessions-pipeline-worker:externalSecrets.*`, `alleyoop:externalSecrets.*`
 - Verify: kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready
-- Sources: [`charts/96bulls-worker/values.yaml:248`](../charts/96bulls-worker/values.yaml#L248), [`charts/96bulls-worker/templates/externalsecret.yaml:20`](../charts/96bulls-worker/templates/externalsecret.yaml#L20), [`charts/alleyoop/templates/externalsecret.yaml:11`](../charts/alleyoop/templates/externalsecret.yaml#L11)
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:248`](../charts/sessions-pipeline-worker/values.yaml#L248), [`charts/sessions-pipeline-worker/templates/externalsecret.yaml:20`](../charts/sessions-pipeline-worker/templates/externalsecret.yaml#L20), [`charts/alleyoop/templates/externalsecret.yaml:11`](../charts/alleyoop/templates/externalsecret.yaml#L11)
 
 #### req.secret.image-pull
 
 <a id="req-secret-image-pull"></a>
 
-**Pull Secret for the private GHCR services image** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
+**Pull Secret for the private GHCR services image** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
 
 ghcr.io/agentworkforce/96bulls-services is a private package. Create a
 docker-registry Secret and list it in the umbrella's shared imagePullSecrets
@@ -787,13 +788,13 @@ The ECR path (EKS node role) needs none.
 - Values: `worker.imagePullSecrets`, `alleyoop.imagePullSecrets`
 - Secret: `<pull secret>`; keys . type kubernetes.io/dockerconfigjson with read access to ghcr.io/agentworkforce/96bulls-services
 - Verify: kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff
-- Sources: [`README.md:128`](../README.md#L128), [`charts/96bulls/values.yaml:24`](../charts/96bulls/values.yaml#L24), [`charts/96bulls/templates/_privileged-sql-job.tpl:92`](../charts/96bulls/templates/_privileged-sql-job.tpl#L92)
+- Sources: [`README.md:128`](../README.md#L128), [`charts/sessions-pipeline/values.yaml:24`](../charts/sessions-pipeline/values.yaml#L24), [`charts/sessions-pipeline/templates/_privileged-sql-job.tpl:92`](../charts/sessions-pipeline/templates/_privileged-sql-job.tpl#L92)
 
 #### req.secret.locker-credentials
 
 <a id="req-secret-locker-credentials"></a>
 
-**Locker credential Secret (MinIO root / S3 static keys)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase
+**Locker credential Secret (MinIO root / S3 static keys)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase
 
 In secret mode the workers and alleyoop read the Locker access key pair from
 existingSecret, and the bundled MinIO reads its root credential from the same
@@ -802,17 +803,17 @@ Secret (locker.existingSecret). Not used with locker.credentials.mode=podIdentit
 - Provided by: operator
 - Values: `worker.existingSecret`, `alleyoop.existingSecret`, `locker.existingSecret`, `worker.secretKeys.lockerAccessKeyId`, `worker.secretKeys.lockerSecretAccessKey`, `alleyoop.secretKeys.lockerAccessKeyId`, `alleyoop.secretKeys.lockerSecretAccessKey`
 - Env: `LOCKER_ACCESS_KEY_ID`, `LOCKER_SECRET_ACCESS_KEY`
-- Secret: `96bulls-locker` from `worker.existingSecret`; keys `rootUser` from `worker.secretKeys.lockerAccessKeyId`; `rootPassword` from `worker.secretKeys.lockerSecretAccessKey`
-- Secret: `96bulls-locker` from `alleyoop.existingSecret`; keys `rootUser` from `alleyoop.secretKeys.lockerAccessKeyId`; `rootPassword` from `alleyoop.secretKeys.lockerSecretAccessKey`
-- Secret: `96bulls-locker` from `locker.existingSecret`; keys . the bundled MinIO's root credential
-- Verify: kubectl get secret 96bulls-locker -o jsonpath='{.data}' has rootUser and rootPassword
-- Sources: [`charts/96bulls/values.yaml:3`](../charts/96bulls/values.yaml#L3), [`charts/96bulls/values.yaml:28`](../charts/96bulls/values.yaml#L28), [`charts/96bulls-worker/templates/_env.tpl:78`](../charts/96bulls-worker/templates/_env.tpl#L78), [`charts/alleyoop/templates/_env.tpl:66`](../charts/alleyoop/templates/_env.tpl#L66)
+- Secret: `sessions-pipeline-locker` from `worker.existingSecret`; keys `rootUser` from `worker.secretKeys.lockerAccessKeyId`; `rootPassword` from `worker.secretKeys.lockerSecretAccessKey`
+- Secret: `sessions-pipeline-locker` from `alleyoop.existingSecret`; keys `rootUser` from `alleyoop.secretKeys.lockerAccessKeyId`; `rootPassword` from `alleyoop.secretKeys.lockerSecretAccessKey`
+- Secret: `sessions-pipeline-locker` from `locker.existingSecret`; keys . the bundled MinIO's root credential
+- Verify: kubectl get secret sessions-pipeline-locker -o jsonpath='{.data}' has rootUser and rootPassword
+- Sources: [`charts/sessions-pipeline/values.yaml:3`](../charts/sessions-pipeline/values.yaml#L3), [`charts/sessions-pipeline/values.yaml:28`](../charts/sessions-pipeline/values.yaml#L28), [`charts/sessions-pipeline-worker/templates/_env.tpl:78`](../charts/sessions-pipeline-worker/templates/_env.tpl#L78), [`charts/alleyoop/templates/_env.tpl:66`](../charts/alleyoop/templates/_env.tpl#L66)
 
 #### req.secret.summary-master-keys
 
 <a id="req-secret-summary-master-keys"></a>
 
-**Summary encryption keyring (SUMMARY_MASTER_KEYS)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Summary encryption keyring (SUMMARY_MASTER_KEYS)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Bob Costas encrypts summary objects before they reach the Locker. The keyring
 ("<key-id>:<64 hex>[,<key-id>:<64 hex>...]", first is current) comes only from
@@ -823,15 +824,15 @@ worker.existingSecret; pod-identity installs with no shared Secret must set it.
 - Provided by: default: operator, aws-cnpg: stack, aws-supabase: stack, gcp-cloudsql: stack
 - Values: `worker.summaryEncryption.existingSecret`, `worker.summaryEncryption.key`, `worker.summaryEncryption.mountPath`, `worker.summaryEncryption.fileName`
 - Env: `SUMMARY_MASTER_KEYS_FILE`, `SUMMARY_MASTER_KEYS`
-- Secret: `96bulls-locker` (default), `96bulls-runtime` (aws-cnpg), `96bulls-summary` (aws-supabase), `96bulls-gcp` (gcp-cloudsql) from `worker.summaryEncryption.existingSecret` then `worker.existingSecret`; keys `SUMMARY_MASTER_KEYS` from `worker.summaryEncryption.key`
-- Verify: kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex>
-- Sources: [`README.md:143`](../README.md#L143), [`charts/96bulls-worker/values.yaml:45`](../charts/96bulls-worker/values.yaml#L45), [`charts/96bulls-worker/templates/_env.tpl:102`](../charts/96bulls-worker/templates/_env.tpl#L102), [`charts/96bulls-worker/templates/_env.tpl:30`](../charts/96bulls-worker/templates/_env.tpl#L30), `sessions-pipeline@7d7229b:src/shared/keyring.ts:17`
+- Secret: `sessions-pipeline-locker` (default), `96bulls-runtime` (aws-cnpg), `sessions-pipeline-summary` (aws-supabase), `96bulls-gcp` (gcp-cloudsql) from `worker.summaryEncryption.existingSecret` then `worker.existingSecret`; keys `SUMMARY_MASTER_KEYS` from `worker.summaryEncryption.key`
+- Verify: kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex>
+- Sources: [`README.md:143`](../README.md#L143), [`charts/sessions-pipeline-worker/values.yaml:45`](../charts/sessions-pipeline-worker/values.yaml#L45), [`charts/sessions-pipeline-worker/templates/_env.tpl:102`](../charts/sessions-pipeline-worker/templates/_env.tpl#L102), [`charts/sessions-pipeline-worker/templates/_env.tpl:30`](../charts/sessions-pipeline-worker/templates/_env.tpl#L30), `sessions-pipeline@7d7229b:src/shared/keyring.ts:17`
 
 #### req.secret.hoopdb-url
 
 <a id="req-secret-hoopdb-url"></a>
 
-**HoopDb connection Secret (HOOPDB_URL)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**HoopDb connection Secret (HOOPDB_URL)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Every workload and migrate read HOOPDB_URL from hoopdb.existingSecret/key (else
 existingSecret / secretKeys.hoopdbUrl). With the in-cluster HoopDb it is the
@@ -842,16 +843,16 @@ migration role's connection string unless migrations.hoopdb separates them.
 - Provided by: default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: stack, gcp-cloudsql: stack
 - Values: `worker.hoopdb.existingSecret`, `worker.hoopdb.key`, `worker.secretKeys.hoopdbUrl`, `alleyoop.hoopdb.existingSecret`, `alleyoop.hoopdb.key`, `alleyoop.secretKeys.hoopdbUrl`
 - Env: `HOOPDB_URL`
-- Secret: `hoopdb-app` (default), `96bulls-hoopdb` (external-selfhosted), `96bulls-hoopdb` (external-supabase), `96bulls-gcp` (gcp-cloudsql) from `worker.hoopdb.existingSecret` then `worker.existingSecret`; keys `uri` (default), `HOOPDB_URL` (external-selfhosted), `HOOPDB_URL` (external-supabase), `HOOPDB_URL` (gcp-cloudsql) from `worker.hoopdb.key,worker.secretKeys.hoopdbUrl`
-- Secret: `hoopdb-app` (default), `96bulls-hoopdb` (external-selfhosted), `96bulls-hoopdb` (external-supabase), `96bulls-gcp` (gcp-cloudsql) from `alleyoop.hoopdb.existingSecret` then `alleyoop.existingSecret`; keys `uri` (default), `HOOPDB_URL` (external-selfhosted), `HOOPDB_URL` (external-supabase), `HOOPDB_URL` (gcp-cloudsql) from `alleyoop.hoopdb.key,alleyoop.secretKeys.hoopdbUrl`
-- Verify: default: kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready / external-selfhosted: kubectl get secret 96bulls-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select 1' / external-supabase: kubectl get secret 96bulls-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select current_user'
-- Sources: [`charts/96bulls/values.yaml:39`](../charts/96bulls/values.yaml#L39), [`charts/96bulls/profiles/external-selfhosted.yaml:11`](../charts/96bulls/profiles/external-selfhosted.yaml#L11), [`charts/96bulls/profiles/external-supabase.yaml:24`](../charts/96bulls/profiles/external-supabase.yaml#L24), [`charts/96bulls-worker/templates/_env.tpl:162`](../charts/96bulls-worker/templates/_env.tpl#L162), [`charts/alleyoop/templates/_env.tpl:54`](../charts/alleyoop/templates/_env.tpl#L54)
+- Secret: `hoopdb-app` (default), `sessions-pipeline-hoopdb` (external-selfhosted), `sessions-pipeline-hoopdb` (external-supabase), `96bulls-gcp` (gcp-cloudsql) from `worker.hoopdb.existingSecret` then `worker.existingSecret`; keys `uri` (default), `HOOPDB_URL` (external-selfhosted), `HOOPDB_URL` (external-supabase), `HOOPDB_URL` (gcp-cloudsql) from `worker.hoopdb.key,worker.secretKeys.hoopdbUrl`
+- Secret: `hoopdb-app` (default), `sessions-pipeline-hoopdb` (external-selfhosted), `sessions-pipeline-hoopdb` (external-supabase), `96bulls-gcp` (gcp-cloudsql) from `alleyoop.hoopdb.existingSecret` then `alleyoop.existingSecret`; keys `uri` (default), `HOOPDB_URL` (external-selfhosted), `HOOPDB_URL` (external-supabase), `HOOPDB_URL` (gcp-cloudsql) from `alleyoop.hoopdb.key,alleyoop.secretKeys.hoopdbUrl`
+- Verify: default: kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready / external-selfhosted: kubectl get secret sessions-pipeline-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select 1' / external-supabase: kubectl get secret sessions-pipeline-hoopdb -o jsonpath='{.data.HOOPDB_URL}' \| base64 -d \| psql -X -c 'select current_user'
+- Sources: [`charts/sessions-pipeline/values.yaml:39`](../charts/sessions-pipeline/values.yaml#L39), [`charts/sessions-pipeline/profiles/external-selfhosted.yaml:11`](../charts/sessions-pipeline/profiles/external-selfhosted.yaml#L11), [`charts/sessions-pipeline/profiles/external-supabase.yaml:24`](../charts/sessions-pipeline/profiles/external-supabase.yaml#L24), [`charts/sessions-pipeline-worker/templates/_env.tpl:162`](../charts/sessions-pipeline-worker/templates/_env.tpl#L162), [`charts/alleyoop/templates/_env.tpl:54`](../charts/alleyoop/templates/_env.tpl#L54)
 
 #### req.secret.hoopdb-migration-url
 
 <a id="req-secret-hoopdb-migration-url"></a>
 
-**Separate migration-owner connection Secret (HOOPDB_MIGRATION_URL)** · shipped · chart `96bulls` · profiles gcp-cloudsql
+**Separate migration-owner connection Secret (HOOPDB_MIGRATION_URL)** · shipped · chart `sessions-pipeline` · profiles gcp-cloudsql
 
 On Cloud SQL the services connect as the least-privilege runtime role and only
 the migrate Job (and its wait-for-role) connects as the migration owner, from
@@ -861,13 +862,13 @@ migrations.hoopdb.existingSecret/key.
 - Values: `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key`
 - Secret: `96bulls-gcp` from `worker.migrations.hoopdb.existingSecret`; keys `HOOPDB_MIGRATION_URL` from `worker.migrations.hoopdb.key`
 - Verify: kubectl get secret 96bulls-gcp -o jsonpath='{.data.HOOPDB_MIGRATION_URL}' connects as the migration owner (select current_user)
-- Sources: [`charts/96bulls/ci/gcp-cloudsql-values.yaml:33`](../charts/96bulls/ci/gcp-cloudsql-values.yaml#L33), [`charts/96bulls-worker/values.yaml:93`](../charts/96bulls-worker/values.yaml#L93), `sessions-pipeline@7d7229b:stacks/gcp/config.ts:1002`
+- Sources: [`charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml:33`](../charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml#L33), [`charts/sessions-pipeline-worker/values.yaml:93`](../charts/sessions-pipeline-worker/values.yaml#L93), `sessions-pipeline@7d7229b:stacks/gcp/config.ts:1002`
 
-#### req.96bulls.tenant-org-id
+#### req.sessions-pipeline.tenant-org-id
 
-<a id="req-96bulls-tenant-org-id"></a>
+<a id="req-sessions-pipeline-tenant-org-id"></a>
 
-**Agent Relay org id (TENANT_ORG_ID)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Agent Relay org id (TENANT_ORG_ID)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 The org this install ingests for; every profile leaves it to the operator and the render fails without it.
 
@@ -875,13 +876,13 @@ The org this install ingests for; every profile leaves it to the operator and th
 - Values: `global.tenant.orgId`, `worker.tenant.orgId`, `alleyoop.tenant.orgId`
 - Env: `TENANT_ORG_ID`
 - Verify: helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise)
-- Sources: [`charts/96bulls/values.yaml:16`](../charts/96bulls/values.yaml#L16), [`charts/96bulls-worker/templates/_env.tpl:20`](../charts/96bulls-worker/templates/_env.tpl#L20)
+- Sources: [`charts/sessions-pipeline/values.yaml:16`](../charts/sessions-pipeline/values.yaml#L16), [`charts/sessions-pipeline-worker/templates/_env.tpl:20`](../charts/sessions-pipeline-worker/templates/_env.tpl#L20)
 
-#### req.96bulls.relayauth-jwks
+#### req.sessions-pipeline.relayauth-jwks
 
-<a id="req-96bulls-relayauth-jwks"></a>
+<a id="req-sessions-pipeline-relayauth-jwks"></a>
 
-**A RelayAuth JWKS URL reachable from alleyoop** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**A RelayAuth JWKS URL reachable from alleyoop** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 alleyoop verifies courier tokens against RelayAuth's JWKS (RELAYAUTH_JWKS_URL).
 Point it at a RelayAuth install (the relayauth profile, with its JWKS ingress or
@@ -891,13 +892,13 @@ in-cluster Service) or the hosted issuer. Every profile leaves it to the operato
 - Values: `alleyoop.auth.jwksUrl`
 - Env: `RELAYAUTH_JWKS_URL`
 - Verify: kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]}
-- Sources: [`charts/96bulls/values.yaml:81`](../charts/96bulls/values.yaml#L81), [`charts/alleyoop/templates/deployment.yaml:46`](../charts/alleyoop/templates/deployment.yaml#L46), `sessions-pipeline@7d7229b:src/alleyoop/ingest.ts:118`
+- Sources: [`charts/sessions-pipeline/values.yaml:81`](../charts/sessions-pipeline/values.yaml#L81), [`charts/alleyoop/templates/deployment.yaml:46`](../charts/alleyoop/templates/deployment.yaml#L46), `sessions-pipeline@7d7229b:src/alleyoop/ingest.ts:118`
 
 #### req.db.postgres-17-extensions
 
 <a id="req-db-postgres-17-extensions"></a>
 
-**PostgreSQL 17 with pg_trgm and btree_gin (and vector) available** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**PostgreSQL 17 with pg_trgm and btree_gin (and vector) available** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 The session directory migrations run CREATE EXTENSION IF NOT EXISTS pg_trgm and
 btree_gin WITH SCHEMA public (both trusted, so the migration owner can create
@@ -909,13 +910,13 @@ external databases too, though the migrations at 7d7229b do not use it.
 - Provided by: default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: stack
 - Values: `hoopdb.cluster.imageName`, `hoopdb.cluster.initdb.postInitApplicationSQL`
 - Verify: psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000
-- Sources: [`charts/96bulls/values.yaml:99`](../charts/96bulls/values.yaml#L99), [`charts/96bulls/values.yaml:119`](../charts/96bulls/values.yaml#L119), [`docs/self-hosted-reference-architecture.md:75`](../docs/self-hosted-reference-architecture.md#L75), `sessions-pipeline@7d7229b:supabase/migrations/20261030010000_session_directory.sql:9`, `sessions-pipeline@7d7229b:supabase/migrations/20261030020000_session_directory_short_summary.sql:177`
+- Sources: [`charts/sessions-pipeline/values.yaml:99`](../charts/sessions-pipeline/values.yaml#L99), [`charts/sessions-pipeline/values.yaml:119`](../charts/sessions-pipeline/values.yaml#L119), [`docs/self-hosted-reference-architecture.md:75`](../docs/self-hosted-reference-architecture.md#L75), `sessions-pipeline@7d7229b:supabase/migrations/20261030010000_session_directory.sql:9`, `sessions-pipeline@7d7229b:supabase/migrations/20261030020000_session_directory_short_summary.sql:177`
 
 #### req.db.dedicated-database
 
 <a id="req-db-dedicated-database"></a>
 
-**A database dedicated to HoopDb** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, gcp-cloudsql
+**A database dedicated to HoopDb** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, gcp-cloudsql
 
 global-default-revoke sets the global function default of the migration owner
 and every superuser in the HoopDb database; that is safe only because the
@@ -924,13 +925,13 @@ database holds nothing else. The in-cluster HoopDb is dedicated by construction.
 - Provided by: default: chart, external-selfhosted: operator, gcp-cloudsql: stack
 - Values: `hoopdb.cluster.initdb.database`, `hoopdb.cluster.initdb.owner`
 - Verify: psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas
-- Sources: [`charts/96bulls/profiles/external-selfhosted.yaml:2`](../charts/96bulls/profiles/external-selfhosted.yaml#L2), [`charts/96bulls/values.yaml:275`](../charts/96bulls/values.yaml#L275)
+- Sources: [`charts/sessions-pipeline/profiles/external-selfhosted.yaml:2`](../charts/sessions-pipeline/profiles/external-selfhosted.yaml#L2), [`charts/sessions-pipeline/values.yaml:275`](../charts/sessions-pipeline/values.yaml#L275)
 
 #### req.db.compat-roles
 
 <a id="req-db-compat-roles"></a>
 
-**Supabase compatibility roles (anon, authenticated, service_role)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
+**Supabase compatibility roles (anon, authenticated, service_role)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
 
 The migrations GRANT to the Supabase roles. CNPG initdb creates them as
 superuser; on plain external Postgres the migrator's shim creates them
@@ -940,13 +941,13 @@ cloudsql_migration_roles.sql does (shim off); Supabase has them natively.
 - Provided by: default: chart, external-selfhosted: migrator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: operator
 - Values: `hoopdb.cluster.initdb.postInitApplicationSQL`, `worker.migrations.supabaseShim`
 - Verify: psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3
-- Sources: [`charts/96bulls/values.yaml:122`](../charts/96bulls/values.yaml#L122), [`charts/96bulls/ci/gcp-cloudsql-values.yaml:5`](../charts/96bulls/ci/gcp-cloudsql-values.yaml#L5), `sessions-pipeline@7d7229b:supabase/bootstrap/cloudsql_migration_roles.sql:1`
+- Sources: [`charts/sessions-pipeline/values.yaml:122`](../charts/sessions-pipeline/values.yaml#L122), [`charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml:5`](../charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml#L5), `sessions-pipeline@7d7229b:supabase/bootstrap/cloudsql_migration_roles.sql:1`
 
 #### req.db.search-worker-role
 
 <a id="req-db-search-worker-role"></a>
 
-**The session directory search Worker role (session_directory_search_worker)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
+**The session directory search Worker role (session_directory_search_worker)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
 
 NOLOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION,
 exactly statement_timeout=2s, no memberships. The migration only verifies it
@@ -957,33 +958,33 @@ databases from the operator (Supabase uses the transactional _supabase wrapper).
 - Provided by: default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: operator
 - Values: `hoopdb.cluster.initdb.postInitApplicationSQL`, `searchWorkerRole.bootstrapJob.enabled`, `searchWorkerRole.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.role`
 - Verify: default: psql "$HOOPDB_URL" -Atc "select rolcanlogin, rolconfig from pg_roles where rolname='session_directory_search_worker'" is f\|{statement_timeout=2s} / external-selfhosted: run supabase/bootstrap/session_directory_search_worker.sql as a superuser; then the same query / external-supabase: run supabase/bootstrap/session_directory_search_worker_supabase.sql as postgres; then the same query / gcp-cloudsql: run supabase/bootstrap/session_directory_search_worker.sql as the migration owner; then the same query
-- Sources: [`charts/96bulls/values.yaml:131`](../charts/96bulls/values.yaml#L131), [`charts/96bulls/values.yaml:218`](../charts/96bulls/values.yaml#L218), [`charts/96bulls/templates/search-worker-role-bootstrap.yaml:7`](../charts/96bulls/templates/search-worker-role-bootstrap.yaml#L7), [`README.md:259`](../README.md#L259), `sessions-pipeline@7d7229b:supabase/bootstrap/session_directory_search_worker.sql:1`, `sessions-pipeline@7d7229b:runbooks/session-directory-search-worker-bootstrap.md:1`
+- Sources: [`charts/sessions-pipeline/values.yaml:131`](../charts/sessions-pipeline/values.yaml#L131), [`charts/sessions-pipeline/values.yaml:218`](../charts/sessions-pipeline/values.yaml#L218), [`charts/sessions-pipeline/templates/search-worker-role-bootstrap.yaml:7`](../charts/sessions-pipeline/templates/search-worker-role-bootstrap.yaml#L7), [`README.md:259`](../README.md#L259), `sessions-pipeline@7d7229b:supabase/bootstrap/session_directory_search_worker.sql:1`, `sessions-pipeline@7d7229b:runbooks/session-directory-search-worker-bootstrap.md:1`
 
 #### req.db.runtime-role
 
 <a id="req-db-runtime-role"></a>
 
-**The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
+**The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
 
 The role the services connect as: never the migration owner or the search
 Worker; NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS, LOGIN as
 configured, CONNECT granted, TEMPORARY revoked from PUBLIC (Supabase keeps its
 PUBLIC TEMPORARY baseline). On CNPG runtimeRole.bootstrapJob creates or verifies
 it; external databases pre-provision it (hoopdb_runtime_role.sql, or the
-_supabase wrapper with -v runtime_role=bulls96_runtime -v runtime_login=true).
+_supabase wrapper with -v runtime_role=sessions_pipeline_runtime -v runtime_login=true).
 Never the drifted legacy relayhistory_runtime.
 
 - Provided by: default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: operator
 - Values: `worker.migrations.runtimeRole`, `worker.migrations.runtimeRoleLogin`, `runtimeRole.bootstrapJob.enabled`, `runtimeRole.bootstrapJob.sqlPath`
 - Env: `HOOPDB_RUNTIME_ROLE`, `HOOPDB_RUNTIME_ROLE_LOGIN`
-- Verify: psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise
-- Sources: [`charts/96bulls/templates/hoopdb-runtime-role-bootstrap.yaml:17`](../charts/96bulls/templates/hoopdb-runtime-role-bootstrap.yaml#L17), [`charts/96bulls/values.yaml:250`](../charts/96bulls/values.yaml#L250), [`charts/96bulls/profiles/external-supabase.yaml:29`](../charts/96bulls/profiles/external-supabase.yaml#L29), [`charts/96bulls-worker/templates/_env.tpl:202`](../charts/96bulls-worker/templates/_env.tpl#L202), `sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_runtime_role.sql:1`, `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:150`
+- Verify: psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f\|f\|f\|f\|f\|t; migrate refuses otherwise
+- Sources: [`charts/sessions-pipeline/templates/hoopdb-runtime-role-bootstrap.yaml:17`](../charts/sessions-pipeline/templates/hoopdb-runtime-role-bootstrap.yaml#L17), [`charts/sessions-pipeline/values.yaml:250`](../charts/sessions-pipeline/values.yaml#L250), [`charts/sessions-pipeline/profiles/external-supabase.yaml:29`](../charts/sessions-pipeline/profiles/external-supabase.yaml#L29), [`charts/sessions-pipeline-worker/templates/_env.tpl:202`](../charts/sessions-pipeline-worker/templates/_env.tpl#L202), `sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_runtime_role.sql:1`, `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:150`
 
 #### req.db.function-boundary
 
 <a id="req-db-function-boundary"></a>
 
-**The durable function boundary installed before the first migrate** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
+**The durable function boundary installed before the first migrate** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql
 
 The migrator's function-boundary gate refuses (function_boundary_unproven)
 without a catalog-proven control. global-default-revoke: on CNPG
@@ -992,20 +993,20 @@ functionDefaultRevoke.bootstrapJob runs hoopdb_function_default_revoke.sql
 Postgres runs the same file as a superuser; Cloud SQL runs
 cloudsql_owner_function_default_revoke.sql as the migration owner.
 event-trigger (Supabase only): hoopdb_sessions_function_boundary_supabase.sql as
-postgres (-v runtime_role=bulls96_runtime), then migrate.ts --activation-check
+postgres (-v runtime_role=sessions_pipeline_runtime), then migrate.ts --activation-check
 must report event_trigger.verified true. Never run the default-revoke file on
 Supabase.
 
 - Provided by: default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: operator
 - Values: `functionDefaultRevoke.bootstrapJob.enabled`, `functionDefaultRevoke.bootstrapJob.sqlPath`, `worker.migrations.waitForRole.functionDefault`
 - Verify: default: the function-default Job completes and migrate's wait-for-role logs "present: ... + owner function default" / external-supabase: migrate.ts --activation-check with HOOPDB_DB_MODE=supabase HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger reports event_trigger.verified true / aws-supabase: no boundary is selected in this shape; migrate refuses with function_boundary_unproven until one is
-- Sources: [`charts/96bulls/templates/hoopdb-function-default-revoke.yaml:17`](../charts/96bulls/templates/hoopdb-function-default-revoke.yaml#L17), [`charts/96bulls/values.yaml:283`](../charts/96bulls/values.yaml#L283), [`charts/96bulls/profiles/external-supabase.yaml:38`](../charts/96bulls/profiles/external-supabase.yaml#L38), [`charts/96bulls/profiles/external-selfhosted.yaml:17`](../charts/96bulls/profiles/external-selfhosted.yaml#L17), `sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_function_default_revoke.sql:1`, `sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_sessions_function_boundary_supabase.sql:1`, `sessions-pipeline@7d7229b:supabase/bootstrap/cloudsql_owner_function_default_revoke.sql:1`, `sessions-pipeline@7d7229b:runbooks/session-directory-search-worker-bootstrap.md:374`
+- Sources: [`charts/sessions-pipeline/templates/hoopdb-function-default-revoke.yaml:17`](../charts/sessions-pipeline/templates/hoopdb-function-default-revoke.yaml#L17), [`charts/sessions-pipeline/values.yaml:283`](../charts/sessions-pipeline/values.yaml#L283), [`charts/sessions-pipeline/profiles/external-supabase.yaml:38`](../charts/sessions-pipeline/profiles/external-supabase.yaml#L38), [`charts/sessions-pipeline/profiles/external-selfhosted.yaml:17`](../charts/sessions-pipeline/profiles/external-selfhosted.yaml#L17), `sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_function_default_revoke.sql:1`, `sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_sessions_function_boundary_supabase.sql:1`, `sessions-pipeline@7d7229b:supabase/bootstrap/cloudsql_owner_function_default_revoke.sql:1`, `sessions-pipeline@7d7229b:runbooks/session-directory-search-worker-bootstrap.md:374`
 
-#### req.96bulls.privileged-sql-image
+#### req.sessions-pipeline.privileged-sql-image
 
-<a id="req-96bulls-privileged-sql-image"></a>
+<a id="req-sessions-pipeline-privileged-sql-image"></a>
 
-**The services image digest for the privileged SQL Jobs** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, aws-cnpg
+**The services image digest for the privileged SQL Jobs** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, aws-cnpg
 
 The runtime-role, function-default and search Worker Jobs copy their bootstrap
 file from the services image by digest (privilegedSql.sqlImage, or a Job's own
@@ -1014,14 +1015,14 @@ without it. The profiles pin the same digest as the workloads.
 
 - Provided by: chart
 - Values: `privilegedSql.sqlImage.repository`, `privilegedSql.sqlImage.digest`, `searchWorkerRole.bootstrapJob.sqlImage.*`, `runtimeRole.bootstrapJob.sqlImage.*`, `functionDefaultRevoke.bootstrapJob.sqlImage.*`
-- Verify: helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/96bulls-profiles/matrix.sh asserts the image
-- Sources: [`charts/96bulls/values.yaml:194`](../charts/96bulls/values.yaml#L194), [`charts/96bulls/templates/_privileged-sql-job.tpl:16`](../charts/96bulls/templates/_privileged-sql-job.tpl#L16)
+- Verify: helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/sessions-pipeline-profiles/matrix.sh asserts the image
+- Sources: [`charts/sessions-pipeline/values.yaml:194`](../charts/sessions-pipeline/values.yaml#L194), [`charts/sessions-pipeline/templates/_privileged-sql-job.tpl:16`](../charts/sessions-pipeline/templates/_privileged-sql-job.tpl#L16)
 
-#### req.96bulls.role-verify
+#### req.sessions-pipeline.role-verify
 
-<a id="req-96bulls-role-verify"></a>
+<a id="req-sessions-pipeline-role-verify"></a>
 
-**migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Readiness needs the PASS marker for the image's migration generation that only
 a verifying migrate writes, so the chart always sets it and refuses an override
@@ -1030,13 +1031,13 @@ via extraEnv or component env.
 - Provided by: chart
 - Env: `HOOPDB_ROLE_VERIFY`
 - Verify: kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate
-- Sources: [`charts/96bulls-worker/templates/_jobspec.tpl:82`](../charts/96bulls-worker/templates/_jobspec.tpl#L82), [`charts/96bulls-worker/templates/_env.tpl:23`](../charts/96bulls-worker/templates/_env.tpl#L23)
+- Sources: [`charts/sessions-pipeline-worker/templates/_jobspec.tpl:82`](../charts/sessions-pipeline-worker/templates/_jobspec.tpl#L82), [`charts/sessions-pipeline-worker/templates/_env.tpl:23`](../charts/sessions-pipeline-worker/templates/_env.tpl#L23)
 
 #### req.secret.model-api-key
 
 <a id="req-secret-model-api-key"></a>
 
-**Model API key Secret for session briefs (OPENAI_API_KEY)** · **planned** · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Model API key Secret for session briefs (OPENAI_API_KEY)** · **planned** · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 With session briefs enabled the worker needs the model credential
 (OPENAI_API_KEY, relayhistory's binding name); unset, blank or ending in
@@ -1399,7 +1400,7 @@ different Secret; only the session broker and the deploy Job mount it.
 
 <a id="opt-alleyoop-auth-mode"></a>
 
-**alleyoop token verification source** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**alleyoop token verification source** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 jwksUrl (RelayAuth) for every real install; localJwks reads a JWKS document from
 existingSecret (secretKeys.jwksJson) for kind/local only. Exactly one is set.
@@ -1414,11 +1415,11 @@ issuer/audience are the expected token claims.
 - Verify: helm template fails with "set auth.jwksUrl OR auth.localJwks, not both" or with neither
 - Sources: [`charts/alleyoop/values.yaml:81`](../charts/alleyoop/values.yaml#L81), [`charts/alleyoop/templates/_env.tpl:18`](../charts/alleyoop/templates/_env.tpl#L18), [`charts/alleyoop/templates/deployment.yaml:49`](../charts/alleyoop/templates/deployment.yaml#L49)
 
-#### opt.96bulls.in-cluster-http
+#### opt.sessions-pipeline.in-cluster-http
 
-<a id="opt-96bulls-in-cluster-http"></a>
+<a id="opt-sessions-pipeline-in-cluster-http"></a>
 
-**Plain http to in-cluster Service FQDNs** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Plain http to in-cluster Service FQDNs** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 allowInClusterHttp renders ALLOW_IN_CLUSTER_HTTP for alleyoop and every
 worker component. false (default) keeps the validated destination URLs
@@ -1435,13 +1436,13 @@ bundled MinIO at http://locker:9000 works with the default false.
 - Values: `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`
 - Env: `ALLOW_IN_CLUSTER_HTTP`
 - Verify: helm template renders ALLOW_IN_CLUSTER_HTTP="false" by default and fails when extraEnv sets it
-- Sources: [`charts/alleyoop/values.yaml`](../charts/alleyoop/values.yaml), [`charts/alleyoop/templates/deployment.yaml`](../charts/alleyoop/templates/deployment.yaml), [`charts/96bulls-worker/templates/_env.tpl`](../charts/96bulls-worker/templates/_env.tpl)
+- Sources: [`charts/alleyoop/values.yaml`](../charts/alleyoop/values.yaml), [`charts/alleyoop/templates/deployment.yaml`](../charts/alleyoop/templates/deployment.yaml), [`charts/sessions-pipeline-worker/templates/_env.tpl`](../charts/sessions-pipeline-worker/templates/_env.tpl)
 
 #### opt.alleyoop.history-origin
 
 <a id="opt-alleyoop-history-origin"></a>
 
-**RelayHistory origin expected by the ingest** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**RelayHistory origin expected by the ingest** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 alleyoop.auth.historyOrigin renders RELAYHISTORY_ORIGIN on the ingest: the
 bare origin expected as the History assertion audience. It must be
@@ -1460,7 +1461,7 @@ rendered (the services default applies).
 
 <a id="opt-alleyoop-interim-relayauth-bearer"></a>
 
-**Interim RelayAuth bearer compatibility (local only)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Interim RelayAuth bearer compatibility (local only)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 alleyoop.auth.allowInterimRelayAuthBearer renders
 ALLOW_INTERIM_RELAYAUTH_BEARER on the ingest. false (default) keeps the
@@ -1477,11 +1478,11 @@ or setting the variable through extraEnv or ingest.env fails the render.
 - Verify: helm template renders ALLOW_INTERIM_RELAYAUTH_BEARER="false" by default and fails for true outside environment=local or when extraEnv/ingest.env sets it
 - Sources: [`charts/alleyoop/values.yaml`](../charts/alleyoop/values.yaml), [`charts/alleyoop/templates/_env.tpl`](../charts/alleyoop/templates/_env.tpl), [`charts/alleyoop/templates/deployment.yaml`](../charts/alleyoop/templates/deployment.yaml)
 
-#### opt.96bulls.hoopdb-backend
+#### opt.sessions-pipeline.hoopdb-backend
 
-<a id="opt-96bulls-hoopdb-backend"></a>
+<a id="opt-sessions-pipeline-hoopdb-backend"></a>
 
-**HoopDb backend** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**HoopDb backend** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 cnpg runs HoopDb as a CloudNativePG Cluster in the release (hoopdb.enabled=true,
 selfhosted mode only). external points worker.hoopdb and alleyoop.hoopdb at a
@@ -1493,13 +1494,13 @@ these eks.hoopdb.backend cnpg|external (cnpg is proof/sandbox stages only there)
 - Provided by: operator
 - Values: `hoopdb.enabled`
 - Verify: kubectl get cluster.postgresql.cnpg.io hoopdb exists exactly when cnpg
-- Sources: [`charts/96bulls/values.yaml:90`](../charts/96bulls/values.yaml#L90), `sessions-pipeline@7d7229b:stacks/aws/hardening.ts:360`
+- Sources: [`charts/sessions-pipeline/values.yaml:90`](../charts/sessions-pipeline/values.yaml#L90), `sessions-pipeline@7d7229b:stacks/aws/hardening.ts:360`
 
-#### opt.96bulls.db-mode
+#### opt.sessions-pipeline.db-mode
 
-<a id="opt-96bulls-db-mode"></a>
+<a id="opt-sessions-pipeline-db-mode"></a>
 
-**Migrator database mode (HOOPDB_DB_MODE)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Migrator database mode (HOOPDB_DB_MODE)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 The migrator's database profile (sessions-pipeline migrationProfile()). No
 default: the render fails without it. selfhosted for CNPG, RDS or any
@@ -1512,14 +1513,14 @@ selfhosted.
 - Provided by: operator
 - Values: `worker.migrations.databaseMode`
 - Env: `HOOPDB_DB_MODE`
-- Verify: the migrate Job env has exactly one HOOPDB_DB_MODE (ci/96bulls-profiles/matrix.sh asserts the profile env)
-- Sources: [`charts/96bulls-worker/values.yaml:106`](../charts/96bulls-worker/values.yaml#L106), [`charts/96bulls-worker/templates/_env.tpl:193`](../charts/96bulls-worker/templates/_env.tpl#L193), [`README.md:167`](../README.md#L167), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:117`
+- Verify: the migrate Job env has exactly one HOOPDB_DB_MODE (ci/sessions-pipeline-profiles/matrix.sh asserts the profile env)
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:106`](../charts/sessions-pipeline-worker/values.yaml#L106), [`charts/sessions-pipeline-worker/templates/_env.tpl:193`](../charts/sessions-pipeline-worker/templates/_env.tpl#L193), [`README.md:167`](../README.md#L167), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:117`
 
-#### opt.96bulls.function-boundary-mode
+#### opt.sessions-pipeline.function-boundary-mode
 
-<a id="opt-96bulls-function-boundary-mode"></a>
+<a id="opt-sessions-pipeline-function-boundary-mode"></a>
 
-**Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Which catalog-proven function boundary the migrator requires.
 global-default-revoke (required in selfhosted and cloudsql) or event-trigger
@@ -1533,13 +1534,13 @@ HOOPDB_FUNCTION_BOUNDARY_APPROVED is refused, including via extraEnv.
 - Values: `worker.migrations.functionBoundaryMode`
 - Env: `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED`
 - Verify: helm template refuses event-trigger outside supabase ("supported only in supabase mode")
-- Sources: [`charts/96bulls-worker/values.yaml:125`](../charts/96bulls-worker/values.yaml#L125), [`charts/96bulls-worker/templates/_env.tpl:207`](../charts/96bulls-worker/templates/_env.tpl#L207), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:173`
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:125`](../charts/sessions-pipeline-worker/values.yaml#L125), [`charts/sessions-pipeline-worker/templates/_env.tpl:207`](../charts/sessions-pipeline-worker/templates/_env.tpl#L207), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:173`
 
-#### opt.96bulls.supabase-shim
+#### opt.sessions-pipeline.supabase-shim
 
-<a id="opt-96bulls-supabase-shim"></a>
+<a id="opt-sessions-pipeline-supabase-shim"></a>
 
-**Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 true makes the migrator create the Supabase compatibility roles on plain
 Postgres. Required (true or false) in local, selfhosted and cloudsql (Cloud SQL:
@@ -1551,13 +1552,13 @@ false); in supabase mode it must be unset or false and renders "false".
 - Values: `worker.migrations.supabaseShim`
 - Env: `HOOPDB_SUPABASE_SHIM`
 - Verify: helm template refuses supabaseShim=true in supabase mode
-- Sources: [`charts/96bulls-worker/values.yaml:115`](../charts/96bulls-worker/values.yaml#L115), [`charts/96bulls-worker/templates/_env.tpl:198`](../charts/96bulls-worker/templates/_env.tpl#L198), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:131`
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:115`](../charts/sessions-pipeline-worker/values.yaml#L115), [`charts/sessions-pipeline-worker/templates/_env.tpl:198`](../charts/sessions-pipeline-worker/templates/_env.tpl#L198), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:131`
 
-#### opt.96bulls.role-bootstrap
+#### opt.sessions-pipeline.role-bootstrap
 
-<a id="opt-96bulls-role-bootstrap"></a>
+<a id="opt-sessions-pipeline-role-bootstrap"></a>
 
-**Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Optional; the migrator defaults it to the shim choice. Refused as true in
 supabase mode. Cloud SQL sets false (no customer superuser; the operator
@@ -1569,13 +1570,13 @@ provisions the search Worker role).
 - Values: `worker.migrations.roleBootstrap`
 - Env: `HOOPDB_ROLE_BOOTSTRAP`
 - Verify: the migrate Job env carries HOOPDB_ROLE_BOOTSTRAP only when set
-- Sources: [`charts/96bulls-worker/values.yaml:110`](../charts/96bulls-worker/values.yaml#L110), [`charts/96bulls-worker/templates/_env.tpl:233`](../charts/96bulls-worker/templates/_env.tpl#L233), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:132`
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:110`](../charts/sessions-pipeline-worker/values.yaml#L110), [`charts/sessions-pipeline-worker/templates/_env.tpl:233`](../charts/sessions-pipeline-worker/templates/_env.tpl#L233), `sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:132`
 
-#### opt.96bulls.runtime-workload-role
+#### opt.sessions-pipeline.runtime-workload-role
 
-<a id="opt-96bulls-runtime-workload-role"></a>
+<a id="opt-sessions-pipeline-runtime-workload-role"></a>
 
-**Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 The one role allowed to be a member of the runtime role (for example a pooler login role). Empty means none.
 
@@ -1584,14 +1585,14 @@ The one role allowed to be a member of the runtime role (for example a pooler lo
 - Provided by: operator
 - Values: `worker.migrations.runtimeWorkloadRole`
 - Env: `HOOPDB_RUNTIME_WORKLOAD_ROLE`
-- Verify: psql -Atc "select r.rolname from pg_auth_members m join pg_roles r on r.oid=m.member where m.roleid='bulls96_runtime'::regrole" lists at most that role
-- Sources: [`charts/96bulls-worker/values.yaml:124`](../charts/96bulls-worker/values.yaml#L124), [`charts/96bulls-worker/templates/_env.tpl:229`](../charts/96bulls-worker/templates/_env.tpl#L229)
+- Verify: psql -Atc "select r.rolname from pg_auth_members m join pg_roles r on r.oid=m.member where m.roleid='sessions_pipeline_runtime'::regrole" lists at most that role
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:124`](../charts/sessions-pipeline-worker/values.yaml#L124), [`charts/sessions-pipeline-worker/templates/_env.tpl:229`](../charts/sessions-pipeline-worker/templates/_env.tpl#L229)
 
-#### opt.96bulls.wait-for-role
+#### opt.sessions-pipeline.wait-for-role
 
-<a id="opt-96bulls-wait-for-role"></a>
+<a id="opt-sessions-pipeline-wait-for-role"></a>
 
-**migrate's wait-for-role ordering** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**migrate's wait-for-role ordering** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 An init container (by digest, the pinned CNPG Postgres image) holds migrate until
 the search Worker role and, outside local mode, the runtime role exist; with
@@ -1603,13 +1604,13 @@ in the umbrella; required with the in-cluster HoopDb; refused in supabase mode.
 - Provided by: chart
 - Values: `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role`
 - Verify: kubectl logs job/<migrate> -c wait-for-role ends with "present"
-- Sources: [`charts/96bulls/values.yaml:73`](../charts/96bulls/values.yaml#L73), [`charts/96bulls-worker/templates/_jobspec.tpl:32`](../charts/96bulls-worker/templates/_jobspec.tpl#L32), [`charts/96bulls-worker/templates/_env.tpl:199`](../charts/96bulls-worker/templates/_env.tpl#L199)
+- Sources: [`charts/sessions-pipeline/values.yaml:73`](../charts/sessions-pipeline/values.yaml#L73), [`charts/sessions-pipeline-worker/templates/_jobspec.tpl:32`](../charts/sessions-pipeline-worker/templates/_jobspec.tpl#L32), [`charts/sessions-pipeline-worker/templates/_env.tpl:199`](../charts/sessions-pipeline-worker/templates/_env.tpl#L199)
 
-#### opt.96bulls.supabase-activation-hold
+#### opt.sessions-pipeline.supabase-activation-hold
 
-<a id="opt-96bulls-supabase-activation-hold"></a>
+<a id="opt-sessions-pipeline-supabase-activation-hold"></a>
 
-**External-Supabase activation hold** · shipped · chart `96bulls` · profiles external-supabase
+**External-Supabase activation hold** · shipped · chart `sessions-pipeline` · profiles external-supabase
 
 profiles/external-supabase.yaml sets supabaseActivation.hold=true, so that profile
 does not render. Lift it only when the pinned image is confirmed as the
@@ -1621,13 +1622,13 @@ bootstrap and --activation-check) are approved.
 - Provided by: operator
 - Values: `supabaseActivation.hold`
 - Verify: helm template with the profile fails with "supabaseActivation.hold" until lifted
-- Sources: [`charts/96bulls/values.yaml:307`](../charts/96bulls/values.yaml#L307), [`charts/96bulls/templates/supabase-activation-hold.yaml:2`](../charts/96bulls/templates/supabase-activation-hold.yaml#L2)
+- Sources: [`charts/sessions-pipeline/values.yaml:307`](../charts/sessions-pipeline/values.yaml#L307), [`charts/sessions-pipeline/templates/supabase-activation-hold.yaml:2`](../charts/sessions-pipeline/templates/supabase-activation-hold.yaml#L2)
 
 #### opt.hoopdb.migration-owner-url
 
 <a id="opt-hoopdb-migration-owner-url"></a>
 
-**Separate migration-owner URL for migrate** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase
+**Separate migration-owner URL for migrate** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase
 
 Optional everywhere except Cloud SQL (see req.secret.hoopdb-migration-url): when
 both migrations.hoopdb.existingSecret and key are set, only migrate and its
@@ -1639,13 +1640,13 @@ worker.hoopdb URL. Set both or neither.
 - Provided by: operator
 - Values: `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key`
 - Verify: helm template refuses one without the other ("must be set together")
-- Sources: [`charts/96bulls/values.yaml:56`](../charts/96bulls/values.yaml#L56), [`charts/96bulls-worker/templates/_env.tpl:18`](../charts/96bulls-worker/templates/_env.tpl#L18)
+- Sources: [`charts/sessions-pipeline/values.yaml:56`](../charts/sessions-pipeline/values.yaml#L56), [`charts/sessions-pipeline-worker/templates/_env.tpl:18`](../charts/sessions-pipeline-worker/templates/_env.tpl#L18)
 
-#### opt.96bulls.locker-backend
+#### opt.sessions-pipeline.locker-backend
 
-<a id="opt-96bulls-locker-backend"></a>
+<a id="opt-sessions-pipeline-locker-backend"></a>
 
-**Locker object store** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Locker object store** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 minio runs the bundled MinIO (locker.enabled; Chainguard image, digest-pinned) and
 the locker-init Job creates the bucket. external uses your S3-compatible bucket:
@@ -1659,13 +1660,13 @@ versioned.
 - Values: `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`
 - Env: `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION`
 - Verify: the locker-init Job completes (minio) or a worker writes to the bucket (external)
-- Sources: [`charts/96bulls/values.yaml:137`](../charts/96bulls/values.yaml#L137), [`charts/96bulls-worker/templates/_env.tpl:71`](../charts/96bulls-worker/templates/_env.tpl#L71)
+- Sources: [`charts/sessions-pipeline/values.yaml:137`](../charts/sessions-pipeline/values.yaml#L137), [`charts/sessions-pipeline-worker/templates/_env.tpl:71`](../charts/sessions-pipeline-worker/templates/_env.tpl#L71)
 
-#### opt.96bulls.locker-credentials-mode
+#### opt.sessions-pipeline.locker-credentials-mode
 
-<a id="opt-96bulls-locker-credentials-mode"></a>
+<a id="opt-sessions-pipeline-locker-credentials-mode"></a>
 
-**Locker credentials mode** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Locker credentials mode** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 secret reads the LOCKER_* keys from existingSecret; podIdentity omits both static credential env vars so the SDK uses workload identity.
 
@@ -1674,13 +1675,13 @@ secret reads the LOCKER_* keys from existingSecret; podIdentity omits both stati
 - Provided by: operator
 - Values: `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode`
 - Verify: no LOCKER_ACCESS_KEY_ID in the rendered pods with podIdentity
-- Sources: [`charts/96bulls-worker/values.yaml:63`](../charts/96bulls-worker/values.yaml#L63), [`charts/96bulls-worker/templates/_env.tpl:15`](../charts/96bulls-worker/templates/_env.tpl#L15)
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:63`](../charts/sessions-pipeline-worker/values.yaml#L63), [`charts/sessions-pipeline-worker/templates/_env.tpl:15`](../charts/sessions-pipeline-worker/templates/_env.tpl#L15)
 
-#### opt.96bulls.locker-provider
+#### opt.sessions-pipeline.locker-provider
 
-<a id="opt-96bulls-locker-provider"></a>
+<a id="opt-sessions-pipeline-locker-provider"></a>
 
-**Locker provider (S3-compatible or native GCS)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Locker provider (S3-compatible or native GCS)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 s3 (default) leaves LOCKER_PROVIDER unset: MinIO, AWS S3 or another
 S3-compatible store. gcs renders LOCKER_PROVIDER=gcs and
@@ -1701,13 +1702,13 @@ render fails.
 - Values: `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`
 - Env: `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION`
 - Verify: with gcs, the worker and Alleyoop /readyz return 200 and /datapathz reports ok
-- Sources: [`charts/96bulls-worker/values.yaml:64`](../charts/96bulls-worker/values.yaml#L64), [`charts/96bulls-worker/templates/_env.tpl:63`](../charts/96bulls-worker/templates/_env.tpl#L63), [`charts/96bulls-worker/templates/_env.tpl:108`](../charts/96bulls-worker/templates/_env.tpl#L108), [`charts/alleyoop/templates/_env.tpl:95`](../charts/alleyoop/templates/_env.tpl#L95)
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:64`](../charts/sessions-pipeline-worker/values.yaml#L64), [`charts/sessions-pipeline-worker/templates/_env.tpl:63`](../charts/sessions-pipeline-worker/templates/_env.tpl#L63), [`charts/sessions-pipeline-worker/templates/_env.tpl:108`](../charts/sessions-pipeline-worker/templates/_env.tpl#L108), [`charts/alleyoop/templates/_env.tpl:95`](../charts/alleyoop/templates/_env.tpl#L95)
 
-#### opt.96bulls.services-image
+#### opt.sessions-pipeline.services-image
 
-<a id="opt-96bulls-services-image"></a>
+<a id="opt-sessions-pipeline-services-image"></a>
 
-**Services image registry** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Services image registry** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 ghcr (the chart default, private: needs req.secret.image-pull) or the immutable
 ECR digest of the same build for hosted EKS (node role pulls, no pull Secret).
@@ -1718,14 +1719,14 @@ compatibility matrix for the pinned digests.
 - Choices: `ghcr`; `ecr`: AWS path only
 - Provided by: chart
 - Values: `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry`
-- Verify: ci/96bulls-profiles/matrix.sh asserts every row renders only the pinned images
-- Sources: [`charts/96bulls-worker/values.yaml:22`](../charts/96bulls-worker/values.yaml#L22), [`charts/96bulls/ci/aws-cnpg-values.yaml:15`](../charts/96bulls/ci/aws-cnpg-values.yaml#L15), [`ci/96bulls-profiles/matrix.sh:70`](../ci/96bulls-profiles/matrix.sh#L70)
+- Verify: ci/sessions-pipeline-profiles/matrix.sh asserts every row renders only the pinned images
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:22`](../charts/sessions-pipeline-worker/values.yaml#L22), [`charts/sessions-pipeline/ci/aws-cnpg-values.yaml:15`](../charts/sessions-pipeline/ci/aws-cnpg-values.yaml#L15), [`ci/sessions-pipeline-profiles/matrix.sh:70`](../ci/sessions-pipeline-profiles/matrix.sh#L70)
 
-#### opt.96bulls.otel
+#### opt.sessions-pipeline.otel
 
-<a id="opt-96bulls-otel"></a>
+<a id="opt-sessions-pipeline-otel"></a>
 
-**OpenTelemetry export** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**OpenTelemetry export** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Off by default. Set global.otel.endpoint to your OTLP/HTTP backend, or enable the
 bundled collector (otel.enabled) with endpoint http://otel-collector:4318; its
@@ -1737,13 +1738,13 @@ default exporter drops telemetry.
 - Values: `global.otel.endpoint`, `otel.enabled`, `otel.config.*`
 - Env: `OTEL_EXPORTER_OTLP_ENDPOINT`
 - Verify: OTEL_EXPORTER_OTLP_ENDPOINT in the pods equals global.otel.endpoint
-- Sources: [`charts/96bulls/values.yaml:165`](../charts/96bulls/values.yaml#L165), [`charts/96bulls-worker/templates/_env.tpl:106`](../charts/96bulls-worker/templates/_env.tpl#L106)
+- Sources: [`charts/sessions-pipeline/values.yaml:165`](../charts/sessions-pipeline/values.yaml#L165), [`charts/sessions-pipeline-worker/templates/_env.tpl:106`](../charts/sessions-pipeline-worker/templates/_env.tpl#L106)
 
-#### opt.96bulls.deployment-identity
+#### opt.sessions-pipeline.deployment-identity
 
-<a id="opt-96bulls-deployment-identity"></a>
+<a id="opt-sessions-pipeline-deployment-identity"></a>
 
-**Workspace, deployment and environment labels** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Workspace, deployment and environment labels** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 WORKSPACE_ID, DEPLOYMENT, DEPLOYMENT_ID (default <namespace>/<release>) and ENVIRONMENT stamped on every record.
 
@@ -1753,13 +1754,13 @@ WORKSPACE_ID, DEPLOYMENT, DEPLOYMENT_ID (default <namespace>/<release>) and ENVI
 - Values: `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`
 - Env: `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT`
 - Verify: env of any worker pod
-- Sources: [`charts/96bulls/values.yaml:49`](../charts/96bulls/values.yaml#L49), [`charts/96bulls-worker/templates/_env.tpl:95`](../charts/96bulls-worker/templates/_env.tpl#L95)
+- Sources: [`charts/sessions-pipeline/values.yaml:49`](../charts/sessions-pipeline/values.yaml#L49), [`charts/sessions-pipeline-worker/templates/_env.tpl:95`](../charts/sessions-pipeline-worker/templates/_env.tpl#L95)
 
-#### opt.96bulls.worker-health
+#### opt.sessions-pipeline.worker-health
 
-<a id="opt-96bulls-worker-health"></a>
+<a id="opt-sessions-pipeline-worker-health"></a>
 
-**Stage worker health server** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Stage worker health server** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 /readyz and /healthz on workerHealth.port for every stage worker; a slow migration never restarts a worker.
 
@@ -1769,13 +1770,13 @@ WORKSPACE_ID, DEPLOYMENT, DEPLOYMENT_ID (default <namespace>/<release>) and ENVI
 - Values: `worker.workerHealth.*`
 - Env: `WORKER_HEALTH_PORT`, `WORKER_UNHEALTHY_AFTER_FAILURES`, `WORKER_MAX_TICK_AGE_MS`
 - Verify: kubectl get pods shows the workers Ready after migrate
-- Sources: [`charts/96bulls-worker/values.yaml:180`](../charts/96bulls-worker/values.yaml#L180), [`charts/96bulls-worker/templates/deployments.yaml:44`](../charts/96bulls-worker/templates/deployments.yaml#L44)
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:180`](../charts/sessions-pipeline-worker/values.yaml#L180), [`charts/sessions-pipeline-worker/templates/deployments.yaml:44`](../charts/sessions-pipeline-worker/templates/deployments.yaml#L44)
 
-#### opt.96bulls.bob-costas-model
+#### opt.sessions-pipeline.bob-costas-model
 
-<a id="opt-96bulls-bob-costas-model"></a>
+<a id="opt-sessions-pipeline-bob-costas-model"></a>
 
-**Bob Costas summariser model (BOB_COSTAS_MODEL)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Bob Costas summariser model (BOB_COSTAS_MODEL)** · shipped · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 off (the extractive summariser) is the only value wired at 7d7229b; any other value fails at start.
 
@@ -1785,13 +1786,13 @@ off (the extractive summariser) is the only value wired at 7d7229b; any other va
 - Values: `worker.components.bob-costas.env`
 - Env: `BOB_COSTAS_MODEL`
 - Verify: env of the bob-costas pod
-- Sources: [`charts/96bulls-worker/values.yaml:223`](../charts/96bulls-worker/values.yaml#L223), `sessions-pipeline@7d7229b:src/bob-costas/summarizer.ts:104`
+- Sources: [`charts/sessions-pipeline-worker/values.yaml:223`](../charts/sessions-pipeline-worker/values.yaml#L223), `sessions-pipeline@7d7229b:src/bob-costas/summarizer.ts:104`
 
-#### opt.96bulls.search-backend
+#### opt.sessions-pipeline.search-backend
 
-<a id="opt-96bulls-search-backend"></a>
+<a id="opt-sessions-pipeline-search-backend"></a>
 
-**Transcript search backend (search.backend)** · **planned** · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Transcript search backend (search.backend)** · **planned** · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 Operator decision 2026-11-01: postgres (PostgreSQL 17 + pg_trgm, the default and
 what every profile does today) or self-managed ClickHouse OSS as a derived index
@@ -1808,16 +1809,16 @@ architecture.
 - Verify: not applicable until charted
 - Sources: [`docs/self-hosted-reference-architecture.md:68`](../docs/self-hosted-reference-architecture.md#L68), [`docs/self-hosted-reference-architecture.md:105`](../docs/self-hosted-reference-architecture.md#L105)
 
-#### opt.96bulls.session-briefs
+#### opt.sessions-pipeline.session-briefs
 
-<a id="opt-96bulls-session-briefs"></a>
+<a id="opt-sessions-pipeline-session-briefs"></a>
 
-**Model session briefs** · **planned** · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+**Model session briefs** · **planned** · chart `sessions-pipeline` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
 
 sessions-pipeline #127 (main 475d503, generation 5ed11913...) adds the
 session-brief worker (SERVICE=session-brief) and SESSION_BRIEF_ENABLED, which
 arms wakeups in the HoopDb indexer. Off by default upstream. Not in any chart
-yet: needs the 96bulls-next re-pin, a session-brief component, and the model
+yet: needs the sessions-pipeline-next re-pin, a session-brief component, and the model
 key Secret (req.secret.model-api-key). Values names are proposed.
 
 - Default: `false`
@@ -2486,15 +2487,15 @@ Rendered by the charts but not a requirement or an option: fixed by the chart or
 
 | env | chart | why |
 | --- | --- | --- |
-| `SERVICE` | 96bulls-worker, alleyoop | selects the entry point of the one services image |
-| `OTEL_SERVICE_NAME` | 96bulls-worker, alleyoop | equals SERVICE |
-| `TMPDIR` | 96bulls-worker, alleyoop | the writable emptyDir under a read-only root filesystem |
-| `HOME` | 96bulls, 96bulls-worker, relayflows | a writable home under a read-only root filesystem |
-| `ROLES` | 96bulls-worker | wait-for-role init container; derived from waitForRole.role and migrations.runtimeRole |
-| `FUNCTION_DEFAULT` | 96bulls-worker | wait-for-role init container; derived from waitForRole.functionDefault |
-| `INTERVAL` | 96bulls-worker | wait-for-role poll interval (waitForRole.intervalSeconds) |
-| `CLUSTER` | 96bulls | privileged SQL Jobs; the CNPG cluster name (bootstrapJob.cluster) |
-| `DATABASE` | 96bulls | privileged SQL Jobs; the HoopDb database (bootstrapJob.database) |
+| `SERVICE` | sessions-pipeline-worker, alleyoop | selects the entry point of the one services image |
+| `OTEL_SERVICE_NAME` | sessions-pipeline-worker, alleyoop | equals SERVICE |
+| `TMPDIR` | sessions-pipeline-worker, alleyoop | the writable emptyDir under a read-only root filesystem |
+| `HOME` | sessions-pipeline, sessions-pipeline-worker, relayflows | a writable home under a read-only root filesystem |
+| `ROLES` | sessions-pipeline-worker | wait-for-role init container; derived from waitForRole.role and migrations.runtimeRole |
+| `FUNCTION_DEFAULT` | sessions-pipeline-worker | wait-for-role init container; derived from waitForRole.functionDefault |
+| `INTERVAL` | sessions-pipeline-worker | wait-for-role poll interval (waitForRole.intervalSeconds) |
+| `CLUSTER` | sessions-pipeline | privileged SQL Jobs; the CNPG cluster name (bootstrapJob.cluster) |
+| `DATABASE` | sessions-pipeline | privileged SQL Jobs; the HoopDb database (bootstrapJob.database) |
 | `INGEST_PORT` | alleyoop | from ingest.port |
 | `PORT` | relaycast, relayauth | from server.port |
 | `RELAYCAST_DB_PATH` | relaycast | fixed /data/relaycast.db on the data PVC |

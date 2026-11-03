@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 # Helm does not recursively vendor file:// dependency children.
-helm dependency build charts/96bulls >/dev/null
+helm dependency build charts/sessions-pipeline >/dev/null
 helm dependency build charts/agent-relay >/dev/null
 out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
   -f charts/agent-relay/values-gcp-proof.yaml \

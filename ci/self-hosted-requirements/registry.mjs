@@ -64,12 +64,12 @@ const STATUSES = ['shipped', 'planned'];
 const PROVIDERS = ['operator', 'chart', 'migrator', 'stack'];
 
 // Umbrella value paths under worker./alleyoop. belong to the subcharts.
-const UMBRELLA_ALIASES = { worker: '96bulls-worker', alleyoop: 'alleyoop' };
+const UMBRELLA_ALIASES = { worker: 'sessions-pipeline-worker', alleyoop: 'alleyoop' };
 function normPath(chart, p) {
   let c = chart, q = p;
   const m = /^([a-z0-9-]+):(.+)$/.exec(p);
   if (m) { c = m[1]; q = m[2]; }
-  if (c === '96bulls') {
+  if (c === 'sessions-pipeline') {
     const head = q.split('.')[0];
     if (UMBRELLA_ALIASES[head] && q.includes('.')) { c = UMBRELLA_ALIASES[head]; q = q.slice(head.length + 1); }
   }
@@ -81,7 +81,7 @@ const entryValues = (e) => asList(e.values).map((p) => normPath(entryCharts(e)[0
 const entryEnv = (e) => asList(e.env);
 const perProfile = (v, p) => (v && typeof v === 'object' && !Array.isArray(v) ? (p in v ? v[p] : v.default) : v);
 // The charts whose templates an entry's chart covers (the umbrella renders its subcharts).
-const chartFamily = (c) => (c === '96bulls' ? ['96bulls', '96bulls-worker', 'alleyoop'] : [c]);
+const chartFamily = (c) => (c === 'sessions-pipeline' ? ['sessions-pipeline', 'sessions-pipeline-worker', 'alleyoop'] : [c]);
 
 // ---------------------------------------------------------------------------
 // Template scan
@@ -166,7 +166,7 @@ function profileValues(pid) {
   const files = [`charts/${p.chart}/values.yaml`, ...asList(p.values_file).map((f) => `charts/${p.chart}/${f}`)];
   return (mergedCache[pid] = mergeYaml(files));
 }
-// Resolve an entry path (umbrella-relative for 96bulls) in a profile.
+// Resolve an entry path (umbrella-relative for sessions-pipeline) in a profile.
 function resolve(pid, p) {
   const prof = profileById[pid];
   const v = getPath(profileValues(pid), p.replace(/^[a-z0-9-]+:/, ''));
@@ -314,16 +314,16 @@ checks.planned = () => {
   const c = 'planned';
   for (const e of entries.filter((x) => x.status === 'planned')) {
     // A planned env name may already be shipped by an unrelated chart (for
-    // example Relay History can use OPENAI_API_KEY while the 96Bulls model
+    // example Relay History can use OPENAI_API_KEY while the Sessions Pipeline model
     // worker remains planned). Enforce absence only in the entry's chart
     // family; normalized value paths still catch umbrella/subchart reads.
     const plannedCharts = [...new Set(entryCharts(e).flatMap(chartFamily))];
     for (const ch of plannedCharts) {
       for (const n of entryEnv(e)) if (scans[ch].env.has(n) || new RegExp(`\\b${n}\\b`).test(templateText[ch])) err(c, `${e.id} is planned, but charts/${ch}/templates references env ${n}: ship it (status: shipped) or remove the reference`);
     }
-    // Paths are normalized (an umbrella .Values.worker.x is 96bulls-worker:x),
-    // so scan every chart: a planned 96bulls-worker path read only by the
-    // 96bulls umbrella templates (or any other consumer) is still caught.
+    // Paths are normalized (an umbrella .Values.worker.x is sessions-pipeline-worker:x),
+    // so scan every chart: a planned sessions-pipeline-worker path read only by the
+    // sessions-pipeline umbrella templates (or any other consumer) is still caught.
     for (const p of entryValues(e)) {
       const want = p.replace(/\.\*$/, '');
       for (const ch of CHARTS) {
@@ -337,19 +337,19 @@ checks.matrix = () => {
   const c = 'matrix';
   const comp = reg.compatibility || {};
   const img = comp.services_images || {};
-  const matrixSh = fs.readFileSync(abs('ci/96bulls-profiles/matrix.sh'), 'utf8');
+  const matrixSh = fs.readFileSync(abs('ci/sessions-pipeline-profiles/matrix.sh'), 'utf8');
   const shConst = (n) => (new RegExp(`^${n}="([^"]+)"`, 'm').exec(matrixSh) || [])[1];
   const ref = (r) => `${r.repository}@${r.digest}`;
   for (const [k, n] of [['ghcr', 'GHCR'], ['ecr', 'ECR']]) {
     if (!img[k]) { err(c, `compatibility.services_images.${k} is missing`); continue; }
-    if (shConst(n) !== ref(img[k])) err(c, `services image ${k} is ${ref(img[k])}, ci/96bulls-profiles/matrix.sh ${n} is ${shConst(n)}`);
+    if (shConst(n) !== ref(img[k])) err(c, `services image ${k} is ${ref(img[k])}, ci/sessions-pipeline-profiles/matrix.sh ${n} is ${shConst(n)}`);
   }
   const file = (p) => fs.readFileSync(abs(p), 'utf8').trim();
-  if (file('ci/96bulls-search-worker-role/services-commit') !== img.source_commit) err(c, `services source_commit ${img.source_commit} != ci/96bulls-search-worker-role/services-commit`);
-  if (file('ci/96bulls-search-worker-role/services-generation') !== img.migration_generation) err(c, `migration_generation ${img.migration_generation} != ci/96bulls-search-worker-role/services-generation`);
-  for (const ch of ['96bulls-worker', 'alleyoop']) if (chartValues[ch].image.digest !== img.ghcr?.digest) err(c, `charts/${ch}/values.yaml image.digest is ${chartValues[ch].image.digest}, not the registry GHCR digest`);
-  // Every 96bulls profile pins the image the registry names for it.
-  for (const p of profiles.filter((x) => x.chart === '96bulls')) {
+  if (file('ci/sessions-pipeline-search-worker-role/services-commit') !== img.source_commit) err(c, `services source_commit ${img.source_commit} != ci/sessions-pipeline-search-worker-role/services-commit`);
+  if (file('ci/sessions-pipeline-search-worker-role/services-generation') !== img.migration_generation) err(c, `migration_generation ${img.migration_generation} != ci/sessions-pipeline-search-worker-role/services-generation`);
+  for (const ch of ['sessions-pipeline-worker', 'alleyoop']) if (chartValues[ch].image.digest !== img.ghcr?.digest) err(c, `charts/${ch}/values.yaml image.digest is ${chartValues[ch].image.digest}, not the registry GHCR digest`);
+  // Every sessions-pipeline profile pins the image the registry names for it.
+  for (const p of profiles.filter((x) => x.chart === 'sessions-pipeline')) {
     const want = img[p.services_image];
     if (!want) { err(c, `profile ${p.id}: services_image must be ghcr or ecr`); continue; }
     const pinned = (k) => getPath(profileValues(p.id), k);
@@ -365,11 +365,11 @@ checks.matrix = () => {
     const got = { hoopdb: v.hoopdb?.enabled ? 'cnpg' : 'external', db_mode: getPath(v, 'worker.migrations.databaseMode'), boundary: getPath(v, 'worker.migrations.functionBoundaryMode') || null };
     for (const k of Object.keys(got)) if ((p.db?.[k] ?? null) !== got[k]) err(c, `profile ${p.id}: db.${k} is ${JSON.stringify(p.db?.[k])}, the values render ${JSON.stringify(got[k])}`);
   }
-  // Every 96bulls values file in the render matrix is a registry profile or ci_only.
+  // Every sessions-pipeline values file in the render matrix is a registry profile or ci_only.
   const rows = [...matrixSh.matchAll(/^\s+"([^"|]+\.yaml)\|/gm)].map((m) => m[1]);
-  const known = new Set([...profiles.filter((x) => x.chart === '96bulls').flatMap((x) => asList(x.values_file)), ...asList(reg.ci_only_values).map((x) => x.file)]);
-  for (const r of rows) if (!known.has(r)) err(c, `ci/96bulls-profiles/matrix.sh row ${r} is neither a registry profile nor in ci_only_values`);
-  for (const k of known) if (!rows.includes(k)) err(c, `${k} is in the registry but has no ci/96bulls-profiles/matrix.sh row`);
+  const known = new Set([...profiles.filter((x) => x.chart === 'sessions-pipeline').flatMap((x) => asList(x.values_file)), ...asList(reg.ci_only_values).map((x) => x.file)]);
+  for (const r of rows) if (!known.has(r)) err(c, `ci/sessions-pipeline-profiles/matrix.sh row ${r} is neither a registry profile nor in ci_only_values`);
+  for (const k of known) if (!rows.includes(k)) err(c, `${k} is in the registry but has no ci/sessions-pipeline-profiles/matrix.sh row`);
 
   // Releases.
   const releases = asList(comp.releases);
@@ -409,7 +409,7 @@ checks.matrix = () => {
       }
     }
     if (r.current && r.services && (r.services.source_commit !== img.source_commit || r.services.migration_generation !== img.migration_generation)) err(c, `release ${r.id}: services pins differ from compatibility.services_images`);
-    if (r.current && r.services) for (const ch of ['96bulls-worker', 'alleyoop']) {
+    if (r.current && r.services) for (const ch of ['sessions-pipeline-worker', 'alleyoop']) {
       if (r.images?.[ch]?.digest !== img.ghcr?.digest) err(c, `release ${r.id}: ${ch} image digest is not compatibility.services_images.ghcr`);
     }
   }
@@ -417,11 +417,11 @@ checks.matrix = () => {
     const v = loadYaml(`charts/${chart}/Chart.yaml`).version;
     if (!releases.some((r) => r.current && r.charts?.[chart] === v)) err(c, `charts/${chart} ${v} has no current row in compatibility.releases`);
   }
-  // Every dbMode/boundary combination a 96bulls profile renders is a supported combination.
-  const cur = releases.find((r) => r.current && r.charts?.['96bulls']);
+  // Every dbMode/boundary combination a sessions-pipeline profile renders is a supported combination.
+  const cur = releases.find((r) => r.current && r.charts?.['sessions-pipeline']);
   const combos = asList(cur?.db_combos);
-  for (const p of profiles.filter((x) => x.chart === '96bulls')) {
-    if (!combos.some((k) => k.db_mode === p.db.db_mode && (k.boundary ?? null) === (p.db.boundary ?? null) && asList(k.profiles).includes(p.id))) err(c, `profile ${p.id} (${p.db.db_mode} + ${p.db.boundary}) is not in the current 96bulls row's db_combos`);
+  for (const p of profiles.filter((x) => x.chart === 'sessions-pipeline')) {
+    if (!combos.some((k) => k.db_mode === p.db.db_mode && (k.boundary ?? null) === (p.db.boundary ?? null) && asList(k.profiles).includes(p.id))) err(c, `profile ${p.id} (${p.db.db_mode} + ${p.db.boundary}) is not in the current sessions-pipeline row's db_combos`);
   }
 };
 
@@ -472,7 +472,7 @@ function renderDoc() {
     '## Compatibility matrix', '');
   const comp = reg.compatibility;
   const img = comp.services_images;
-  L('Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):', '',
+  L('Services image (sessions-pipeline-worker, alleyoop and the privileged SQL Jobs):', '',
     '| registry | image | source | migration generation |', '| --- | --- | --- | --- |',
     `| GHCR | ${code(`${img.ghcr.repository}@${img.ghcr.digest}`)} | sessions-pipeline ${code(img.source_commit)} | ${code(img.migration_generation)} |`,
     `| ECR (AWS path) | ${code(`${img.ecr.repository}@${img.ecr.digest}`)} | same | same |`, '');
@@ -491,7 +491,7 @@ function renderDoc() {
   }
   L('', '### Supported dbMode and function boundary combinations', '',
     '| dbMode | boundary | HoopDb | status | profiles | notes |', '| --- | --- | --- | --- | --- | --- |');
-  const cur = comp.releases.find((r) => r.current && r.charts?.['96bulls']);
+  const cur = comp.releases.find((r) => r.current && r.charts?.['sessions-pipeline']);
   for (const k of asList(cur.db_combos)) L(`| ${code(k.db_mode)} | ${k.boundary ? code(k.boundary) : '(unset)'} | ${k.hoopdb} | ${k.status} | ${asList(k.profiles).join(', ')} | ${cell(k.notes)} |`);
   for (const k of asList(comp.refused_combos)) L(`| ${code(k.db_mode)} | ${k.boundary ? code(k.boundary) : '(unset)'} | ${k.hoopdb ?? 'any'} | refused | | ${cell(k.notes)} |`);
 

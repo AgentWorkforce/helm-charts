@@ -1,0 +1,20 @@
+# restore-overlay.yaml: no migration, init or backup Jobs during a restore.
+relayhistory:
+  migrations:
+    enabled: false
+relay-cloud-api:
+  migrations:
+    enabled: false
+sessions-pipeline:
+  worker:
+    migrations:
+      enabled: false
+    lockerInit:
+      enabled: false
+relaycast:
+  backup:
+    enabled: false
+# Relayflows in standalone mode is a Job; keep it off until the restore is
+# verified, then re-enable it in a reviewed upgrade.
+components:
+  relayflows: false

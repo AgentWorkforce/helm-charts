@@ -31,7 +31,7 @@ Each archive unpacks to `agent-relay-customer-handoff/` and contains:
 
 See [`HANDOFF.md`](HANDOFF.md) for the full layout and verification steps.
 
-The charts cover Relaycast, RelayAuth, 96Bulls Sessions, RelayHistory, the
+The charts cover Relaycast, RelayAuth, Sessions Pipeline, RelayHistory, the
 headless control-plane API, Relay Dashboard, and custom-origin Desktop setup.
 Relayflows, Relayfile, billing, provider integrations, and hosted fleet are out
 of scope.

@@ -44,23 +44,23 @@ jobs:
       - name: Dependency pins are hook-free
         run: scripts/ci/deps.sh
 
-      - name: 96bulls search Worker role render assertions
+      - name: sessions-pipeline search Worker role render assertions
         run: |
           for repo in https://cloudnative-pg.github.io/charts https://charts.min.io/ https://open-telemetry.github.io/opentelemetry-helm-charts; do
             helm repo add "dep-$(echo "$repo" | md5sum | cut -c1-8)" "$repo" >/dev/null 2>&1 || true
           done
-          helm dependency build charts/96bulls >/dev/null
-          ci/96bulls-search-worker-role/render.sh
+          helm dependency build charts/sessions-pipeline >/dev/null
+          ci/sessions-pipeline-search-worker-role/render.sh
 
       # The development-preview customer handoff builds, verifies, extracts,
       # and its umbrella resolves every file:// dependency and renders.
       - name: Customer handoff package smoke
         run: ci/customer-handoff/smoke.sh
 
-      # Every 96bulls profile (charts/96bulls/profiles/*.yaml and ci/*-values.yaml)
+      # Every sessions-pipeline profile (charts/sessions-pipeline/profiles/*.yaml and ci/*-values.yaml)
       # renders with the manifests and role bootstrap path it must produce.
-      - name: 96bulls profile render matrix
-        run: ci/96bulls-profiles/matrix.sh static
+      - name: sessions-pipeline profile render matrix
+        run: ci/sessions-pipeline-profiles/matrix.sh static
 
       # self-hosted/requirements.yaml against the charts: every template env var,
       # Secret key and Secret values path is registered; shipped entries exist in
@@ -120,6 +120,27 @@ jobs:
       - name: Customer release gate regression tests
         run: python3 ci/customer-release-gate/test.py
 
+  # The setup skill follows the Agent Skills standard
+  # (https://agentskills.io/specification). skills-ref is the reference
+  # validator, pinned to an agentskills/agentskills commit (no tags yet).
+  agent-skill:
+    runs-on: ubuntu-latest
+    env:
+      SKILLS_REF_COMMIT: 69ef37e9424c0a7ea9dd2293b559e43ec8176379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install skills-ref
+        run: python3 -m pip install "skills-ref @ git+https://github.com/agentskills/agentskills@${SKILLS_REF_COMMIT}#subdirectory=skills-ref"
+      - name: Validate the setup skill
+        run: skills-ref validate ./.agents/skills/setting-up-self-hosted-agent-relay-gcp
+      - name: No skill copy under .cursor
+        run: test ! -e .cursor/skills/setting-up-self-hosted-agent-relay-gcp
+      - name: Skill layout resolver tests
+        run: bash .agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/test-layout.sh
+
   kind:
     runs-on: ubuntu-latest
     steps:
@@ -137,7 +158,7 @@ jobs:
         run: |
           kubectl apply --server-side -f "https://raw.githubusercontent.com/external-secrets/external-secrets/${ESO_VERSION}/deploy/crds/bundle.yaml"
           # CloudNativePG CRDs, so charts that render a postgresql.cnpg.io
-          # Cluster (the 96bulls umbrella) dry-run cleanly.
+          # Cluster (the sessions-pipeline umbrella) dry-run cleanly.
           helm repo add cnpg https://cloudnative-pg.github.io/charts
           read -r _ chart version values < <(grep '^cnpg-operator ' deps/pins.txt)
           helm template cnpg "$chart" --version "$version" -f "deps/$values" --include-crds --no-hooks \
@@ -152,9 +173,9 @@ jobs:
       - name: Server-side dry-run apply
         run: scripts/ci/charts.sh dryrun
 
-      # The same 96bulls profile matrix, applied server-side (dry run).
-      - name: 96bulls profile matrix (server-side dry run)
-        run: ci/96bulls-profiles/matrix.sh dryrun
+      # The same sessions-pipeline profile matrix, applied server-side (dry run).
+      - name: sessions-pipeline profile matrix (server-side dry run)
+        run: ci/sessions-pipeline-profiles/matrix.sh dryrun
 
   # Live install of charts/relaycast on kind against the pinned image:
   # upgrade from the published 0.1.0, first-run bootstrap, register -> node
@@ -194,11 +215,11 @@ jobs:
         run: ci/relaycast/smoke.sh
 
   # Real CloudNativePG on kind, on a services image built here from the pinned
-  # 96BullSessions commit (ci/96bulls-search-worker-role/services-commit; the
+  # sessions-pipeline commit (ci/sessions-pipeline-search-worker-role/services-commit; the
   # published image is private). The role part (fresh and existing clusters
   # converge, idempotent, drift refused) and the full release (bootstrap ->
   # migrate -> phase 2 verify -> workloads, drift and phase-2-only failures)
-  # both run. Required: no success on skip. The 96BullSessions checkout uses
+  # both run. Required: no success on skip. The sessions-pipeline checkout uses
   # the BULLS96_READ_TOKEN Actions secret. It is kept for now: it is to be
   # replaced by a repository-scoped read-only credential when one is available.
   # Fork PRs and any run without the secret fail closed, as does a failed
@@ -214,34 +235,34 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" != pull_request ] \
-            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|deps/pins\.txt$|ci/96bulls-search-worker-role/|ci/96bulls-profiles/|\.github/workflows/(lint|release|release-agent-relay)\.yml$)'; then
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/sessions-pipeline/|charts/sessions-pipeline-worker/|deps/cnpg-|deps/pins\.txt$|ci/sessions-pipeline-search-worker-role/|ci/sessions-pipeline-profiles/|\.github/workflows/(lint|release|release-agent-relay)\.yml$)'; then
             echo run=true >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Pinned 96BullSessions commit
+      - name: Pinned sessions-pipeline commit
         if: steps.changed.outputs.run == 'true'
         id: pin
         run: |
-          sha=$(tr -d '[:space:]' < ci/96bulls-search-worker-role/services-commit)
+          sha=$(tr -d '[:space:]' < ci/sessions-pipeline-search-worker-role/services-commit)
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::services-commit must be a full 40-hex commit sha"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       # Fail closed: a fork PR (no secrets) or a missing secret is a failure,
       # never a skip. The value is only tested for emptiness, never printed.
-      - name: Require the 96BullSessions read token
+      - name: Require the sessions-pipeline read token
         if: steps.changed.outputs.run == 'true'
         env:
           BULLS96_READ_TOKEN: ${{ secrets.BULLS96_READ_TOKEN }}
         run: |
           if [ -z "$BULLS96_READ_TOKEN" ]; then
-            echo "::error::BULLS96_READ_TOKEN is not available to this run (fork pull request, or the Actions secret is missing). This job builds the private 96BullSessions services image and is required: it fails rather than skips. A maintainer must run it from a branch in AgentWorkforce/helm-charts."
+            echo "::error::BULLS96_READ_TOKEN is not available to this run (fork pull request, or the Actions secret is missing). This job builds the private sessions-pipeline services image and is required: it fails rather than skips. A maintainer must run it from a branch in AgentWorkforce/helm-charts."
             exit 1
           fi
 
       - uses: actions/checkout@v4
         if: steps.changed.outputs.run == 'true'
         with:
-          repository: AgentWorkforce/96BullSessions
+          repository: AgentWorkforce/sessions-pipeline
           ref: ${{ steps.pin.outputs.sha }}
           token: ${{ secrets.BULLS96_READ_TOKEN }}
           path: .services-src
@@ -261,11 +282,11 @@ jobs:
       - uses: helm/kind-action@v1.15.1
         if: steps.changed.outputs.run == 'true'
         with:
-          cluster_name: 96bulls-role
+          cluster_name: sessions-pipeline-role
 
       - name: Role converges; drift refused; full release incl. phase-2-only failure
         if: steps.changed.outputs.run == 'true'
         env:
           SERVICES_IMAGE: ghcr.io/agentworkforce/96bulls-services:kind-${{ steps.pin.outputs.sha }}
           SERVICES_SRC: .services-src
-        run: ci/96bulls-search-worker-role/kind.sh
+        run: ci/sessions-pipeline-search-worker-role/kind.sh

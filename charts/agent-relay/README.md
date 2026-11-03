@@ -3,7 +3,7 @@
 Umbrella chart for the self-hosted messaging and Sessions proof:
 
 - Relaycast and RelayAuth
-- 96Bulls Sessions pipeline
+- Sessions Pipeline
 - Relay History
 - self-host control-plane API
 - static dashboard
@@ -36,14 +36,14 @@ before installing. The required value overrides are:
 | `gkeIngress.hosts.{root,api,cast,history}` | Four customer-controlled public DNS names whose A records point at the reserved address. |
 | `relaycast.image.{repository,digest}` | Customer-accessible Relaycast image mirror and its real immutable digest. |
 | `relayauth.image.{repository,digest}` | Customer-accessible RelayAuth image mirror and its real immutable digest. |
-| `96bulls.worker.image.{repository,digest}` and `96bulls.alleyoop.image.{repository,digest}` | Repository path under `global.imageRegistry` and the same immutable Sessions services digest. |
+| `sessions-pipeline.worker.image.{repository,digest}` and `sessions-pipeline.alleyoop.image.{repository,digest}` | Repository path under `global.imageRegistry` and the same immutable Sessions services digest. |
 | `relayhistory.image.{repository,digest}` | Customer-accessible Relay History image mirror and its real immutable digest. |
 | `relay-cloud-api.image.{repository,digest}` | Customer-accessible control API image mirror and its real immutable digest. |
 | `relay-dashboard.image.{repository,digest}` | Customer-accessible dashboard image mirror and its real immutable digest. |
 | All `existingSecret` values set to `example-agent-relay-secrets` | Name of a pre-created Secret in the release namespace. Update every occurrence if separate Secrets are used. |
-| `96bulls.{worker,alleyoop}.locker.bucket` | Existing customer-owned GCS bucket used for session objects. Both values must match. |
-| `96bulls.{worker,alleyoop}.locker.region` | Region of that bucket. Both values must match. |
-| `96bulls.worker.extraEnv` (shared with `alleyoop.extraEnv` through a YAML anchor) | Cloud SQL connection name, Memorystore host/port/server CA bundle, and Pub/Sub topic and subscription. `locker.provider=gcs` arms the Sessions services' GCS data-path readiness check, which requires them; the chart refuses to render without them. |
+| `sessions-pipeline.{worker,alleyoop}.locker.bucket` | Existing customer-owned GCS bucket used for session objects. Both values must match. |
+| `sessions-pipeline.{worker,alleyoop}.locker.region` | Region of that bucket. Both values must match. |
+| `sessions-pipeline.worker.extraEnv` (shared with `alleyoop.extraEnv` through a YAML anchor) | Cloud SQL connection name, Memorystore host/port/server CA bundle, and Pub/Sub topic and subscription. `locker.provider=gcs` arms the Sessions services' GCS data-path readiness check, which requires them; the chart refuses to render without them. |
 | `relaycast.baseUrl` | `https://` plus `gkeIngress.hosts.cast`. |
 | `relayhistory.relayauth.historyOrigin` | `https://` plus `gkeIngress.hosts.history`. |
 | `relay-cloud-api.publicUrl` | `https://` plus `gkeIngress.hosts.api`. |
@@ -94,7 +94,7 @@ no enrollment Secret; model and provider credentials reach the flow through
 The template assumes external Cloud SQL and GCS rather than in-cluster
 Postgres and MinIO. Before installation, provision separate Sessions, Relay
 History, and control API databases; install the Sessions database extensions
-and migrations required by 96Bulls; and make each runtime URL use the
+and migrations required by the Sessions Pipeline; and make each runtime URL use the
 least-privilege role named in the values (`sessions_runtime` or
 `control_api_runtime`). Migration URLs must use the corresponding
 migration-owner roles. Relay History must have its own database and migration
@@ -133,7 +133,7 @@ helm template agent-relay . -n agent-relay -f values-gcp.yaml >/dev/null
 `values-gcp-proof.yaml` is the portable, all-components customer shape.
 `values-gcp-proof-live.yaml` is a separate overlay for the existing proof
 cluster; it reuses RelayAuth in the `relayauth` namespace, disables the
-already-running Sessions pipeline, and inherits the portable profile's
+already-running Sessions Pipeline, and inherits the portable profile's
 restricted GKE NetworkPolicies.
 
 One umbrella GKE Ingress reserves a global static address
@@ -223,7 +223,7 @@ The portable all-components shape additionally needs
 `relayauth-bootstrap-api-key` must contain the same API-key value.
 
 ```sh
-helm dependency build charts/96bulls
+helm dependency build charts/sessions-pipeline
 helm dependency build charts/agent-relay
 helm install agent-relay charts/agent-relay -n agent-relay \
   --create-namespace --no-hooks -f charts/agent-relay/values-gcp-proof.yaml \
@@ -234,6 +234,6 @@ helm install agent-relay charts/agent-relay -n agent-relay \
 The proof uses single-writer/single-replica components and makes no HA claim.
 Cloud SQL networking and database/user provisioning remain operator work.
 RelayHistory must use its own database and migration ledger; do not point it at
-the 96Bulls `hoopdb` database. The headless API supports both `/api/v1` and
+the Sessions Pipeline `hoopdb` database. The headless API supports both `/api/v1` and
 Desktop/Dashboard `/cloud/api/v1` routes, including secure browser login,
 workspace-scoped session search, and replay.

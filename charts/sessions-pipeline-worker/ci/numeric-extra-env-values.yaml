@@ -1,0 +1,27 @@
+existingSecret: sessions-pipeline
+locker:
+  endpoint: http://locker:9000
+tenant:
+  orgId: org_ci
+extraEnv:
+  - name: REDIS_PORT
+    # Intentionally numeric: the chart must coerce EnvVar values to strings.
+    value: 6378
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: redis
+        key: password
+  - name: OPTIONAL_FLAG
+    value: null
+components:
+  referee:
+    env:
+      - name: REFEREE_RETRY_LIMIT
+        value: 6379
+migrations:
+  databaseMode: selfhosted
+  supabaseShim: true
+  runtimeRole: sessions_pipeline_runtime
+  runtimeRoleLogin: true
+  functionBoundaryMode: global-default-revoke

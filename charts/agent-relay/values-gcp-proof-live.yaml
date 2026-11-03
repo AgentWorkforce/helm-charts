@@ -1,5 +1,5 @@
 # Existing proof-cluster overlay. Apply after values-gcp-proof.yaml.
-# RelayAuth and the Sessions pipeline already run in their own namespaces.
+# RelayAuth and the Sessions Pipeline already run in their own namespaces.
 # The exposed components inherit the proof profile's GKE load-balancer
 # NetworkPolicy rules.
 #

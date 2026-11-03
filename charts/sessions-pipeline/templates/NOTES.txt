@@ -1,0 +1,12 @@
+sessions-pipeline {{ .Chart.Version }} in namespace {{ .Release.Namespace }}
+
+One sessions-pipeline release per namespace: dependency objects use fixed names
+(hoopdb, locker, otel-collector) so the app charts can reference them.
+{{- if .Values.hoopdb.enabled }}
+
+HoopDb: CloudNativePG Cluster "hoopdb" (needs the CloudNativePG operator).
+  kubectl -n {{ .Release.Namespace }} get cluster.postgresql.cnpg.io hoopdb
+{{- end }}
+
+Progress:
+  kubectl -n {{ .Release.Namespace }} get jobs,deploy -l app.kubernetes.io/part-of=sessions-pipeline

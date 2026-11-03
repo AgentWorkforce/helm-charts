@@ -2,11 +2,11 @@
 
 This runbook covers the `agent-relay` `portable-single` suite:
 
-- PostgreSQL databases for 96Bulls (`hoopdb`), RelayHistory, and the control
+- PostgreSQL databases for the Sessions Pipeline (`hoopdb`), RelayHistory, and the control
   API;
 - Relaycast SQLite and uploaded files on its retained RWO PVC;
 - RelayAuth SQLite on its retained RWO PVC;
-- 96Bulls Locker objects in GCS.
+- Sessions Pipeline Locker objects in GCS.
 
 A recovery set is valid only when all artifacts use one recovery ID, carry a
 `COMPLETE` marker naming that ID, and are captured while application writes
@@ -300,8 +300,8 @@ the recorded schema, and the restored bucket already exists:
 
 - `relayhistory.migrations.enabled=false`;
 - `relay-cloud-api.migrations.enabled=false`;
-- `96bulls.worker.migrations.enabled=false`;
-- `96bulls.worker.lockerInit.enabled=false`;
+- `sessions-pipeline.worker.migrations.enabled=false`;
+- `sessions-pipeline.worker.lockerInit.enabled=false`;
 - `relaycast.backup.enabled=false`, so no backup CronJob writes during the
   drill;
 - `gkeIngress.enabled=false` and all leaf ingresses disabled;
@@ -322,7 +322,7 @@ relayhistory:
 relay-cloud-api:
   migrations:
     enabled: false
-96bulls:
+sessions-pipeline:
   worker:
     migrations:
       enabled: false

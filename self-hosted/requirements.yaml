@@ -14,7 +14,7 @@
 #   kind         requirement: must exist before install. option: a choice with a default.
 #   title, description
 #   chart        the chart (or list) whose values/templates the entry maps to
-#   values       chart value paths. Umbrella paths (chart 96bulls) under worker./alleyoop.
+#   values       chart value paths. Umbrella paths (chart sessions-pipeline) under worker./alleyoop.
 #                are the subcharts' paths. A trailing .* covers every path below it.
 #   env          env vars the charts render for it
 #   secrets      [{name, name_paths, keys: [{key, key_path}], note}]; name/key may be a
@@ -47,57 +47,57 @@ overview: |
   the pinned digests.
 
 profiles:
-  # The 96bulls umbrella profiles: charts/96bulls/profiles/*.yaml (shipped) and the
-  # stack shapes CI renders (charts/96bulls/ci/*-values.yaml, ci/96bulls-profiles/matrix.sh).
+  # The sessions-pipeline umbrella profiles: charts/sessions-pipeline/profiles/*.yaml (shipped) and the
+  # stack shapes CI renders (charts/sessions-pipeline/ci/*-values.yaml, ci/sessions-pipeline-profiles/matrix.sh).
   - id: selfhost-postgres
     title: New self-host install, in-cluster CloudNativePG HoopDb
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: profiles/selfhost-postgres.yaml
     services_image: ghcr
     db: { hoopdb: cnpg, db_mode: selfhosted, boundary: global-default-revoke }
-    install: helm install bulls agentworkforce/96bulls -f profiles/selfhost-postgres.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
+    install: helm install sessions-pipeline agentworkforce/sessions-pipeline -f profiles/selfhost-postgres.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
     summary: initdb creates the search Worker role; the runtime-role and function-default Jobs run as postgres before migrate on every deploy; in-cluster MinIO Locker.
   - id: migration
     title: Existing self-host release, in-cluster CloudNativePG HoopDb created before the search Worker role
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: profiles/migration.yaml
     services_image: ghcr
     db: { hoopdb: cnpg, db_mode: selfhosted, boundary: global-default-revoke }
-    install: helm upgrade bulls agentworkforce/96bulls -f profiles/migration.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
+    install: helm upgrade <existing release> agentworkforce/sessions-pipeline -f profiles/migration.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
     summary: selfhost-postgres plus searchWorkerRole.bootstrapJob, because initdb never runs again on an existing cluster.
   - id: external-selfhosted
     title: External operator-controlled plain Postgres (RDS, your own Postgres 17) dedicated to HoopDb
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: profiles/external-selfhosted.yaml
     services_image: ghcr
     db: { hoopdb: external, db_mode: selfhosted, boundary: global-default-revoke }
-    install: helm install bulls agentworkforce/96bulls -f profiles/external-selfhosted.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set worker.migrations.runtimeRole=<role> --set worker.migrations.runtimeRoleLogin=<true|false>
+    install: helm install sessions-pipeline agentworkforce/sessions-pipeline -f profiles/external-selfhosted.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set worker.migrations.runtimeRole=<role> --set worker.migrations.runtimeRoleLogin=<true|false>
     summary: No in-cluster SQL Jobs (the chart cannot exec into an external database); a superuser runs three bootstrap files first; migrate waits for the roles.
   - id: external-supabase
     title: External Supabase project as HoopDb (fail-closed)
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: profiles/external-supabase.yaml
     services_image: ghcr
     db: { hoopdb: external, db_mode: supabase, boundary: event-trigger }
-    install: helm install bulls agentworkforce/96bulls -f profiles/external-supabase.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set supabaseActivation.hold=false
+    install: helm install sessions-pipeline agentworkforce/sessions-pipeline -f profiles/external-supabase.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url> --set supabaseActivation.hold=false
     summary: Held by supabaseActivation.hold until the pinned image is confirmed as the production-Supabase pin and the live Supabase activation steps are approved. No shim, no wait-for-role, no privileged Jobs.
   - id: aws-cnpg
     title: AWS EKS proof stage, in-cluster CNPG HoopDb, S3 Locker via Pod Identity
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: ci/aws-cnpg-values.yaml
     services_image: ecr
     db: { hoopdb: cnpg, db_mode: selfhosted, boundary: global-default-revoke }
     summary: The stacks/aws/eks.ts shape with hoopdb backend cnpg (isolated proof and sandbox stages only). ECR image, S3 bucket through EKS Pod Identity, bundled OTel collector.
   - id: aws-supabase
     title: AWS EKS, external Supabase HoopDb, S3 Locker via Pod Identity
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: ci/pod-identity-values.yaml
     services_image: ghcr
     db: { hoopdb: external, db_mode: supabase, boundary: null }
     summary: The stacks/aws/eks.ts shape with hoopdb backend external. supabase mode with no function boundary set, so migrate fails closed (function_boundary_unproven) until one is selected and installed.
   - id: gcp-cloudsql
     title: GKE + Google Cloud SQL, GCS Locker via Workload Identity
-    chart: 96bulls
+    chart: sessions-pipeline
     values_file: ci/gcp-cloudsql-values.yaml
     services_image: ghcr
     db: { hoopdb: external, db_mode: cloudsql, boundary: global-default-revoke }
@@ -136,7 +136,7 @@ profiles:
     chart: agent-relay
     values_file: [values-gcp-proof.yaml, values-gcp-proof-live.yaml, ci/gcp-proof-values.yaml]
     install: helm install agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml --set relay-cloud-api.image.digest=sha256:<digest>
-    summary: Relaycast, RelayAuth, 96Bulls, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
+    summary: Relaycast, RelayAuth, Sessions Pipeline, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
   - id: relayfile
     title: Relayfile server
     chart: relayfile
@@ -172,7 +172,7 @@ profiles:
     values_file: [values-gcp-proof.yaml, values-gcp-proof-live.yaml, values-gcp-proof-durable-actors.yaml, values-gcp-proof-relayfile.yaml, ci/gcp-proof-values.yaml]
     install: helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml
     summary: components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer. All proof image digests are pinned in the overlays (no --set).
-# charts/96bulls/ci/*-values.yaml rendered by ci/96bulls-profiles/matrix.sh that are
+# charts/sessions-pipeline/ci/*-values.yaml rendered by ci/sessions-pipeline-profiles/matrix.sh that are
 # test variants of a profile above, not install shapes of their own.
 ci_only_values:
   - file: ci/default-values.yaml
@@ -183,7 +183,7 @@ ci_only_values:
     why: migration (existing cluster) with CI tenant values.
 
 compatibility:
-  # The services image every 96bulls profile, CI values file and chart default pins.
+  # The services image every sessions-pipeline profile, CI values file and chart default pins.
   services_images:
     source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
     migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
@@ -196,19 +196,19 @@ compatibility:
       digest: sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9
       built_by: publish-image-ecr run 41375747474
   releases:
-    - id: 96bulls-0.5.5
+    - id: sessions-pipeline-0.6.0
       status: unreleased
       current: true
-      charts: { 96bulls: 0.5.5, 96bulls-worker: 0.5.3, alleyoop: 0.3.7 }
+      charts: { sessions-pipeline: 0.6.0, sessions-pipeline-worker: 0.6.0, alleyoop: 0.3.8 }
       depends:
-        96bulls: { worker: 0.5.3, alleyoop: 0.3.7, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
+        sessions-pipeline: { worker: 0.6.0, alleyoop: 0.3.8, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
       images:
-        96bulls-worker: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
+        sessions-pipeline-worker: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
         alleyoop: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
       services:
         source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
         migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
-      notes: 'alleyoop 0.3.7 adds auth.allowInterimRelayAuthBearer (ALLOW_INTERIM_RELAYAUTH_BEARER, default false, environment=local only). Same services image and db combos as 0.5.4.'
+      notes: 'Rename: the umbrella and worker charts were published as 96bulls (last 0.5.4) and 96bulls-worker (last 0.5.3); they continue here as sessions-pipeline 0.6.0 and sessions-pipeline-worker 0.6.0 (96bulls 0.5.5 was never released). alleyoop 0.3.8 only relabels part-of. Includes alleyoop 0.3.7 auth.allowInterimRelayAuthBearer (ALLOW_INTERIM_RELAYAUTH_BEARER, default false, environment=local only). Same services image and db combos as 0.5.4. Upgrade path: helm upgrade <existing 96bulls release> agentworkforce/sessions-pipeline keeps the release, resource names and selectors (the worker alias is unchanged; only chart and part-of labels change). A standalone 96bulls-worker release keeps its selectors only with nameOverride: 96bulls-worker.'
       db_combos:
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
@@ -217,8 +217,8 @@ compatibility:
         - { db_mode: supabase, boundary: null, hoopdb: external, status: fails closed, profiles: [aws-supabase], notes: renders; migrate refuses with function_boundary_unproven }
         - { db_mode: local, boundary: null, hoopdb: any, status: dev only, profiles: [], notes: local stack only; never a self-host install }
       sources:
-        - "charts/96bulls/Chart.yaml:4"
-        - "ci/96bulls-profiles/matrix.sh:70"
+        - "charts/sessions-pipeline/Chart.yaml:4"
+        - "ci/sessions-pipeline-profiles/matrix.sh:70"
     - id: 96bulls-0.5.4
       status: shipped
       charts: { 96bulls: 0.5.4, 96bulls-worker: 0.5.3, alleyoop: 0.3.6 }
@@ -230,7 +230,7 @@ compatibility:
       services:
         source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
         migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
-      notes: 'allowInClusterHttp (ALLOW_IN_CLUSTER_HTTP, default false) for alleyoop and the worker, and the optional alleyoop auth.historyOrigin (RELAYHISTORY_ORIGIN). Same services image and db combos. 96bulls 0.5.3 / alleyoop 0.3.5 were reserved for the interim-bearer PR and never released; it shipped as 0.5.5 / 0.3.7. Superseded by 0.5.5.'
+      notes: 'allowInClusterHttp (ALLOW_IN_CLUSTER_HTTP, default false) for alleyoop and the worker, and the optional alleyoop auth.historyOrigin (RELAYHISTORY_ORIGIN). Same services image and db combos. 96bulls 0.5.3 / alleyoop 0.3.5 were reserved for the interim-bearer PR and never released; it shipped as 0.5.5 / 0.3.7. Superseded by sessions-pipeline 0.6.0.'
       db_combos:
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
@@ -239,8 +239,8 @@ compatibility:
         - { db_mode: supabase, boundary: null, hoopdb: external, status: fails closed, profiles: [aws-supabase], notes: renders; migrate refuses with function_boundary_unproven }
         - { db_mode: local, boundary: null, hoopdb: any, status: dev only, profiles: [], notes: local stack only; never a self-host install }
       sources:
-        - "charts/96bulls/Chart.yaml:4"
-        - "ci/96bulls-profiles/matrix.sh:70"
+        - "helm-charts@731b55e278d5:charts/96bulls/Chart.yaml:4"
+        - "helm-charts@731b55e278d5:ci/96bulls-profiles/matrix.sh:70"
     - id: 96bulls-0.5.2
       status: shipped
       charts: { 96bulls: 0.5.2, 96bulls-worker: 0.5.2, alleyoop: 0.3.4 }
@@ -261,8 +261,8 @@ compatibility:
         - { db_mode: supabase, boundary: null, hoopdb: external, status: fails closed, profiles: [aws-supabase], notes: renders; migrate refuses with function_boundary_unproven }
         - { db_mode: local, boundary: null, hoopdb: any, status: dev only, profiles: [], notes: local stack only; never a self-host install }
       sources:
-        - "charts/96bulls/Chart.yaml:4"
-        - "ci/96bulls-profiles/matrix.sh:70"
+        - "helm-charts@08ec5617643d:charts/96bulls/Chart.yaml:4"
+        - "helm-charts@08ec5617643d:ci/96bulls-profiles/matrix.sh:70"
     - id: 96bulls-0.5.1
       status: shipped
       charts: { 96bulls: 0.5.1, 96bulls-worker: 0.5.1, alleyoop: 0.3.3 }
@@ -282,23 +282,30 @@ compatibility:
         - { db_mode: supabase, boundary: event-trigger, hoopdb: external, status: held, profiles: [external-supabase], notes: supabaseActivation.hold; migrate refuses until the reviewed event trigger is installed and --activation-check passes }
         - { db_mode: supabase, boundary: null, hoopdb: external, status: fails closed, profiles: [aws-supabase], notes: renders; migrate refuses with function_boundary_unproven }
         - { db_mode: local, boundary: null, hoopdb: any, status: dev only, profiles: [], notes: local stack only; never a self-host install }
-    - id: 96bulls-next
+    - id: sessions-pipeline-next
       status: planned
-      charts: { 96bulls: next }
+      charts: { sessions-pipeline: next }
       services:
         source_commit: 475d503216a2e948a11ae3738c1973f2e2d40250
         migration_generation: 5ed119133e36047c942ac8c59410872c46a13d0ca0beb87c2df66bbd35a6d15f
       images_note: not built for the charts yet
-      notes: 'Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/96bulls-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped.'
+      notes: 'Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/sessions-pipeline-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped.'
       db_combos: []
-    - id: relaycast-0.3.0
+    - id: relaycast-0.3.1
       status: unreleased
       current: true
+      charts: { relaycast: 0.3.1 }
+      app_versions: { relaycast: 12.2.1-selfhost.1 }
+      images:
+        relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762 }
+      notes: 'README-only bump of 0.3.0 for the sessions-pipeline rename.'
+    - id: relaycast-0.3.0
+      status: shipped
       charts: { relaycast: 0.3.0 }
       app_versions: { relaycast: 12.2.1-selfhost.1 }
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762 }
-      notes: 'License-annotation bump of 0.2.0 (unreleased 0.2.1) plus runtime.backend=durable-actors (env contract v1): relaycast-actors-gateway and relaycast-actors-deployer images, digests supplied by the operator; the SQLite image above is unchanged and remains the default.'
+      notes: 'License-annotation bump of 0.2.0 (unreleased 0.2.1) plus runtime.backend=durable-actors (env contract v1): relaycast-actors-gateway and relaycast-actors-deployer images, digests supplied by the operator; the SQLite image above is unchanged and remains the default. Superseded by 0.3.1.'
 
     - id: relaycast-0.2.0
       status: shipped
@@ -336,18 +343,18 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.2.1
+    - id: agent-relay-0.3.0
       status: unreleased
       current: true
-      charts: { agent-relay: 0.2.1, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
+      charts: { agent-relay: 0.3.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.3.0, relayauth: 0.1.2, 96bulls: 0.5.5, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+        agent-relay: { relaycast: 0.3.1, relayauth: 0.1.2, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: 'relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf (relayhistory-cloud 74a6e526, erasure fix). The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe and RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.level defaults to errors (scrubbed error metadata and health only; it takes effect once the install is registered with installId, install key and endpoint, so a default render stays off and a partial registration fails), telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. 0.2.1 moves to 96bulls 0.5.5 (interim RelayAuth bearer stays off by default) and supersedes the never-released 0.2.0.'
+      notes: 'agent-relay 0.3.0 renames the Sessions subchart values key from 96bulls: to sessions-pipeline: (move your overrides; resource names under the umbrella are unchanged). relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:72a057c27edbec53412a2b3a665913810b5d9a95d8b6b818946f1892590147bf (relayhistory-cloud 74a6e526, erasure fix). The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe and RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.level defaults to errors (scrubbed error metadata and health only; it takes effect once the install is registered with installId, install key and endpoint, so a default render stays off and a partial registration fails), telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. 0.2.1 moved to 96bulls 0.5.5 (interim RelayAuth bearer stays off by default) and supersedes the never-released 0.2.0.'
     - id: relayfile-0.2.0
       status: unreleased
       current: true
@@ -396,15 +403,15 @@ compatibility:
 
 # Env the charts render that is neither a requirement nor an option.
 internal_env:
-  - { name: SERVICE, chart: [96bulls-worker, alleyoop], why: selects the entry point of the one services image }
-  - { name: OTEL_SERVICE_NAME, chart: [96bulls-worker, alleyoop], why: equals SERVICE }
-  - { name: TMPDIR, chart: [96bulls-worker, alleyoop], why: the writable emptyDir under a read-only root filesystem }
-  - { name: HOME, chart: [96bulls, 96bulls-worker, relayflows], why: a writable home under a read-only root filesystem }
-  - { name: ROLES, chart: 96bulls-worker, why: wait-for-role init container; derived from waitForRole.role and migrations.runtimeRole }
-  - { name: FUNCTION_DEFAULT, chart: 96bulls-worker, why: wait-for-role init container; derived from waitForRole.functionDefault }
-  - { name: INTERVAL, chart: 96bulls-worker, why: wait-for-role poll interval (waitForRole.intervalSeconds) }
-  - { name: CLUSTER, chart: 96bulls, why: privileged SQL Jobs; the CNPG cluster name (bootstrapJob.cluster) }
-  - { name: DATABASE, chart: 96bulls, why: privileged SQL Jobs; the HoopDb database (bootstrapJob.database) }
+  - { name: SERVICE, chart: [sessions-pipeline-worker, alleyoop], why: selects the entry point of the one services image }
+  - { name: OTEL_SERVICE_NAME, chart: [sessions-pipeline-worker, alleyoop], why: equals SERVICE }
+  - { name: TMPDIR, chart: [sessions-pipeline-worker, alleyoop], why: the writable emptyDir under a read-only root filesystem }
+  - { name: HOME, chart: [sessions-pipeline, sessions-pipeline-worker, relayflows], why: a writable home under a read-only root filesystem }
+  - { name: ROLES, chart: sessions-pipeline-worker, why: wait-for-role init container; derived from waitForRole.role and migrations.runtimeRole }
+  - { name: FUNCTION_DEFAULT, chart: sessions-pipeline-worker, why: wait-for-role init container; derived from waitForRole.functionDefault }
+  - { name: INTERVAL, chart: sessions-pipeline-worker, why: wait-for-role poll interval (waitForRole.intervalSeconds) }
+  - { name: CLUSTER, chart: sessions-pipeline, why: privileged SQL Jobs; the CNPG cluster name (bootstrapJob.cluster) }
+  - { name: DATABASE, chart: sessions-pipeline, why: privileged SQL Jobs; the HoopDb database (bootstrapJob.database) }
   - { name: INGEST_PORT, chart: alleyoop, why: from ingest.port }
   - { name: PORT, chart: [relaycast, relayauth], why: from server.port }
   - { name: RELAYCAST_DB_PATH, chart: relaycast, why: fixed /data/relaycast.db on the data PVC }
@@ -422,7 +429,7 @@ internal_env:
 
 entries:
   # =========================================================================
-  # 96bulls: cluster capabilities
+  # sessions-pipeline: cluster capabilities
   # =========================================================================
   - id: req.k8s.cnpg-operator
     kind: requirement
@@ -431,15 +438,15 @@ entries:
       The in-cluster HoopDb is a CloudNativePG Cluster (cnpg/cluster 0.9.0), so the
       CNPG operator and its CRDs must be installed before the release. Pinned
       operator values are in deps/cnpg-operator-values.yaml.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.enabled]
     profiles: [selfhost-postgres, migration, aws-cnpg]
     status: shipped
     provided_by: { default: operator, aws-cnpg: stack }
     verify: kubectl get crd clusters.postgresql.cnpg.io && kubectl get deploy -A -l app.kubernetes.io/name=cloudnative-pg
     sources:
-      - "charts/96bulls/Chart.yaml:12"
-      - "charts/96bulls/values.yaml:85"
+      - "charts/sessions-pipeline/Chart.yaml:12"
+      - "charts/sessions-pipeline/values.yaml:85"
       - "deps/pins.txt:4"
       - "sessions-pipeline@7d7229b:stacks/aws/hardening.ts:375"
 
@@ -449,15 +456,15 @@ entries:
     description: |
       The CNPG HoopDb claims hoopdb.cluster.storage.size (10Gi) and the MinIO Locker
       locker.persistence.size (20Gi) through the default StorageClass.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.cluster.storage.size, locker.persistence.size]
     profiles: [selfhost-postgres, migration, aws-cnpg]
     status: shipped
     provided_by: { default: operator, aws-cnpg: stack }
     verify: kubectl get storageclass (one marked default), then kubectl get pvc -n <ns> all Bound
     sources:
-      - "charts/96bulls/values.yaml:102"
-      - "charts/96bulls/values.yaml:155"
+      - "charts/sessions-pipeline/values.yaml:102"
+      - "charts/sessions-pipeline/values.yaml:155"
 
   - id: req.k8s.workload-identity
     kind: requirement
@@ -470,7 +477,7 @@ entries:
       workloads start (GKE: Workload Identity bindings via serviceAccount.annotations).
       The role needs the bucket, and bucket creation plus versioning unless
       lockerInit is disabled.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.locker.credentials.mode, alleyoop.locker.credentials.mode, worker.serviceAccount.annotations, alleyoop.serviceAccount.annotations]
     profiles: [aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -482,8 +489,8 @@ entries:
     verify: aws eks list-pod-identity-associations --cluster-name <c> (one per worker/alleyoop ServiceAccount); then the locker-init Job (or a worker) reaches the bucket
     sources:
       - "README.md:152"
-      - "charts/96bulls-worker/values.yaml:60"
-      - "charts/96bulls-worker/templates/_env.tpl:77"
+      - "charts/sessions-pipeline-worker/values.yaml:60"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:77"
 
   - id: req.k8s.external-secrets-operator
     kind: requirement
@@ -492,19 +499,19 @@ entries:
       externalSecrets.enabled renders an ExternalSecret (external-secrets.io/v1) whose
       target is existingSecret. The ESO CRDs and the named secretStoreRef must exist,
       and every consumed key must be mapped in externalSecrets.data.
-    chart: [96bulls-worker, alleyoop]
-    values: ["96bulls-worker:externalSecrets.*", "alleyoop:externalSecrets.*"]
+    chart: [sessions-pipeline-worker, alleyoop]
+    values: ["sessions-pipeline-worker:externalSecrets.*", "alleyoop:externalSecrets.*"]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: operator
     verify: kubectl get crd externalsecrets.external-secrets.io && kubectl get clustersecretstore <name>; the ExternalSecret reports Ready
     sources:
-      - "charts/96bulls-worker/values.yaml:248"
-      - "charts/96bulls-worker/templates/externalsecret.yaml:20"
+      - "charts/sessions-pipeline-worker/values.yaml:248"
+      - "charts/sessions-pipeline-worker/templates/externalsecret.yaml:20"
       - "charts/alleyoop/templates/externalsecret.yaml:11"
 
   # =========================================================================
-  # 96bulls: Secrets
+  # sessions-pipeline: Secrets
   # =========================================================================
   - id: req.secret.image-pull
     kind: requirement
@@ -514,7 +521,7 @@ entries:
       docker-registry Secret and list it in the umbrella's shared imagePullSecrets
       (worker and alleyoop; the privileged SQL Jobs reuse worker.imagePullSecrets).
       The ECR path (EKS node role) needs none.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.imagePullSecrets, alleyoop.imagePullSecrets]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -525,8 +532,8 @@ entries:
     verify: kubectl get secret <pull secret> -o jsonpath='{.type}' is kubernetes.io/dockerconfigjson; pods are not ImagePullBackOff
     sources:
       - "README.md:128"
-      - "charts/96bulls/values.yaml:24"
-      - "charts/96bulls/templates/_privileged-sql-job.tpl:92"
+      - "charts/sessions-pipeline/values.yaml:24"
+      - "charts/sessions-pipeline/templates/_privileged-sql-job.tpl:92"
 
   - id: req.secret.locker-credentials
     kind: requirement
@@ -535,7 +542,7 @@ entries:
       In secret mode the workers and alleyoop read the Locker access key pair from
       existingSecret, and the bundled MinIO reads its root credential from the same
       Secret (locker.existingSecret). Not used with locker.credentials.mode=podIdentity.
-    chart: 96bulls
+    chart: sessions-pipeline
     values:
       - worker.existingSecret
       - alleyoop.existingSecret
@@ -549,24 +556,24 @@ entries:
     status: shipped
     provided_by: operator
     secrets:
-      - name: 96bulls-locker
+      - name: sessions-pipeline-locker
         name_paths: [worker.existingSecret]
         keys:
           - { key: rootUser, key_path: worker.secretKeys.lockerAccessKeyId }
           - { key: rootPassword, key_path: worker.secretKeys.lockerSecretAccessKey }
-      - name: 96bulls-locker
+      - name: sessions-pipeline-locker
         name_paths: [alleyoop.existingSecret]
         keys:
           - { key: rootUser, key_path: alleyoop.secretKeys.lockerAccessKeyId }
           - { key: rootPassword, key_path: alleyoop.secretKeys.lockerSecretAccessKey }
-      - name: 96bulls-locker
+      - name: sessions-pipeline-locker
         name_paths: [locker.existingSecret]
         note: the bundled MinIO's root credential
-    verify: kubectl get secret 96bulls-locker -o jsonpath='{.data}' has rootUser and rootPassword
+    verify: kubectl get secret sessions-pipeline-locker -o jsonpath='{.data}' has rootUser and rootPassword
     sources:
-      - "charts/96bulls/values.yaml:3"
-      - "charts/96bulls/values.yaml:28"
-      - "charts/96bulls-worker/templates/_env.tpl:78"
+      - "charts/sessions-pipeline/values.yaml:3"
+      - "charts/sessions-pipeline/values.yaml:28"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:78"
       - "charts/alleyoop/templates/_env.tpl:66"
 
   - id: req.secret.summary-master-keys
@@ -578,23 +585,23 @@ entries:
       a Secret and is projected as a read-only file into Bob Costas only
       (SUMMARY_MASTER_KEYS_FILE). summaryEncryption.existingSecret empty follows
       worker.existingSecret; pod-identity installs with no shared Secret must set it.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.summaryEncryption.existingSecret, worker.summaryEncryption.key, worker.summaryEncryption.mountPath, worker.summaryEncryption.fileName]
     env: [SUMMARY_MASTER_KEYS_FILE, SUMMARY_MASTER_KEYS]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: { default: operator, aws-cnpg: stack, aws-supabase: stack, gcp-cloudsql: stack }
     secrets:
-      - name: { default: 96bulls-locker, aws-cnpg: 96bulls-runtime, aws-supabase: 96bulls-summary, gcp-cloudsql: 96bulls-gcp }
+      - name: { default: sessions-pipeline-locker, aws-cnpg: 96bulls-runtime, aws-supabase: sessions-pipeline-summary, gcp-cloudsql: 96bulls-gcp }
         name_paths: [worker.summaryEncryption.existingSecret, worker.existingSecret]
         keys:
           - { key: SUMMARY_MASTER_KEYS, key_path: worker.summaryEncryption.key }
-    verify: kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/96bulls/summary-master-keys; the Secret key parses as <id>:<64 hex>
+    verify: kubectl exec deploy/<release>-worker-bob-costas -- test -r /var/run/secrets/sessions-pipeline/summary-master-keys; the Secret key parses as <id>:<64 hex>
     sources:
       - "README.md:143"
-      - "charts/96bulls-worker/values.yaml:45"
-      - "charts/96bulls-worker/templates/_env.tpl:102"
-      - "charts/96bulls-worker/templates/_env.tpl:30"
+      - "charts/sessions-pipeline-worker/values.yaml:45"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:102"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:30"
       - "sessions-pipeline@7d7229b:src/shared/keyring.ts:17"
 
   - id: req.secret.hoopdb-url
@@ -606,30 +613,30 @@ entries:
       Secret CloudNativePG generates (hoopdb-app, key uri): nothing to create. With an
       external database the operator (or the stack) creates it; for supabase it is the
       migration role's connection string unless migrations.hoopdb separates them.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.hoopdb.existingSecret, worker.hoopdb.key, worker.secretKeys.hoopdbUrl, alleyoop.hoopdb.existingSecret, alleyoop.hoopdb.key, alleyoop.secretKeys.hoopdbUrl]
     env: [HOOPDB_URL]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: { default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: stack, gcp-cloudsql: stack }
     secrets:
-      - name: { default: hoopdb-app, external-selfhosted: 96bulls-hoopdb, external-supabase: 96bulls-hoopdb, gcp-cloudsql: 96bulls-gcp }
+      - name: { default: hoopdb-app, external-selfhosted: sessions-pipeline-hoopdb, external-supabase: sessions-pipeline-hoopdb, gcp-cloudsql: 96bulls-gcp }
         name_paths: [worker.hoopdb.existingSecret, worker.existingSecret]
         keys:
           - { key: { default: uri, external-selfhosted: HOOPDB_URL, external-supabase: HOOPDB_URL, gcp-cloudsql: HOOPDB_URL }, key_path: [worker.hoopdb.key, worker.secretKeys.hoopdbUrl] }
-      - name: { default: hoopdb-app, external-selfhosted: 96bulls-hoopdb, external-supabase: 96bulls-hoopdb, gcp-cloudsql: 96bulls-gcp }
+      - name: { default: hoopdb-app, external-selfhosted: sessions-pipeline-hoopdb, external-supabase: sessions-pipeline-hoopdb, gcp-cloudsql: 96bulls-gcp }
         name_paths: [alleyoop.hoopdb.existingSecret, alleyoop.existingSecret]
         keys:
           - { key: { default: uri, external-selfhosted: HOOPDB_URL, external-supabase: HOOPDB_URL, gcp-cloudsql: HOOPDB_URL }, key_path: [alleyoop.hoopdb.key, alleyoop.secretKeys.hoopdbUrl] }
     verify:
       default: kubectl get secret hoopdb-app -o jsonpath='{.data.uri}' is non-empty once the CNPG Cluster is ready
-      external-selfhosted: kubectl get secret 96bulls-hoopdb -o jsonpath='{.data.HOOPDB_URL}' | base64 -d | psql -X -c 'select 1'
-      external-supabase: kubectl get secret 96bulls-hoopdb -o jsonpath='{.data.HOOPDB_URL}' | base64 -d | psql -X -c 'select current_user'
+      external-selfhosted: kubectl get secret sessions-pipeline-hoopdb -o jsonpath='{.data.HOOPDB_URL}' | base64 -d | psql -X -c 'select 1'
+      external-supabase: kubectl get secret sessions-pipeline-hoopdb -o jsonpath='{.data.HOOPDB_URL}' | base64 -d | psql -X -c 'select current_user'
     sources:
-      - "charts/96bulls/values.yaml:39"
-      - "charts/96bulls/profiles/external-selfhosted.yaml:11"
-      - "charts/96bulls/profiles/external-supabase.yaml:24"
-      - "charts/96bulls-worker/templates/_env.tpl:162"
+      - "charts/sessions-pipeline/values.yaml:39"
+      - "charts/sessions-pipeline/profiles/external-selfhosted.yaml:11"
+      - "charts/sessions-pipeline/profiles/external-supabase.yaml:24"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:162"
       - "charts/alleyoop/templates/_env.tpl:54"
 
   - id: req.secret.hoopdb-migration-url
@@ -639,7 +646,7 @@ entries:
       On Cloud SQL the services connect as the least-privilege runtime role and only
       the migrate Job (and its wait-for-role) connects as the migration owner, from
       migrations.hoopdb.existingSecret/key.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.hoopdb.existingSecret, worker.migrations.hoopdb.key]
     profiles: [gcp-cloudsql]
     status: shipped
@@ -651,18 +658,18 @@ entries:
           - { key: HOOPDB_MIGRATION_URL, key_path: worker.migrations.hoopdb.key }
     verify: kubectl get secret 96bulls-gcp -o jsonpath='{.data.HOOPDB_MIGRATION_URL}' connects as the migration owner (select current_user)
     sources:
-      - "charts/96bulls/ci/gcp-cloudsql-values.yaml:33"
-      - "charts/96bulls-worker/values.yaml:93"
+      - "charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml:33"
+      - "charts/sessions-pipeline-worker/values.yaml:93"
       - "sessions-pipeline@7d7229b:stacks/gcp/config.ts:1002"
 
   # =========================================================================
-  # 96bulls: tenant and auth
+  # sessions-pipeline: tenant and auth
   # =========================================================================
-  - id: req.96bulls.tenant-org-id
+  - id: req.sessions-pipeline.tenant-org-id
     kind: requirement
     title: Agent Relay org id (TENANT_ORG_ID)
     description: The org this install ingests for; every profile leaves it to the operator and the render fails without it.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [global.tenant.orgId, worker.tenant.orgId, alleyoop.tenant.orgId]
     env: [TENANT_ORG_ID]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -670,17 +677,17 @@ entries:
     provided_by: operator
     verify: helm template renders (it fails with "tenant.orgId (or global.tenant.orgId) is required" otherwise)
     sources:
-      - "charts/96bulls/values.yaml:16"
-      - "charts/96bulls-worker/templates/_env.tpl:20"
+      - "charts/sessions-pipeline/values.yaml:16"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:20"
 
-  - id: req.96bulls.relayauth-jwks
+  - id: req.sessions-pipeline.relayauth-jwks
     kind: requirement
     title: A RelayAuth JWKS URL reachable from alleyoop
     description: |
       alleyoop verifies courier tokens against RelayAuth's JWKS (RELAYAUTH_JWKS_URL).
       Point it at a RelayAuth install (the relayauth profile, with its JWKS ingress or
       in-cluster Service) or the hosted issuer. Every profile leaves it to the operator.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [alleyoop.auth.jwksUrl]
     env: [RELAYAUTH_JWKS_URL]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -688,7 +695,7 @@ entries:
     provided_by: operator
     verify: kubectl run -it --rm curl --image=curlimages/curl -- curl -fsS <jwksUrl> returns {"keys":[...]}
     sources:
-      - "charts/96bulls/values.yaml:81"
+      - "charts/sessions-pipeline/values.yaml:81"
       - "charts/alleyoop/templates/deployment.yaml:46"
       - "sessions-pipeline@7d7229b:src/alleyoop/ingest.ts:118"
 
@@ -699,7 +706,7 @@ entries:
       jwksUrl (RelayAuth) for every real install; localJwks reads a JWKS document from
       existingSecret (secretKeys.jwksJson) for kind/local only. Exactly one is set.
       issuer/audience are the expected token claims.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [alleyoop.auth.jwksUrl, alleyoop.auth.localJwks, alleyoop.auth.issuer, alleyoop.auth.audience, alleyoop.secretKeys.jwksJson]
     env: [RELAYAUTH_JWKS_URL, JWKS_JSON, AUTH_ISSUER, AUTH_AUDIENCE]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -720,7 +727,7 @@ entries:
       - "charts/alleyoop/templates/_env.tpl:18"
       - "charts/alleyoop/templates/deployment.yaml:49"
 
-  - id: opt.96bulls.in-cluster-http
+  - id: opt.sessions-pipeline.in-cluster-http
     kind: option
     title: Plain http to in-cluster Service FQDNs
     description: |
@@ -732,7 +739,7 @@ entries:
       example alleyoop.auth.jwksUrl=http://relayauth.relayauth.svc:8787/.well-known/jwks.json.
       LOCKER_ENDPOINT and the OTLP endpoint are outside this policy, so the
       bundled MinIO at http://locker:9000 works with the default false.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [alleyoop.allowInClusterHttp, worker.allowInClusterHttp]
     env: [ALLOW_IN_CLUSTER_HTTP]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -746,7 +753,7 @@ entries:
     sources:
       - "charts/alleyoop/values.yaml"
       - "charts/alleyoop/templates/deployment.yaml"
-      - "charts/96bulls-worker/templates/_env.tpl"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl"
 
   - id: opt.alleyoop.history-origin
     kind: option
@@ -756,7 +763,7 @@ entries:
       bare origin expected as the History assertion audience. It must be
       byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Unset, nothing is
       rendered (the services default applies).
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [alleyoop.auth.historyOrigin]
     env: [RELAYHISTORY_ORIGIN]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -781,7 +788,7 @@ entries:
       assertions. true accepts legacy RelayAuth bearer tokens and is allowed
       only with environment=local; any other environment, a non-boolean value,
       or setting the variable through extraEnv or ingest.env fails the render.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [alleyoop.auth.allowInterimRelayAuthBearer]
     env: [ALLOW_INTERIM_RELAYAUTH_BEARER]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -798,7 +805,7 @@ entries:
       - "charts/alleyoop/templates/deployment.yaml"
 
   # =========================================================================
-  # 96bulls: database
+  # sessions-pipeline: database
   # =========================================================================
   - id: req.db.postgres-17-extensions
     kind: requirement
@@ -810,15 +817,15 @@ entries:
       them. The chart's in-cluster HoopDb uses the CNPG standard Postgres 17 image and
       also creates vector and pg_trgm at initdb; the chart documents vector for
       external databases too, though the migrations at 7d7229b do not use it.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.cluster.imageName, hoopdb.cluster.initdb.postInitApplicationSQL]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: { default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: stack }
     verify: psql "$HOOPDB_URL" -Atc "select name from pg_available_extensions where name in ('pg_trgm','btree_gin','vector')" lists all three; server_version_num >= 170000
     sources:
-      - "charts/96bulls/values.yaml:99"
-      - "charts/96bulls/values.yaml:119"
+      - "charts/sessions-pipeline/values.yaml:99"
+      - "charts/sessions-pipeline/values.yaml:119"
       - "docs/self-hosted-reference-architecture.md:75"
       - "sessions-pipeline@7d7229b:supabase/migrations/20261030010000_session_directory.sql:9"
       - "sessions-pipeline@7d7229b:supabase/migrations/20261030020000_session_directory_short_summary.sql:177"
@@ -830,15 +837,15 @@ entries:
       global-default-revoke sets the global function default of the migration owner
       and every superuser in the HoopDb database; that is safe only because the
       database holds nothing else. The in-cluster HoopDb is dedicated by construction.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.cluster.initdb.database, hoopdb.cluster.initdb.owner]
     profiles: [selfhost-postgres, migration, aws-cnpg, external-selfhosted, gcp-cloudsql]
     status: shipped
     provided_by: { default: chart, external-selfhosted: operator, gcp-cloudsql: stack }
     verify: psql "$HOOPDB_URL" -Atc "select nspname from pg_namespace where nspname not like 'pg_%' and nspname <> 'information_schema'" shows only HoopDb schemas
     sources:
-      - "charts/96bulls/profiles/external-selfhosted.yaml:2"
-      - "charts/96bulls/values.yaml:275"
+      - "charts/sessions-pipeline/profiles/external-selfhosted.yaml:2"
+      - "charts/sessions-pipeline/values.yaml:275"
 
   - id: req.db.compat-roles
     kind: requirement
@@ -848,15 +855,15 @@ entries:
       superuser; on plain external Postgres the migrator's shim creates them
       (HOOPDB_SUPABASE_SHIM=true); on Cloud SQL the operator's
       cloudsql_migration_roles.sql does (shim off); Supabase has them natively.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.cluster.initdb.postInitApplicationSQL, worker.migrations.supabaseShim]
     profiles: [selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: { default: chart, external-selfhosted: migrator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: operator }
     verify: psql "$HOOPDB_URL" -Atc "select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')" is 3
     sources:
-      - "charts/96bulls/values.yaml:122"
-      - "charts/96bulls/ci/gcp-cloudsql-values.yaml:5"
+      - "charts/sessions-pipeline/values.yaml:122"
+      - "charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml:5"
       - "sessions-pipeline@7d7229b:supabase/bootstrap/cloudsql_migration_roles.sql:1"
 
   - id: req.db.search-worker-role
@@ -868,7 +875,7 @@ entries:
       (phase 1) and migrate's wait-for-role waits for it. New CNPG clusters get it from
       initdb; existing CNPG clusters from searchWorkerRole.bootstrapJob; external
       databases from the operator (Supabase uses the transactional _supabase wrapper).
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.cluster.initdb.postInitApplicationSQL, searchWorkerRole.bootstrapJob.enabled, searchWorkerRole.bootstrapJob.sqlPath, worker.migrations.waitForRole.role]
     profiles: [selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -882,42 +889,42 @@ entries:
       external-supabase: run supabase/bootstrap/session_directory_search_worker_supabase.sql as postgres; then the same query
       gcp-cloudsql: run supabase/bootstrap/session_directory_search_worker.sql as the migration owner; then the same query
     sources:
-      - "charts/96bulls/values.yaml:131"
-      - "charts/96bulls/values.yaml:218"
-      - "charts/96bulls/templates/search-worker-role-bootstrap.yaml:7"
+      - "charts/sessions-pipeline/values.yaml:131"
+      - "charts/sessions-pipeline/values.yaml:218"
+      - "charts/sessions-pipeline/templates/search-worker-role-bootstrap.yaml:7"
       - "README.md:259"
       - "sessions-pipeline@7d7229b:supabase/bootstrap/session_directory_search_worker.sql:1"
       - "sessions-pipeline@7d7229b:runbooks/session-directory-search-worker-bootstrap.md:1"
 
   - id: req.db.runtime-role
     kind: requirement
-    title: The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. bulls96_runtime)
+    title: The dedicated HoopDb runtime role (HOOPDB_RUNTIME_ROLE, e.g. sessions_pipeline_runtime)
     description: |
       The role the services connect as: never the migration owner or the search
       Worker; NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS, LOGIN as
       configured, CONNECT granted, TEMPORARY revoked from PUBLIC (Supabase keeps its
       PUBLIC TEMPORARY baseline). On CNPG runtimeRole.bootstrapJob creates or verifies
       it; external databases pre-provision it (hoopdb_runtime_role.sql, or the
-      _supabase wrapper with -v runtime_role=bulls96_runtime -v runtime_login=true).
+      _supabase wrapper with -v runtime_role=sessions_pipeline_runtime -v runtime_login=true).
       Never the drifted legacy relayhistory_runtime.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.runtimeRole, worker.migrations.runtimeRoleLogin, runtimeRole.bootstrapJob.enabled, runtimeRole.bootstrapJob.sqlPath]
     env: [HOOPDB_RUNTIME_ROLE, HOOPDB_RUNTIME_ROLE_LOGIN]
     profiles: [selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: { default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: operator, gcp-cloudsql: operator }
     profile_values:
-      selfhost-postgres: { worker.migrations.runtimeRole: bulls96_runtime, worker.migrations.runtimeRoleLogin: true, runtimeRole.bootstrapJob.enabled: true }
-      migration: { worker.migrations.runtimeRole: bulls96_runtime, runtimeRole.bootstrapJob.enabled: true }
+      selfhost-postgres: { worker.migrations.runtimeRole: sessions_pipeline_runtime, worker.migrations.runtimeRoleLogin: true, runtimeRole.bootstrapJob.enabled: true }
+      migration: { worker.migrations.runtimeRole: sessions_pipeline_runtime, runtimeRole.bootstrapJob.enabled: true }
       external-selfhosted: { worker.migrations.runtimeRole: "", worker.migrations.runtimeRoleLogin: null }
-      external-supabase: { worker.migrations.runtimeRole: bulls96_runtime, worker.migrations.runtimeRoleLogin: true }
-      gcp-cloudsql: { worker.migrations.runtimeRole: bulls96_runtime }
-    verify: psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='bulls96_runtime'" is f|f|f|f|f|t; migrate refuses otherwise
+      external-supabase: { worker.migrations.runtimeRole: sessions_pipeline_runtime, worker.migrations.runtimeRoleLogin: true }
+      gcp-cloudsql: { worker.migrations.runtimeRole: sessions_pipeline_runtime }
+    verify: psql "$HOOPDB_URL" -Atc "select rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolcanlogin from pg_roles where rolname='sessions_pipeline_runtime'" is f|f|f|f|f|t; migrate refuses otherwise
     sources:
-      - "charts/96bulls/templates/hoopdb-runtime-role-bootstrap.yaml:17"
-      - "charts/96bulls/values.yaml:250"
-      - "charts/96bulls/profiles/external-supabase.yaml:29"
-      - "charts/96bulls-worker/templates/_env.tpl:202"
+      - "charts/sessions-pipeline/templates/hoopdb-runtime-role-bootstrap.yaml:17"
+      - "charts/sessions-pipeline/values.yaml:250"
+      - "charts/sessions-pipeline/profiles/external-supabase.yaml:29"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:202"
       - "sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_runtime_role.sql:1"
       - "sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:150"
 
@@ -932,10 +939,10 @@ entries:
       Postgres runs the same file as a superuser; Cloud SQL runs
       cloudsql_owner_function_default_revoke.sql as the migration owner.
       event-trigger (Supabase only): hoopdb_sessions_function_boundary_supabase.sql as
-      postgres (-v runtime_role=bulls96_runtime), then migrate.ts --activation-check
+      postgres (-v runtime_role=sessions_pipeline_runtime), then migrate.ts --activation-check
       must report event_trigger.verified true. Never run the default-revoke file on
       Supabase.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [functionDefaultRevoke.bootstrapJob.enabled, functionDefaultRevoke.bootstrapJob.sqlPath, worker.migrations.waitForRole.functionDefault]
     profiles: [selfhost-postgres, migration, aws-cnpg, external-selfhosted, external-supabase, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -949,16 +956,16 @@ entries:
       external-supabase: migrate.ts --activation-check with HOOPDB_DB_MODE=supabase HOOPDB_FUNCTION_BOUNDARY_MODE=event-trigger reports event_trigger.verified true
       aws-supabase: no boundary is selected in this shape; migrate refuses with function_boundary_unproven until one is
     sources:
-      - "charts/96bulls/templates/hoopdb-function-default-revoke.yaml:17"
-      - "charts/96bulls/values.yaml:283"
-      - "charts/96bulls/profiles/external-supabase.yaml:38"
-      - "charts/96bulls/profiles/external-selfhosted.yaml:17"
+      - "charts/sessions-pipeline/templates/hoopdb-function-default-revoke.yaml:17"
+      - "charts/sessions-pipeline/values.yaml:283"
+      - "charts/sessions-pipeline/profiles/external-supabase.yaml:38"
+      - "charts/sessions-pipeline/profiles/external-selfhosted.yaml:17"
       - "sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_function_default_revoke.sql:1"
       - "sessions-pipeline@7d7229b:supabase/bootstrap/hoopdb_sessions_function_boundary_supabase.sql:1"
       - "sessions-pipeline@7d7229b:supabase/bootstrap/cloudsql_owner_function_default_revoke.sql:1"
       - "sessions-pipeline@7d7229b:runbooks/session-directory-search-worker-bootstrap.md:374"
 
-  - id: req.96bulls.privileged-sql-image
+  - id: req.sessions-pipeline.privileged-sql-image
     kind: requirement
     title: The services image digest for the privileged SQL Jobs
     description: |
@@ -966,7 +973,7 @@ entries:
       file from the services image by digest (privilegedSql.sqlImage, or a Job's own
       sqlImage). There is no chart default: every enabled Job fails to render
       without it. The profiles pin the same digest as the workloads.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [privilegedSql.sqlImage.repository, privilegedSql.sqlImage.digest, searchWorkerRole.bootstrapJob.sqlImage.*, runtimeRole.bootstrapJob.sqlImage.*, functionDefaultRevoke.bootstrapJob.sqlImage.*]
     profiles: [selfhost-postgres, migration, aws-cnpg]
     status: shipped
@@ -975,29 +982,29 @@ entries:
       selfhost-postgres: { privilegedSql.sqlImage.digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2" }
       migration: { privilegedSql.sqlImage.digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2" }
       aws-cnpg: { privilegedSql.sqlImage.digest: "sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9" }
-    verify: helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/96bulls-profiles/matrix.sh asserts the image
+    verify: helm template renders (it fails with "sqlImage.repository and .digest are required" otherwise); ci/sessions-pipeline-profiles/matrix.sh asserts the image
     sources:
-      - "charts/96bulls/values.yaml:194"
-      - "charts/96bulls/templates/_privileged-sql-job.tpl:16"
+      - "charts/sessions-pipeline/values.yaml:194"
+      - "charts/sessions-pipeline/templates/_privileged-sql-job.tpl:16"
 
-  - id: req.96bulls.role-verify
+  - id: req.sessions-pipeline.role-verify
     kind: requirement
     title: migrate always runs the phase 2 role verify (HOOPDB_ROLE_VERIFY=true)
     description: |
       Readiness needs the PASS marker for the image's migration generation that only
       a verifying migrate writes, so the chart always sets it and refuses an override
       via extraEnv or component env.
-    chart: 96bulls
+    chart: sessions-pipeline
     env: [HOOPDB_ROLE_VERIFY]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
     provided_by: chart
     verify: kubectl get job -l app.kubernetes.io/component=hoopdb-migrate -o yaml shows HOOPDB_ROLE_VERIFY "true"; workloads go ready after migrate
     sources:
-      - "charts/96bulls-worker/templates/_jobspec.tpl:82"
-      - "charts/96bulls-worker/templates/_env.tpl:23"
+      - "charts/sessions-pipeline-worker/templates/_jobspec.tpl:82"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:23"
 
-  - id: opt.96bulls.hoopdb-backend
+  - id: opt.sessions-pipeline.hoopdb-backend
     kind: option
     title: HoopDb backend
     description: |
@@ -1005,7 +1012,7 @@ entries:
       selfhosted mode only). external points worker.hoopdb and alleyoop.hoopdb at a
       database you run (RDS/your Postgres, Cloud SQL, Supabase). The AWS stack calls
       these eks.hoopdb.backend cnpg|external (cnpg is proof/sandbox stages only there).
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [hoopdb.enabled]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -1017,10 +1024,10 @@ entries:
       - { value: external, note: "hoopdb.enabled=false; set worker.hoopdb/alleyoop.hoopdb" }
     verify: kubectl get cluster.postgresql.cnpg.io hoopdb exists exactly when cnpg
     sources:
-      - "charts/96bulls/values.yaml:90"
+      - "charts/sessions-pipeline/values.yaml:90"
       - "sessions-pipeline@7d7229b:stacks/aws/hardening.ts:360"
 
-  - id: opt.96bulls.db-mode
+  - id: opt.sessions-pipeline.db-mode
     kind: option
     title: Migrator database mode (HOOPDB_DB_MODE)
     description: |
@@ -1029,7 +1036,7 @@ entries:
       operator-controlled plain Postgres; cloudsql for Google Cloud SQL; supabase for a
       Supabase project; local for the dev stack only. The in-cluster HoopDb requires
       selfhosted.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.databaseMode]
     env: [HOOPDB_DB_MODE]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1042,14 +1049,14 @@ entries:
       - { value: cloudsql }
       - { value: supabase }
       - { value: local, note: dev stack only }
-    verify: the migrate Job env has exactly one HOOPDB_DB_MODE (ci/96bulls-profiles/matrix.sh asserts the profile env)
+    verify: the migrate Job env has exactly one HOOPDB_DB_MODE (ci/sessions-pipeline-profiles/matrix.sh asserts the profile env)
     sources:
-      - "charts/96bulls-worker/values.yaml:106"
-      - "charts/96bulls-worker/templates/_env.tpl:193"
+      - "charts/sessions-pipeline-worker/values.yaml:106"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:193"
       - "README.md:167"
       - "sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:117"
 
-  - id: opt.96bulls.function-boundary-mode
+  - id: opt.sessions-pipeline.function-boundary-mode
     kind: option
     title: Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)
     description: |
@@ -1058,7 +1065,7 @@ entries:
       (supabase only; refused elsewhere by the chart and the migrator). Optional in
       supabase mode, where unset fails closed. The old name
       HOOPDB_FUNCTION_BOUNDARY_APPROVED is refused, including via extraEnv.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.functionBoundaryMode]
     env: [HOOPDB_FUNCTION_BOUNDARY_MODE, HOOPDB_FUNCTION_BOUNDARY_APPROVED]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1071,18 +1078,18 @@ entries:
       - { value: event-trigger, note: supabase only }
     verify: helm template refuses event-trigger outside supabase ("supported only in supabase mode")
     sources:
-      - "charts/96bulls-worker/values.yaml:125"
-      - "charts/96bulls-worker/templates/_env.tpl:207"
+      - "charts/sessions-pipeline-worker/values.yaml:125"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:207"
       - "sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:173"
 
-  - id: opt.96bulls.supabase-shim
+  - id: opt.sessions-pipeline.supabase-shim
     kind: option
     title: Plain-Postgres role shim (HOOPDB_SUPABASE_SHIM)
     description: |
       true makes the migrator create the Supabase compatibility roles on plain
       Postgres. Required (true or false) in local, selfhosted and cloudsql (Cloud SQL:
       false); in supabase mode it must be unset or false and renders "false".
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.supabaseShim]
     env: [HOOPDB_SUPABASE_SHIM]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1095,18 +1102,18 @@ entries:
       - { value: false }
     verify: helm template refuses supabaseShim=true in supabase mode
     sources:
-      - "charts/96bulls-worker/values.yaml:115"
-      - "charts/96bulls-worker/templates/_env.tpl:198"
+      - "charts/sessions-pipeline-worker/values.yaml:115"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:198"
       - "sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:131"
 
-  - id: opt.96bulls.role-bootstrap
+  - id: opt.sessions-pipeline.role-bootstrap
     kind: option
     title: Migrator role bootstrap (HOOPDB_ROLE_BOOTSTRAP)
     description: |
       Optional; the migrator defaults it to the shim choice. Refused as true in
       supabase mode. Cloud SQL sets false (no customer superuser; the operator
       provisions the search Worker role).
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.roleBootstrap]
     env: [HOOPDB_ROLE_BOOTSTRAP]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1120,15 +1127,15 @@ entries:
       - { value: unset, note: follows supabaseShim }
     verify: the migrate Job env carries HOOPDB_ROLE_BOOTSTRAP only when set
     sources:
-      - "charts/96bulls-worker/values.yaml:110"
-      - "charts/96bulls-worker/templates/_env.tpl:233"
+      - "charts/sessions-pipeline-worker/values.yaml:110"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:233"
       - "sessions-pipeline@7d7229b:src/hoopdb/migrate.ts:132"
 
-  - id: opt.96bulls.runtime-workload-role
+  - id: opt.sessions-pipeline.runtime-workload-role
     kind: option
     title: Runtime workload role (HOOPDB_RUNTIME_WORKLOAD_ROLE)
     description: The one role allowed to be a member of the runtime role (for example a pooler login role). Empty means none.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.runtimeWorkloadRole]
     env: [HOOPDB_RUNTIME_WORKLOAD_ROLE]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1138,12 +1145,12 @@ entries:
     choices:
       - { value: "", note: none (the Supabase profile requires none) }
       - { value: "<role>" }
-    verify: psql -Atc "select r.rolname from pg_auth_members m join pg_roles r on r.oid=m.member where m.roleid='bulls96_runtime'::regrole" lists at most that role
+    verify: psql -Atc "select r.rolname from pg_auth_members m join pg_roles r on r.oid=m.member where m.roleid='sessions_pipeline_runtime'::regrole" lists at most that role
     sources:
-      - "charts/96bulls-worker/values.yaml:124"
-      - "charts/96bulls-worker/templates/_env.tpl:229"
+      - "charts/sessions-pipeline-worker/values.yaml:124"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:229"
 
-  - id: opt.96bulls.wait-for-role
+  - id: opt.sessions-pipeline.wait-for-role
     kind: option
     title: migrate's wait-for-role ordering
     description: |
@@ -1151,7 +1158,7 @@ entries:
       the search Worker role and, outside local mode, the runtime role exist; with
       functionDefault also until the owner's function default is exact. On by default
       in the umbrella; required with the in-cluster HoopDb; refused in supabase mode.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.waitForRole.enabled, worker.migrations.waitForRole.functionDefault, worker.migrations.waitForRole.image, worker.migrations.waitForRole.intervalSeconds, worker.migrations.waitForRole.role]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -1167,11 +1174,11 @@ entries:
       - { value: false, note: supabase mode only }
     verify: kubectl logs job/<migrate> -c wait-for-role ends with "present"
     sources:
-      - "charts/96bulls/values.yaml:73"
-      - "charts/96bulls-worker/templates/_jobspec.tpl:32"
-      - "charts/96bulls-worker/templates/_env.tpl:199"
+      - "charts/sessions-pipeline/values.yaml:73"
+      - "charts/sessions-pipeline-worker/templates/_jobspec.tpl:32"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:199"
 
-  - id: opt.96bulls.supabase-activation-hold
+  - id: opt.sessions-pipeline.supabase-activation-hold
     kind: option
     title: External-Supabase activation hold
     description: |
@@ -1179,7 +1186,7 @@ entries:
       does not render. Lift it only when the pinned image is confirmed as the
       production-Supabase pin and the live Supabase activation steps (the event-trigger
       bootstrap and --activation-check) are approved.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [supabaseActivation.hold]
     profiles: [external-supabase]
     status: shipped
@@ -1193,8 +1200,8 @@ entries:
       - { value: false, note: after approval }
     verify: helm template with the profile fails with "supabaseActivation.hold" until lifted
     sources:
-      - "charts/96bulls/values.yaml:307"
-      - "charts/96bulls/templates/supabase-activation-hold.yaml:2"
+      - "charts/sessions-pipeline/values.yaml:307"
+      - "charts/sessions-pipeline/templates/supabase-activation-hold.yaml:2"
 
   - id: opt.hoopdb.migration-owner-url
     kind: option
@@ -1204,7 +1211,7 @@ entries:
       both migrations.hoopdb.existingSecret and key are set, only migrate and its
       wait-for-role read that URL, and long-running workloads keep the least-privilege
       worker.hoopdb URL. Set both or neither.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.migrations.hoopdb.existingSecret, worker.migrations.hoopdb.key]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase]
     status: shipped
@@ -1215,13 +1222,13 @@ entries:
       - { value: "<secret>/<key>", note: owner URL for migrate only }
     verify: helm template refuses one without the other ("must be set together")
     sources:
-      - "charts/96bulls/values.yaml:56"
-      - "charts/96bulls-worker/templates/_env.tpl:18"
+      - "charts/sessions-pipeline/values.yaml:56"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:18"
 
   # =========================================================================
-  # 96bulls: Locker, images, observability, identity
+  # sessions-pipeline: Locker, images, observability, identity
   # =========================================================================
-  - id: opt.96bulls.locker-backend
+  - id: opt.sessions-pipeline.locker-backend
     kind: option
     title: Locker object store
     description: |
@@ -1230,7 +1237,7 @@ entries:
       set worker.locker / alleyoop.locker (endpoint empty = native AWS S3 for region),
       and set worker.lockerInit.enabled=false when the bucket already exists and is
       versioned.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [locker.enabled, worker.locker.endpoint, worker.locker.bucket, worker.locker.region, alleyoop.locker.endpoint, alleyoop.locker.bucket, alleyoop.locker.region, worker.lockerInit.enabled]
     env: [LOCKER_ENDPOINT, LOCKER_BUCKET, LOCKER_REGION]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1243,14 +1250,14 @@ entries:
       - { value: external, note: S3 / GCS bucket }
     verify: the locker-init Job completes (minio) or a worker writes to the bucket (external)
     sources:
-      - "charts/96bulls/values.yaml:137"
-      - "charts/96bulls-worker/templates/_env.tpl:71"
+      - "charts/sessions-pipeline/values.yaml:137"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:71"
 
-  - id: opt.96bulls.locker-credentials-mode
+  - id: opt.sessions-pipeline.locker-credentials-mode
     kind: option
     title: Locker credentials mode
     description: secret reads the LOCKER_* keys from existingSecret; podIdentity omits both static credential env vars so the SDK uses workload identity.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.locker.credentials.mode, alleyoop.locker.credentials.mode]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -1262,10 +1269,10 @@ entries:
       - { value: podIdentity }
     verify: no LOCKER_ACCESS_KEY_ID in the rendered pods with podIdentity
     sources:
-      - "charts/96bulls-worker/values.yaml:63"
-      - "charts/96bulls-worker/templates/_env.tpl:15"
+      - "charts/sessions-pipeline-worker/values.yaml:63"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:15"
 
-  - id: opt.96bulls.locker-provider
+  - id: opt.sessions-pipeline.locker-provider
     kind: option
     title: Locker provider (S3-compatible or native GCS)
     description: |
@@ -1281,7 +1288,7 @@ entries:
       REDIS_AUTH_ENABLED=false, REDIS_TRANSIT_ENCRYPTION=SERVER_AUTHENTICATION,
       REDIS_TLS_CA_PEM (public CA bundle), PUBSUB_TOPIC and PUBSUB_SUBSCRIPTION, or the
       render fails.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.locker.provider, alleyoop.locker.provider, worker.extraEnv, alleyoop.extraEnv]
     env: [LOCKER_PROVIDER, PIPELINE_RAW_PROVIDER, CLOUD_SQL_CONNECTION_NAME, REDIS_HOST, REDIS_PORT, REDIS_AUTH_ENABLED, REDIS_TRANSIT_ENCRYPTION, REDIS_TLS_CA_PEM, PUBSUB_TOPIC, PUBSUB_SUBSCRIPTION]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1294,12 +1301,12 @@ entries:
       - { value: gcs, note: GKE Workload Identity; Cloud SQL, Memorystore and Pub/Sub readiness settings in extraEnv }
     verify: with gcs, the worker and Alleyoop /readyz return 200 and /datapathz reports ok
     sources:
-      - "charts/96bulls-worker/values.yaml:64"
-      - "charts/96bulls-worker/templates/_env.tpl:63"
-      - "charts/96bulls-worker/templates/_env.tpl:108"
+      - "charts/sessions-pipeline-worker/values.yaml:64"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:63"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:108"
       - "charts/alleyoop/templates/_env.tpl:95"
 
-  - id: opt.96bulls.services-image
+  - id: opt.sessions-pipeline.services-image
     kind: option
     title: Services image registry
     description: |
@@ -1307,7 +1314,7 @@ entries:
       ECR digest of the same build for hosted EKS (node role pulls, no pull Secret).
       Overriding repository or tag requires clearing or matching the digest. See the
       compatibility matrix for the pinned digests.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.image.repository, worker.image.digest, worker.image.tag, alleyoop.image.repository, alleyoop.image.digest, alleyoop.image.tag, global.imageRegistry]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: shipped
@@ -1317,20 +1324,20 @@ entries:
     choices:
       - { value: ghcr }
       - { value: ecr, note: AWS path only }
-    verify: ci/96bulls-profiles/matrix.sh asserts every row renders only the pinned images
+    verify: ci/sessions-pipeline-profiles/matrix.sh asserts every row renders only the pinned images
     sources:
-      - "charts/96bulls-worker/values.yaml:22"
-      - "charts/96bulls/ci/aws-cnpg-values.yaml:15"
-      - "ci/96bulls-profiles/matrix.sh:70"
+      - "charts/sessions-pipeline-worker/values.yaml:22"
+      - "charts/sessions-pipeline/ci/aws-cnpg-values.yaml:15"
+      - "ci/sessions-pipeline-profiles/matrix.sh:70"
 
-  - id: opt.96bulls.otel
+  - id: opt.sessions-pipeline.otel
     kind: option
     title: OpenTelemetry export
     description: |
       Off by default. Set global.otel.endpoint to your OTLP/HTTP backend, or enable the
       bundled collector (otel.enabled) with endpoint http://otel-collector:4318; its
       default exporter drops telemetry.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [global.otel.endpoint, otel.enabled, otel.config.*]
     env: [OTEL_EXPORTER_OTLP_ENDPOINT]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1344,14 +1351,14 @@ entries:
       - { value: "http://otel-collector:4318", note: with otel.enabled }
     verify: OTEL_EXPORTER_OTLP_ENDPOINT in the pods equals global.otel.endpoint
     sources:
-      - "charts/96bulls/values.yaml:165"
-      - "charts/96bulls-worker/templates/_env.tpl:106"
+      - "charts/sessions-pipeline/values.yaml:165"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:106"
 
-  - id: opt.96bulls.deployment-identity
+  - id: opt.sessions-pipeline.deployment-identity
     kind: option
     title: Workspace, deployment and environment labels
     description: WORKSPACE_ID, DEPLOYMENT, DEPLOYMENT_ID (default <namespace>/<release>) and ENVIRONMENT stamped on every record.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.tenant.workspaceId, worker.deployment.name, worker.deployment.id, worker.environment, alleyoop.tenant.workspaceId, alleyoop.deployment.name, alleyoop.deployment.id, alleyoop.environment]
     env: [WORKSPACE_ID, DEPLOYMENT, DEPLOYMENT_ID, ENVIRONMENT]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1362,14 +1369,14 @@ entries:
       - { value: "<any>" }
     verify: env of any worker pod
     sources:
-      - "charts/96bulls/values.yaml:49"
-      - "charts/96bulls-worker/templates/_env.tpl:95"
+      - "charts/sessions-pipeline/values.yaml:49"
+      - "charts/sessions-pipeline-worker/templates/_env.tpl:95"
 
-  - id: opt.96bulls.worker-health
+  - id: opt.sessions-pipeline.worker-health
     kind: option
     title: Stage worker health server
     description: /readyz and /healthz on workerHealth.port for every stage worker; a slow migration never restarts a worker.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.workerHealth.*]
     env: [WORKER_HEALTH_PORT, WORKER_UNHEALTHY_AFTER_FAILURES, WORKER_MAX_TICK_AGE_MS]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1381,14 +1388,14 @@ entries:
       - { value: false }
     verify: kubectl get pods shows the workers Ready after migrate
     sources:
-      - "charts/96bulls-worker/values.yaml:180"
-      - "charts/96bulls-worker/templates/deployments.yaml:44"
+      - "charts/sessions-pipeline-worker/values.yaml:180"
+      - "charts/sessions-pipeline-worker/templates/deployments.yaml:44"
 
-  - id: opt.96bulls.bob-costas-model
+  - id: opt.sessions-pipeline.bob-costas-model
     kind: option
     title: Bob Costas summariser model (BOB_COSTAS_MODEL)
     description: off (the extractive summariser) is the only value wired at 7d7229b; any other value fails at start.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.components.bob-costas.env]
     env: [BOB_COSTAS_MODEL]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1399,10 +1406,10 @@ entries:
       - { value: "off" }
     verify: env of the bob-costas pod
     sources:
-      - "charts/96bulls-worker/values.yaml:223"
+      - "charts/sessions-pipeline-worker/values.yaml:223"
       - "sessions-pipeline@7d7229b:src/bob-costas/summarizer.ts:104"
 
-  - id: opt.96bulls.search-backend
+  - id: opt.sessions-pipeline.search-backend
     kind: option
     title: Transcript search backend (search.backend)
     description: |
@@ -1413,7 +1420,7 @@ entries:
       and Secret boundary (search.clickhouse.mode external|operator, endpoint,
       database, table, user, existingSecret/secretKeys) are in the reference
       architecture.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [search.backend, search.clickhouse.*]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
     status: planned
@@ -1427,16 +1434,16 @@ entries:
       - "docs/self-hosted-reference-architecture.md:68"
       - "docs/self-hosted-reference-architecture.md:105"
 
-  - id: opt.96bulls.session-briefs
+  - id: opt.sessions-pipeline.session-briefs
     kind: option
     title: Model session briefs
     description: |
       sessions-pipeline #127 (main 475d503, generation 5ed11913...) adds the
       session-brief worker (SERVICE=session-brief) and SESSION_BRIEF_ENABLED, which
       arms wakeups in the HoopDb indexer. Off by default upstream. Not in any chart
-      yet: needs the 96bulls-next re-pin, a session-brief component, and the model
+      yet: needs the sessions-pipeline-next re-pin, a session-brief component, and the model
       key Secret (req.secret.model-api-key). Values names are proposed.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.sessionBrief.enabled, worker.sessionBrief.model]
     env: [SESSION_BRIEF_ENABLED, SESSION_BRIEF_MODEL]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
@@ -1459,7 +1466,7 @@ entries:
       (OPENAI_API_KEY, relayhistory's binding name); unset, blank or ending in
       "-disabled" means no model calls and the worker claims nothing. It must come
       from a Secret, never values. Secret and value names are proposed.
-    chart: 96bulls
+    chart: sessions-pipeline
     values: [worker.sessionBrief.existingSecret, worker.sessionBrief.secretKeys.*]
     env: [OPENAI_API_KEY]
     profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]

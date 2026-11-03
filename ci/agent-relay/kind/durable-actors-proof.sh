@@ -96,7 +96,7 @@ RELAYFILE_JWT=$(keep relayfile-actors RELAYFILE_JWT_SECRET 32)
 
 log "helm install (umbrella, kind values)"
 # Helm does not recursively vendor file:// dependency children.
-helm dependency build charts/96bulls >/dev/null
+helm dependency build charts/sessions-pipeline >/dev/null
 helm dependency build charts/agent-relay >/dev/null
 helm --kube-context "$CTX" upgrade --install agent-relay charts/agent-relay -n "$NS" \
   -f ci/agent-relay/kind-durable-actors-values.yaml --wait --timeout 10m

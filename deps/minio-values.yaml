@@ -1,6 +1,6 @@
 # minio/minio 5.4.0, standalone, kind-only sizes. No buckets/users/policies:
 # the chart's post-install bucket Job is a Helm hook (dropped under
-# --no-hooks); 96bulls-worker's locker-init Job creates the bucket instead.
+# --no-hooks); sessions-pipeline-worker's locker-init Job creates the bucket instead.
 fullnameOverride: locker
 mode: standalone
 replicas: 1

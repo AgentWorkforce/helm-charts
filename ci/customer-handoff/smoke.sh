@@ -31,7 +31,7 @@ diff -r "$work/tar" "$work/zip" >/dev/null \
 root="$work/tar/agent-relay-customer-handoff"
 
 # The umbrella resolves every file:// dependency inside the archive.
-helm dependency build "$root/charts/96bulls" >/dev/null
+helm dependency build "$root/charts/sessions-pipeline" >/dev/null
 helm dependency build "$root/charts/agent-relay" >/dev/null
 helm template agent-relay "$root/charts/agent-relay" \
   --namespace agent-relay -f "$root/charts/agent-relay/values-gcp.yaml" >"$work/rendered.yaml"
@@ -42,10 +42,27 @@ test -s "$work/rendered.yaml"
   cd "$root"
   unset HANDOFF_ROOT
   # shellcheck disable=SC1091
-  . .cursor/skills/setting-up-self-hosted-agent-relay-gcp/scripts/resolve-layout.sh
+  . .agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/resolve-layout.sh
   resolve_agent_relay_layout
   test "$AGENT_RELAY_BASE_VALUES_FILE" -ef "$root/charts/agent-relay/values-gcp.yaml"
 )
+
+# The hidden .agents skill directory ships complete (every tracked file, same
+# bytes and mode), the Cursor-only location is gone, and the architecture
+# diagrams ship with their renders.
+skill=.agents/skills/setting-up-self-hosted-agent-relay-gcp
+test -f "$root/$skill/SKILL.md" || { echo "error: $skill/SKILL.md is not in the handoff" >&2; exit 1; }
+# Compare against the committed blobs: the handoff is built from HEAD.
+while read -r mode _ _ f; do
+  git -C "$repo" show "HEAD:$f" | cmp -s - "$root/$f" || { echo "error: $f is missing from or differs in the handoff" >&2; exit 1; }
+  if test "$mode" = 100755 && ! test -x "$root/$f"; then echo "error: $f lost its executable bit" >&2; exit 1; fi
+done < <(git -C "$repo" ls-tree -r HEAD -- "$skill")
+test ! -e "$root/.cursor" || { echo "error: the handoff still ships .cursor/" >&2; exit 1; }
+for d in agent-relay-architecture agent-relay-request-flow; do
+  for ext in mmd svg png; do
+    test -s "$root/docs/diagrams/$d.$ext" || { echo "error: docs/diagrams/$d.$ext is not in the handoff" >&2; exit 1; }
+  done
+done
 
 # Relative links in shipped Markdown that do not resolve inside the archive.
 python3 -I - "$root" <<'PY'

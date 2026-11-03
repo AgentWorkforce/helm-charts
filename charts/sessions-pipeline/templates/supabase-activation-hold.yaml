@@ -1,0 +1,2 @@
+{{- /* See supabaseActivation in values.yaml. */ -}}
+{{- if .Values.supabaseActivation.hold }}{{ fail "supabaseActivation.hold: the external-Supabase profile is fail-closed until its pinned image (charts/sessions-pipeline/profiles/external-supabase.yaml) is confirmed as the production-Supabase pin and the live Supabase activation steps (the event-trigger function boundary bootstrap and --activation-check) are approved" }}{{ end }}

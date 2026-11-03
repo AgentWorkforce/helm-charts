@@ -1,0 +1,55 @@
+%% Agent Relay self-hosted: the main request flows through the deployed suite.
+%% Source of truth for agent-relay-request-flow.svg / .png (mermaid-cli 11.4.2,
+%% -b white, PNG at -s 2). Client calls cross the GKE HTTPS load balancer.
+%% Service-to-service calls stay in-cluster: relay-cloud-api to relayhistory and
+%% relayauth, and relayhistory to relayauth for JWKS (the JWKS ingress is off).
+sequenceDiagram
+  autonumber
+  actor User as Team member (browser)
+  participant Desktop as Agent Relay Desktop
+  participant Dash as relay-dashboard<br/>(dashboard host)
+  participant API as relay-cloud-api<br/>(api host, /cloud/api)
+  participant Auth as relayauth
+  participant Hist as relayhistory<br/>(history host)
+  participant Cast as relaycast<br/>(cast host)
+  participant Agent as CLI / SDK agent
+  participant Peer as Peer agent
+
+  rect rgb(238, 242, 255)
+    Note over Desktop,API: 1. Desktop sign-in with device approval
+    Desktop->>API: start device authorization (custom deployment origin)
+    API-->>Desktop: device code + verification URL
+    User->>Dash: open verification URL, sign in
+    Dash->>API: approve device for org / workspace
+    Desktop->>API: poll for the device token
+    API->>Auth: mint scoped tokens
+    API-->>Desktop: session + scoped Relaycast and RelayHistory credentials
+  end
+
+  rect rgb(236, 253, 245)
+    Note over Desktop,Hist: 2. Session upload (durable delivery batches)
+    Desktop->>Hist: POST delivery batch (scoped token)
+    Hist->>Auth: verify token (JWKS)
+    Hist-->>Desktop: accepted (retries are idempotent)
+    Note right of Hist: stored in its own Postgres database
+  end
+
+  rect rgb(240, 249, 255)
+    Note over User,Hist: 3. Dashboard read
+    User->>Dash: open Sessions
+    Dash->>API: GET sessions (same-origin /cloud/api)
+    API->>Hist: list / replay / search for the workspace
+    Hist-->>API: workspace-scoped results
+    API-->>Dash: sessions
+  end
+
+  rect rgb(255, 247, 237)
+    Note over Cast,Peer: 4. Agent messaging
+    Agent->>Cast: register + connect /v1/node/ws (workspace credential)
+    Peer->>Cast: register + connect /v1/node/ws
+    Agent->>Cast: send message to a peer or channel
+    Cast-->>Peer: deliver over the peer's socket
+    Peer->>Cast: reply in the same conversation
+    Cast-->>Agent: deliver the reply
+    Note over Cast: /internal and /v1/workspaces are denied at the edge
+  end
