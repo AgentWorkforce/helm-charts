@@ -62,6 +62,31 @@ explicit backends.<name>.serviceName must equal that derived name. */ -}}
 {{- $childPort := dig "service" "port" 0 (index $child 1) -}}
 {{- if and $childPort (ne (int $childPort) (int (dig "servicePort" 0 $backend))) }}{{ fail (printf "gkeIngress.backends.%s.servicePort must equal %s.service.port (%v)" $name (index $child 0) $childPort) }}{{ end -}}
 {{- end }}
+{{- /* The flows worker queue is a long-lived SSE stream through the api
+backend. GCE's default 30s backend timeout cuts every response at 30s, so
+the api Service gets a BackendConfig with a longer timeout, bound through the
+Service's cloud.google.com/backend-config annotation (set in the child's
+service.annotations; checked here). */ -}}
+{{- $apiBackendConfig := printf "%s-api" $gkeName | trunc 63 | trimSuffix "-" -}}
+{{- $apiTimeout := int (dig "backends" "api" "timeoutSec" 0 $gke) -}}
+{{- if lt $apiTimeout 60 }}{{ fail "gkeIngress.backends.api.timeoutSec must be at least 60: the flows worker queue SSE stream needs a backend timeout above GCE's 30s default" }}{{ end -}}
+{{- if gt $apiTimeout 86400 }}{{ fail "gkeIngress.backends.api.timeoutSec must be at most 86400" }}{{ end -}}
+{{- $queuePing := dig "flows" "queuePingMs" "" $cloudApi | toString | default "20000" -}}
+{{- if and (regexMatch "^[0-9]+$" $queuePing) (ge (int64 $queuePing) (mul $apiTimeout 1000)) }}{{ fail "relay-cloud-api.flows.queuePingMs must be below gkeIngress.backends.api.timeoutSec" }}{{ end -}}
+{{- $wantBackendConfig := printf "{\"default\": \"%s\"}" $apiBackendConfig -}}
+{{- $haveBackendConfig := dig "service" "annotations" "cloud.google.com/backend-config" "" $cloudApi -}}
+{{- if ne (toString $haveBackendConfig | nospace) (nospace $wantBackendConfig) }}{{ fail (printf "gkeIngress requires relay-cloud-api.service.annotations.cloud.google.com/backend-config to be '%s' so the api backend gets the BackendConfig timeout" $wantBackendConfig) }}{{ end -}}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ $apiBackendConfig }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  timeoutSec: {{ $apiTimeout }}
+---
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
@@ -90,8 +115,9 @@ spec:
     enabled: true
     responseCodeName: MOVED_PERMANENTLY_DEFAULT
 ---
-# Deliberately has no selector. Sensitive Relaycast paths are routed here so
-# the edge returns an error instead of forwarding them to the public backend.
+# Deliberately has no selector. Sensitive Relaycast paths, and /internal on
+# the api host, are routed here so the edge returns an error instead of
+# forwarding them to the public backend.
 apiVersion: v1
 kind: Service
 metadata:
@@ -149,6 +175,15 @@ spec:
     - host: {{ $hostApi | quote }}
       http:
         paths:
+          # relay-cloud-api /internal/v1 is for in-cluster callers holding
+          # SELFHOST_INTERNAL_TOKEN only. GCE expands this Prefix path to
+          # /internal and /internal/*, which covers /internal/.
+          - path: /internal
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ printf "%s-cast-edge-deny" $gkeName | trunc 63 | trimSuffix "-" }}
+                port: { number: {{ $gke.backends.cast.servicePort }} }
           - path: /
             pathType: Prefix
             backend:

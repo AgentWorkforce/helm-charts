@@ -26,7 +26,10 @@ gkeIngress:
   # match the child's service.port.
   backends:
     dashboard: { serviceName: "", servicePort: 8080 }
-    api: { serviceName: "", servicePort: 80 }
+    # timeoutSec (>= 60) goes into the api BackendConfig; the flows worker
+    # queue is a long-lived SSE stream. relay-cloud-api.service.annotations
+    # must carry cloud.google.com/backend-config: '{"default": "<name>-api"}'.
+    api: { serviceName: "", servicePort: 80, timeoutSec: 3600 }
     cast: { serviceName: "", servicePort: 8787 }
     history: { serviceName: "", servicePort: 8080 }
 
@@ -41,6 +44,10 @@ relayauth:
     enabled: false
 96bulls: {}
 relayhistory: {}
+# relay-cloud-api: see charts/relay-cloud-api/values.yaml. encryption.keyId is
+# required; optional: encryption.previousKeyId, secretKeys.previousEncryptionKey,
+# secretKeys.internalToken, secretKeys.telemetryInstallKey, dashboardUrl,
+# flows.*, telemetry.* (telemetry.level defaults to off, pending decision).
 relay-cloud-api: {}
 relay-dashboard: {}
 # Opt-in only: enabling components.relayflows without configuring this block

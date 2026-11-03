@@ -130,11 +130,11 @@ for chart in "${charts[@]}"; do
         ;;
       dryrun)
         dryrun_out=$(render "$chart" "$v")
-        # Generic CI clusters do not install GKE's ManagedCertificate and
-        # FrontendConfig CRDs. Their schemas are covered by static rendering;
+        # Generic CI clusters do not install GKE's ManagedCertificate,
+        # FrontendConfig and BackendConfig CRDs. Their schemas are covered by static rendering;
         # dry-run the portable Kubernetes objects here.
         if [ "$chart" = agent-relay ]; then
-          dryrun_out=$(yq 'select(.kind != "ManagedCertificate" and .kind != "FrontendConfig")' <<<"$dryrun_out")
+          dryrun_out=$(yq 'select(.kind != "ManagedCertificate" and .kind != "FrontendConfig" and .kind != "BackendConfig")' <<<"$dryrun_out")
         fi
         kubectl apply --server-side --dry-run=server --field-manager=ci -n ci -f - <<<"$dryrun_out" >/dev/null \
           || err "$label: server-side dry-run apply failed"

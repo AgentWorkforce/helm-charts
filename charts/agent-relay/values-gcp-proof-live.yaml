@@ -35,6 +35,16 @@ relay-cloud-api:
     limits: { memory: 512Mi }
   services:
     relayauthUrl: http://relayauth.relayauth.svc:8787
+  # The live data is encrypted under this key id (set by hand on the
+  # deployment before the chart rendered it).
+  encryption:
+    keyId: proof-1
+  # The dashboard is on the root host, not the api host.
+  dashboardUrl: https://gcp-proof.agentrelay.com/
+  # Key in Secret agent-relay-gcp-proof; enables /internal/v1 (flows env
+  # delivery). The api host denies /internal at the edge.
+  secretKeys:
+    internalToken: selfhost-internal-token
   # The proof cluster's shared Cloud SQL database grants runtime access to the
   # role the Sessions stack created; control_api_runtime does not exist there.
   database:

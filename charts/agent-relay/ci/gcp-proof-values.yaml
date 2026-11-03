@@ -6,6 +6,8 @@ relayhistory:
 relay-cloud-api:
   image:
     digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+  encryption:
+    keyId: proof-1
 relay-dashboard:
   image:
     digest: sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe

@@ -222,6 +222,11 @@ relay-cloud-api:
     digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
   database:
     runtimeRole: control_api_runtime
+  # Non-secret id of the encryption key (SELFHOST_ENCRYPTION_KEY_ID), stored
+  # with every encrypted value. Keep it stable; on rotation move it to
+  # encryption.previousKeyId with secretKeys.previousEncryptionKey.
+  encryption:
+    keyId: primary
   # REQUIRED OVERRIDE: publicUrl must use gkeIngress.hosts.api.
   publicUrl: https://api.placeholder.company
   # REQUIRED OVERRIDE: existing Secret name; see README for required keys.
@@ -236,6 +241,9 @@ relay-cloud-api:
   service:
     annotations:
       cloud.google.com/neg: '{"ingress": true}'
+      # Binds the gkeIngress api BackendConfig (backend timeout for the flows
+      # worker queue SSE stream); must name <gkeIngress.name>-api.
+      cloud.google.com/backend-config: '{"default": "example-agent-relay-api"}'
   ingress:
     enabled: false
   networkPolicy:
