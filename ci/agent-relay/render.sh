@@ -203,4 +203,12 @@ fi
 grep -q 'gkeIngress.backends.history.serviceName=history does not match' <<<"$mismatch" \
   || { echo "backend mismatch failed without the expected error" >&2; exit 1; }
 
+# The supported-100 overlay sizes Relaycast backups, so it must enable them.
+s100=$(helm template ar charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp.yaml -f charts/agent-relay/values-gcp-supported-100.yaml)
+test "$(yq 'select(.kind == "CronJob" and .metadata.name == "relaycast-backup") | .metadata.name' <<<"$s100")" = relaycast-backup \
+  || { echo "supported-100 overlay does not render the Relaycast backup CronJob" >&2; exit 1; }
+test "$(yq 'select(.kind == "PersistentVolumeClaim" and .metadata.name == "relaycast-backup") | .spec.resources.requests.storage' <<<"$s100")" = 100Gi \
+  || { echo "supported-100 overlay backup PVC is not 100Gi" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"

@@ -18,7 +18,10 @@ relaycast:
     limits: { cpu: "2", memory: 2Gi }
   persistence:
     size: 50Gi
+  # Relaycast backups are opt-in in the chart; this profile turns them on so
+  # the backup sizing below takes effect (a CronJob plus a second PVC).
   backup:
+    enabled: true
     size: 100Gi
     resources:
       requests: { cpu: 100m, memory: 256Mi }
