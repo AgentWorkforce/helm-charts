@@ -32,8 +32,12 @@ scripts/conformance/run.sh \
   --values /secure/path/conformance-values.yaml
 ```
 
+`--target-namespace` and `--target-release` name an existing release for
+read-only audit checks only. Apply mode rejects them: state-changing scenarios
+always run against isolated releases the harness creates.
+
 Audit mode can validate rendering, client availability, existing
-NetworkPolicy/GKE health resources, DNS, and TLS. Every state-changing scenario
+NetworkPolicy and GKE Ingress/certificate health, DNS, and TLS. Every state-changing scenario
 is recorded as `PLAN`, not silently omitted.
 
 After reviewing the audit evidence and fixture isolation, an authorized
@@ -52,6 +56,7 @@ scripts/conformance/run.sh \
   --base-url https://conformance.example.com \
   --dns-name conformance.example.com \
   --db-outage-hook /secure/path/db-outage-hook \
+  --db-dependent-selector 'app.kubernetes.io/component in (api,history)' \
   --backup-hook /secure/path/backup-hook \
   --restore-hook /secure/path/restore-hook
 ```
@@ -67,17 +72,17 @@ remain available for diagnosis.
 | --- | --- | --- |
 | Fresh install | Isolated Helm install; Helm dry-run in audit mode | chart, current version |
 | Previous-version upgrade | Install previous version, atomic in-place upgrade | previous version |
-| Migration failure | Force failed upgrade and require atomic retention | migration-failure values |
-| Wrong database | Require a known-bad DB fixture to fail readiness | wrong-database values |
+| Migration failure | Non-atomic upgrade that must fail on a migration Job, then explicit `helm rollback` that must restore the previous deployed release | previous version; migration-failure values |
+| Wrong database | Require a known-bad DB fixture to leave started workloads unready | wrong-database values; a passing fresh install with the same base values as baseline |
 | Dedicated-role denial | Product adapter assertion | adapter |
 | Two-agent ping/reply | Product adapter assertion | adapter |
 | Desktop-origin bootstrap | Product adapter assertion | adapter |
 | Session ingest/read-back | Product adapter assertion | adapter |
 | Duplicate receipt idempotency | Product adapter assertion | adapter |
 | Cross-workspace denial | Product adapter assertion | adapter |
-| DB outage readiness | Outage hook, fail-closed readiness, recovery | outage hook |
+| DB outage readiness | Outage hook; pods matching `--db-dependent-selector` must go unready; recovery | outage hook; optional selector |
 | Restart/outbox recovery | Queue fixture, rollout restart, exactly-once check | adapter |
-| NetworkPolicy/GKE backend health | Resource presence plus optional traffic probe | target namespace; adapter for probe |
+| NetworkPolicy/GKE backend health | NetworkPolicy present, every GKE Ingress backend `HEALTHY`, every ManagedCertificate `Active`; optional traffic probe | target namespace (audit) or isolated release (apply); adapter for probe |
 | DNS/TLS | Resolver and HTTPS/TLS 1.2+ health request | DNS name, HTTPS base URL |
 | Backup | Backup hook | backup hook |
 | Isolated restore | Restore then independent verification | restore hook |
@@ -97,10 +102,23 @@ failure, so release policy should separately define whether skips are allowed.
   credentials directly in values files; reference pre-provisioned resources
   using the chart's normal external-secret mechanism.
 - The migration fixture must cause the current-version migration to fail after
-  the previous version is healthy. The upgrade is atomic, and the harness
-  requires a release to remain afterward.
+  the previous version is healthy. The upgrade is deliberately not atomic, so
+  the failed migration Job survives long enough to be attributed. The scenario
+  passes only if a migration Job reached `Failed=True` with no unrelated image,
+  config, or scheduling failures, and an explicit `helm rollback` then leaves
+  the previous chart version deployed. Rollback restores Kubernetes resources
+  only; the fixture database must be disposable.
 - The wrong-database fixture must be a deliberately unreachable or incompatible
-  test database. It must not identify a production database.
+  test database. It must not identify a production database. The scenario is
+  `SKIP` unless the fresh-install scenario passed in the same run with the same
+  base values, so that a failure can be attributed to the wrong-database
+  overlay.
+- `--db-dependent-selector` (or `CONFORMANCE_DB_DEPENDENT_SELECTOR`) is the
+  label selector for pods that must become unready during the database outage.
+  The default is the release's `api` and `history` components
+  (`app.kubernetes.io/instance=<release>,app.kubernetes.io/component in
+  (api,history)`). Job pods are always excluded. The dashboard and
+  SQLite-backed services are expected to stay ready, so do not include them.
 - `CONFORMANCE_ROLLBACK_BASE_URL` can identify the ingress for the side-by-side
   previous-version release. If omitted, the adapter receives the main base URL.
 
@@ -141,10 +159,17 @@ jq -e '
 
 ## GKE resource expectations
 
-The networking scenario requires at least one `NetworkPolicy` and one of:
+The networking scenario checks the resources the charts actually deploy: a
+GCE Ingress with a ManagedCertificate and FrontendConfig, whose health checks
+are derived from readiness probes. It does not look for `BackendConfig` or
+`HealthCheckPolicy`. It passes only when:
 
-- `BackendConfig` (`cloud.google.com`)
-- `HealthCheckPolicy` (`networking.gke.io`)
+- at least one `NetworkPolicy` exists in the namespace;
+- at least one GCE Ingress exists, and each has an
+  `ingress.kubernetes.io/backends` annotation in which every backend is
+  `HEALTHY`; and
+- every ManagedCertificate named by `networking.gke.io/managed-certificates`
+  has `status.certificateStatus: Active`.
 
 In apply mode, an adapter also receives `network-policy-probe` so the product
 can prove allowed traffic succeeds and denied traffic fails. Presence alone is
