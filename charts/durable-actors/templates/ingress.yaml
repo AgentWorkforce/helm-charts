@@ -11,9 +11,9 @@ spec:
   ingressClassName: {{ .Values.ingress.className | quote }}
   tls:
     - secretName: {{ .Values.ingress.tlsSecret | quote }}
-      hosts: [{{ (urlParse .Values.publicUrl).hostname | quote }}]
+      hosts: [{{ (urlParse .Values.publicUrl).hostname | lower | quote }}]
   rules:
-    - host: {{ (urlParse .Values.publicUrl).hostname | quote }}
+    - host: {{ (urlParse .Values.publicUrl).hostname | lower | quote }}
       http:
         paths:
           - path: /

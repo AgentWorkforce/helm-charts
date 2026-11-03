@@ -1,8 +1,10 @@
 # Vendored upstream chart: durable-actors
 
-This directory is the TerseAI/durable-actors release chart, unpacked verbatim.
-Do not edit `Chart.yaml`, `values.yaml`, `values.schema.json`, `README.md`,
-`.helmignore` or `templates/`. Report problems upstream and re-vendor.
+This directory is the TerseAI/durable-actors release chart, unpacked from the
+release asset, plus the local patches listed under "Patches to upstream
+files". Do not edit `Chart.yaml`, `values.yaml`, `values.schema.json`,
+`README.md`, `.helmignore` or `templates/` except to add or update one of
+those patches (and record it there). Report problems upstream and re-vendor.
 
 | Field | Value |
 | --- | --- |
@@ -26,6 +28,8 @@ Image digests pinned by the release chart (`images.*` in `values.yaml`), all in
 ## Local additions (not upstream)
 
 - `UPSTREAM.md` (this file).
+- `LICENSE.md`: upstream's MIT license (`LICENSE.md` at the tag), so the
+  packaged chart carries the notice the license requires.
 - `ci/*-values.yaml`: placeholder fixtures so `scripts/ci/charts.sh static`
   can lint and render the chart; they are not shipped values.
 
@@ -37,6 +41,40 @@ Patches to upstream files (report upstream; drop when fixed there):
    umbrella that defines globals (agent-relay sets `global.tenant`). Error
    without it: `durable-actors: at '': additional properties 'global' not
    allowed`. One added property; nothing else changes.
+2. `invokeApiKeySecretKey` (`values.yaml`, `values.schema.json`,
+   `templates/control-plane.yaml`): when set, the control plane gets
+   `DURABLE_ACTORS_INVOKE_API_KEY` from that `credentialsSecret` key. Only a
+   control-plane image with the invoke-only key patch (durable-actors
+   `selfhost/scoped-credentials`, 7a7e9349) reads it; upstream 0.14.6 ignores
+   the variable. Default empty: renders are byte-identical to upstream. The
+   schema restricts it to Secret key characters (`[-._a-zA-Z0-9]`). Drop when
+   upstream ships an invocation-scoped key.
+3. `actors.hostIdleTimeoutMs` (`values.yaml`, `values.schema.json`,
+   `templates/control-plane.yaml`): when set, the control plane gets
+   `DURABLE_ACTORS_HOST_IDLE_TIMEOUT_MS` (how long an idle actor host stays
+   up; upstream default 10000, max 86400000). Upstream reads the variable but
+   the chart does not expose it. Default null: renders are byte-identical to
+   upstream. Report upstream as a missing chart value.
+4. `templates/_helpers.tpl` (`actors.poolManagerName`) and
+   `templates/control-plane.yaml`: the pool manager is named
+   `<actors.name truncated to 50>-pool-manager`, so its Deployment name and
+   `app.kubernetes.io/name` label stay within 63 characters (upstream appends
+   the suffix to the already 63-character name, which fails for release names
+   of 36+ characters). Unchanged for shorter names. The umbrella's
+   `durable-actors-networkpolicy.yaml` computes the same name.
+5. `templates/control-plane.yaml`: `actors.bounds.*` render when non-null
+   instead of when truthy, so an explicit `0` (allowed by the schema) reaches
+   the control plane. Unchanged for null and non-zero values.
+6. `templates/ingress.yaml`: the host from `publicUrl` is lowercased (the
+   schema allows uppercase; Kubernetes rejects it in Ingress hosts).
+7. `values.schema.json`: `networkPolicy.dnsCidrs` items must be IPv4 or IPv6
+   CIDRs (a bare IP passed the schema and failed at apply time).
+8. `templates/control-plane.yaml`: the pod `securityContext` adds
+   `seccompProfile: {type: RuntimeDefault}`, like the other charts here.
+9. `README.md`: links to upstream docs that are not vendored
+   (`docs/self-hosting.md`, `docs/reference/configuration.md`) point at the
+   upstream tag, and the per-actor CPU default reads 250 millicores (the
+   rendered `actors.cpuMillis` default; upstream says 500).
 
 ## Re-vendoring
 
@@ -67,16 +105,6 @@ sha256 and digests above.
 - Only GKE Sandbox and Modal providers exist upstream. There is no
   kind/MinIO/S3 provider: local proofs use `durable-actors dev` instead (see
   docs/self-hosted-durable-actors.md).
-2. `invokeApiKeySecretKey` (`values.yaml`, `values.schema.json`,
-   `templates/control-plane.yaml`): when set, the control plane gets
-   `DURABLE_ACTORS_INVOKE_API_KEY` from that `credentialsSecret` key. Only a
-   control-plane image with the invoke-only key patch (durable-actors
-   `selfhost/scoped-credentials`, 7a7e9349) reads it; upstream 0.14.6 ignores
-   the variable. Default empty: renders are byte-identical to upstream. Drop
-   when upstream ships an invocation-scoped key.
-3. `actors.hostIdleTimeoutMs` (`values.yaml`, `values.schema.json`,
-   `templates/control-plane.yaml`): when set, the control plane gets
-   `DURABLE_ACTORS_HOST_IDLE_TIMEOUT_MS` (how long an idle actor host stays
-   up; upstream default 10000, max 86400000). Upstream reads the variable but
-   the chart does not expose it. Default null: renders are byte-identical to
-   upstream. Report upstream as a missing chart value.
+- The sandbox Namespace has no `helm.sh/resource-policy: keep` (upstream).
+  `helm uninstall` deletes it together with operator-created Secrets in it,
+  such as `relaycast-actor-env`; recreate them after a reinstall.

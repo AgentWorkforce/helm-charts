@@ -5,7 +5,7 @@ metadata:
   name: {{ include "actors.name" . }}
   annotations:
     iam.gke.io/gcp-service-account: {{ .Values.serviceAccount.googleServiceAccount | quote }}
-{{- $workloads := list (dict "name" (include "actors.name" .) "role" "control_plane" "replicas" .Values.replicaCount) (dict "name" (printf "%s-pool-manager" (include "actors.name" .)) "role" "pool_manager" "replicas" 1) }}
+{{- $workloads := list (dict "name" (include "actors.name" .) "role" "control_plane" "replicas" .Values.replicaCount) (dict "name" (include "actors.poolManagerName" .) "role" "pool_manager" "replicas" 1) }}
 {{- range $workload := $workloads }}
 ---
 apiVersion: apps/v1
@@ -45,6 +45,7 @@ spec:
         runAsUser: 10000
         runAsGroup: 10000
         fsGroup: 10000
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: control-plane
           image: {{ include "actors.image" $.Values.images.controlPlane | quote }}
@@ -125,17 +126,17 @@ spec:
             {{- with $.Values.actors.memoryLimitMiB }}
             - {name: DURABLE_ACTORS_HOST_MEMORY_LIMIT_MIB, value: {{ . | quote }}}
             {{- end }}
-            {{- with $.Values.actors.bounds.minCpuMillis }}
-            - {name: DURABLE_ACTORS_SANDBOX_MIN_CPU_MILLIS, value: {{ . | quote }}}
+            {{- if not (kindIs "invalid" $.Values.actors.bounds.minCpuMillis) }}
+            - {name: DURABLE_ACTORS_SANDBOX_MIN_CPU_MILLIS, value: {{ $.Values.actors.bounds.minCpuMillis | quote }}}
             {{- end }}
-            {{- with $.Values.actors.bounds.maxCpuMillis }}
-            - {name: DURABLE_ACTORS_SANDBOX_MAX_CPU_MILLIS, value: {{ . | quote }}}
+            {{- if not (kindIs "invalid" $.Values.actors.bounds.maxCpuMillis) }}
+            - {name: DURABLE_ACTORS_SANDBOX_MAX_CPU_MILLIS, value: {{ $.Values.actors.bounds.maxCpuMillis | quote }}}
             {{- end }}
-            {{- with $.Values.actors.bounds.minMemoryMiB }}
-            - {name: DURABLE_ACTORS_SANDBOX_MIN_MEMORY_MIB, value: {{ . | quote }}}
+            {{- if not (kindIs "invalid" $.Values.actors.bounds.minMemoryMiB) }}
+            - {name: DURABLE_ACTORS_SANDBOX_MIN_MEMORY_MIB, value: {{ $.Values.actors.bounds.minMemoryMiB | quote }}}
             {{- end }}
-            {{- with $.Values.actors.bounds.maxMemoryMiB }}
-            - {name: DURABLE_ACTORS_SANDBOX_MAX_MEMORY_MIB, value: {{ . | quote }}}
+            {{- if not (kindIs "invalid" $.Values.actors.bounds.maxMemoryMiB) }}
+            - {name: DURABLE_ACTORS_SANDBOX_MAX_MEMORY_MIB, value: {{ $.Values.actors.bounds.maxMemoryMiB | quote }}}
             {{- end }}
             - name: DURABLE_ACTORS_POSTGRES_URL
               valueFrom:

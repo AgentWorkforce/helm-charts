@@ -2,7 +2,7 @@
 
 Run Durable Actors on GKE Sandbox with one Standard GCS bucket and PostgreSQL. Standard GCS is the default persistence mode. Enable GCS Rapid when you need faster state writes.
 
-Follow the [self-hosting guide](../../docs/self-hosting.md) for cluster prerequisites, IAM, credentials, installation, and Rapid configuration.
+Follow the [self-hosting guide](https://github.com/TerseAI/durable-actors/blob/v0.14.6/docs/self-hosting.md) (this repository: [docs/self-hosted-durable-actors.md](../../docs/self-hosted-durable-actors.md)) for cluster prerequisites, IAM, credentials, installation, and Rapid configuration.
 
 ```yaml
 publicUrl: https://actors.example.com
@@ -32,8 +32,8 @@ When upgrading from the shared image configuration, replace `image.repository` a
 - Actor pods start on demand: `actors.warm: 0`.
 - Warm pools refill every second (`actors.refillIntervalMs`), starting up to 32 spares at once across controllers (`actors.maxStarting`). Each controller deletes finished pods every second (`actors.podReapIntervalMs`, `actors.reapConcurrency`) and retired spares 64 at a time (`actors.retireConcurrency`).
 - The controller checks for due alarms every 100 milliseconds; configure `alarms.pollIntervalMs` to change the cadence.
-- Organization activation limits default to 500 starting/running hosts, 50 starts per second, and a burst of 100, shared by all of an organization's projects. Operators configure `organizationLimits.enabled`, `organizationLimits.maxActiveActors`, `organizationLimits.actorStartsPerSecond`, and `organizationLimits.actorStartBurst`. Configured Redis shares enforcement across replicas; a single controller without Redis uses memory. See [organization overrides](../../docs/reference/configuration.md#organization-actor-limits) for manual PostgreSQL overrides and missing-stop handling.
-- Each actor requests and is limited to 500 millicores and 256 MiB unless its deployment overrides resources.
+- Organization activation limits default to 500 starting/running hosts, 50 starts per second, and a burst of 100, shared by all of an organization's projects. Operators configure `organizationLimits.enabled`, `organizationLimits.maxActiveActors`, `organizationLimits.actorStartsPerSecond`, and `organizationLimits.actorStartBurst`. Configured Redis shares enforcement across replicas; a single controller without Redis uses memory. See [organization overrides](https://github.com/TerseAI/durable-actors/blob/v0.14.6/docs/reference/configuration.md#organization-actor-limits) for manual PostgreSQL overrides and missing-stop handling.
+- Each actor requests and is limited to 250 millicores and 256 MiB unless its deployment overrides resources.
 - The controller requests 250 millicores and 512 MiB, with a 1 GiB memory limit. Measure and adjust `resources` for your workload.
 - The sandbox namespace defaults to `<release-namespace>-<release-name>`; use one unique sandbox namespace per installation.
 - gVisor, separate sandbox credentials, RBAC, and sandbox NetworkPolicy are included.
@@ -82,7 +82,7 @@ Store `clickhouse-password` in `credentialsSecret`. Precreate the database and g
 
 For an existing installation, first deploy lifecycle-capable control planes, then upgrade the TypeScript/Python images and redeploy actor bundles so new hosts report. Enable `analytics.backend: clickhouse` after that rollout. Installations already using ClickHouse switch inventory readers on upgrade; old hosts do not appear until an upgraded activation reports. Historical inventory is not backfilled.
 
-PostgreSQL remains required for control-plane bookkeeping and deployment metadata. The default `analytics.backend: postgres` reads inventory from an in-memory lifecycle cache on each control-plane replica; it resets on restart and is not shared across replicas. All modes use lifecycle reports for inventory without GCS scans. See [host lifecycle reports](../../docs/reference/configuration.md#host-lifecycle-reports) for freshness and retention behavior.
+PostgreSQL remains required for control-plane bookkeeping and deployment metadata. The default `analytics.backend: postgres` reads inventory from an in-memory lifecycle cache on each control-plane replica; it resets on restart and is not shared across replicas. All modes use lifecycle reports for inventory without GCS scans. See [host lifecycle reports](https://github.com/TerseAI/durable-actors/blob/v0.14.6/docs/reference/configuration.md#host-lifecycle-reports) for freshness and retention behavior.
 
 ## Usage publishing
 
@@ -93,6 +93,6 @@ usage:
   topic: projects/my-project/topics/actor-usage
 ```
 
-Grant the control plane's Google service account `roles/pubsub.publisher` on that topic. Hosts use the existing lifecycle reporting path and need no Pub/Sub credentials. Publishing works with either analytics backend and is disabled when `usage.topic` is empty. Consumers must handle duplicates and out-of-order delivery; see the [usage event contract](../../docs/reference/configuration.md#usage-events) for aggregation and delivery limitations.
+Grant the control plane's Google service account `roles/pubsub.publisher` on that topic. Hosts use the existing lifecycle reporting path and need no Pub/Sub credentials. Publishing works with either analytics backend and is disabled when `usage.topic` is empty. Consumers must handle duplicates and out-of-order delivery; see the [usage event contract](https://github.com/TerseAI/durable-actors/blob/v0.14.6/docs/reference/configuration.md#usage-events) for aggregation and delivery limitations.
 
 Missing-stop reconciliation uses the configured Redis to coordinate estimated usage ends and later corrections across controllers. Configure Redis persistence for restart recovery. Consumers must accept higher revisions that correct or reopen an estimated interval; estimates do not change ownership or dashboard status.

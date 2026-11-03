@@ -1,6 +1,10 @@
 {{- define "actors.name" -}}
 {{- printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+{{- /* Local patch 4: the pool manager name and label must fit 63 characters. */ -}}
+{{- define "actors.poolManagerName" -}}
+{{- printf "%s-pool-manager" (include "actors.name" . | trunc 50 | trimSuffix "-") -}}
+{{- end -}}
 {{- define "actors.sandboxNamespace" -}}
 {{- default (printf "%s-%s" .Release.Namespace .Release.Name | trunc 63 | trimSuffix "-") .Values.sandboxNamespace -}}
 {{- end -}}
