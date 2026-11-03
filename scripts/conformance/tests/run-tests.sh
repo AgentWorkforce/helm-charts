@@ -39,6 +39,9 @@ mkdir -p "${mock_bin}"
 command_log="${tmp_root}/commands.log"
 : >"${command_log}"
 
+fixtures="${tmp_root}/fixtures"
+mkdir -p "${fixtures}"
+
 cat >"${mock_bin}/helm" <<'MOCK'
 #!/usr/bin/env bash
 printf 'helm' >>"${MOCK_COMMAND_LOG}"
@@ -49,17 +52,49 @@ case " $* " in
     exit 1
     ;;
   *" list "*)
-    printf '[{"name":"aw-conformance-test-migration","status":"deployed"}]\n'
+    filter=""
+    previous=""
+    for arg in "$@"; do
+      [[ "${previous}" == "--filter" ]] && filter="${arg}"
+      previous="${arg}"
+    done
+    name="${filter#^}"
+    name="${name%$}"
+    printf '[{"name":"%s","status":"deployed","chart":"%s"}]\n' \
+      "${name}" "${MOCK_HELM_CHART:-agent-relay-1.0.0}"
     ;;
 esac
 exit 0
 MOCK
 
+# kubectl returns ${MOCK_FIXTURES}/<namespace>.<resource>.json for JSON gets,
+# so scenarios can be driven with specific cluster states.
 cat >"${mock_bin}/kubectl" <<'MOCK'
 #!/usr/bin/env bash
 printf 'kubectl' >>"${MOCK_COMMAND_LOG}"
 printf ' %q' "$@" >>"${MOCK_COMMAND_LOG}"
 printf '\n' >>"${MOCK_COMMAND_LOG}"
+namespace=""
+resource=""
+previous=""
+for arg in "$@"; do
+  case "${previous}" in
+    --namespace|-n) namespace="${arg}" ;;
+    get) resource="${arg}" ;;
+  esac
+  previous="${arg}"
+done
+case " $* " in
+  *" --output json "*|*" -o json "*)
+    fixture="${MOCK_FIXTURES}/${namespace}.${resource}.json"
+    if [[ -f "${fixture}" ]]; then
+      cat "${fixture}"
+    else
+      printf '{"items":[]}\n'
+    fi
+    exit 0
+    ;;
+esac
 case " $* " in
   *" get networkpolicy "*) printf 'networkpolicy.networking.k8s.io/default-deny\n' ;;
   *" get backendconfig.cloud.google.com "*) printf 'backendconfig.cloud.google.com/service\n' ;;
@@ -92,6 +127,7 @@ chmod +x "${mock_bin}/helm" "${mock_bin}/kubectl" "${mock_bin}/curl" "${mock_bin
 
 export PATH="${mock_bin}:${PATH}"
 export MOCK_COMMAND_LOG="${command_log}"
+export MOCK_FIXTURES="${fixtures}"
 
 "${TEST_BASH}" -n "${HARNESS}" "${LIB}" "${CONFORMANCE_DIR}/http-adapter.sh"
 pass "shell syntax"
@@ -156,6 +192,19 @@ exit 0
 MOCK
 chmod +x "${adapter}" "${hook}"
 
+# Wrong database: the app container started but never became ready.
+cat >"${fixtures}/aw-conformance-test-wrong-db.pods.json" <<'JSON'
+{"items":[{"metadata":{"name":"api-1"},"status":{"phase":"Running",
+  "conditions":[{"type":"PodScheduled","status":"True"}],
+  "containerStatuses":[{"name":"api","ready":false,"state":{"running":{}}}]}}]}
+JSON
+# Migration failure: the migration Job ended Failed=True.
+cat >"${fixtures}/aw-conformance-test-migration.jobs.batch.json" <<'JSON'
+{"items":[{"metadata":{"name":"relay-cloud-api-migrate-abc123"},
+  "spec":{"template":{"metadata":{"labels":{"app.kubernetes.io/component":"migration"}}}},
+  "status":{"failed":3,"conditions":[{"type":"Failed","status":"True"}]}}]}
+JSON
+
 if ! "${TEST_BASH}" "${HARNESS}" \
   --apply --approval APPLY --cleanup \
   --chart ./umbrella \
@@ -194,6 +243,51 @@ jq -e '
   and (.counts.plan == 0)
 ' "${apply_evidence}/summary.json" >/dev/null
 pass "approved apply mode exercises all scenarios with isolated mocks"
+assert_contains "${command_log}" 'helm rollback aw-conformance-test-migration'
+if rg 'upgrade --install aw-conformance-test-(wrong-db|migration) .*(wrong-database|migration-failure)\.yaml' \
+  "${command_log}" | rg -q -- '--atomic'; then
+  fail "negative scenarios must keep failed resources for inspection"
+fi
+
+# Negative scenarios must not PASS when the failure has an unrelated cause.
+: >"${command_log}"
+cat >"${fixtures}/aw-neg-wrong-db.pods.json" <<'JSON'
+{"items":[{"metadata":{"name":"api-1"},"status":{"phase":"Pending",
+  "containerStatuses":[{"name":"api","ready":false,
+    "state":{"waiting":{"reason":"ImagePullBackOff"}}}]}}]}
+JSON
+# No migration Job failed: the upgrade failed for another reason.
+cat >"${fixtures}/aw-neg-migration.jobs.batch.json" <<'JSON'
+{"items":[{"metadata":{"name":"relay-cloud-api-migrate-abc123"},
+  "status":{"succeeded":1,"conditions":[{"type":"Complete","status":"True"}]}}]}
+JSON
+negative_evidence="${tmp_root}/negative-evidence"
+"${TEST_BASH}" "${HARNESS}" --apply --approval APPLY \
+  --chart ./umbrella --current-version 2.0.0 --previous-version 1.0.0 \
+  --namespace aw-neg --release aw-neg \
+  --migration-failure-values "${migration_values}" \
+  --wrong-database-values "${wrong_database_values}" \
+  --evidence-dir "${negative_evidence}" >/dev/null 2>&1 || true
+jq -e '
+  [.scenarios[] | select(.scenario == "wrong-database" or .scenario == "migration-failure") | .status]
+  == ["FAIL", "FAIL"]
+' "${negative_evidence}/summary.json" >/dev/null ||
+  fail "negative scenarios passed without a fixture-specific failure signal"
+pass "negative scenarios assert the specific expected failure"
+
+: >"${command_log}"
+baseline_evidence="${tmp_root}/no-baseline-evidence"
+# A fresh install that fails (the mock rejects this values file) gives no
+# baseline, so the wrong-database scenario cannot attribute a failure.
+"${TEST_BASH}" "${HARNESS}" --apply --approval APPLY \
+  --chart ./umbrella --namespace aw-nobase --release aw-nobase \
+  --values "${wrong_database_values}" \
+  --wrong-database-values "${wrong_database_values}" \
+  --evidence-dir "${baseline_evidence}" >/dev/null 2>&1 || true
+jq -e '.scenarios[] | select(.scenario == "wrong-database") | .status == "SKIP"' \
+  "${baseline_evidence}/summary.json" >/dev/null ||
+  fail "wrong-database ran without a passing baseline install"
+pass "wrong-database requires a passing baseline install"
 
 : >"${command_log}"
 set +e

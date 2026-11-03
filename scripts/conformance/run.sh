@@ -189,19 +189,110 @@ create_namespace() {
   return 1
 }
 
-install_release() {
-  local release="$1"
-  local namespace="$2"
-  local version="$3"
-  shift 3
+# helm_install_mode atomic|keep RELEASE NAMESPACE VERSION [extra helm args...]
+# "keep" leaves failed resources in place so negative scenarios can inspect
+# why the release failed before cleaning up.
+helm_install_mode() {
+  local rollback_mode="$1"
+  local release="$2"
+  local namespace="$3"
+  local version="$4"
+  shift 4
+  local atomic_args=()
+  [[ "${rollback_mode}" == "atomic" ]] && atomic_args=(--atomic)
   helm_values_args
   helm_version_args "${version}"
   # Migration Jobs are plain (non-hook) Jobs; --wait alone does not wait for
   # them, so a running or failed migration could otherwise report success.
   run_quiet safe_helm upgrade --install "${release}" "${CHART}" \
     --namespace "${namespace}" \
-    --atomic --wait --wait-for-jobs --timeout "${TIMEOUT}" --hide-secret \
+    ${atomic_args[@]+"${atomic_args[@]}"} --wait --wait-for-jobs \
+    --timeout "${TIMEOUT}" --hide-secret \
     ${HELM_VERSION_ARGS[@]+"${HELM_VERSION_ARGS[@]}"} ${HELM_VALUES_ARGS[@]+"${HELM_VALUES_ARGS[@]}"} "$@"
+}
+
+install_release() {
+  helm_install_mode atomic "$@"
+}
+
+install_release_keep_failure() {
+  helm_install_mode keep "$@"
+}
+
+# Print a JSON object classifying why release pods are not healthy:
+#   unrelated: pods blocked by image, config, or scheduling problems, which
+#              say nothing about the database fixture
+#   app_failed: workload containers that started and then stayed unready,
+#              exited non-zero, or crash-looped (the expected signal when
+#              the application cannot use its database)
+classify_release_pods() {
+  local release="$1"
+  local namespace="$2"
+  local pods_json=""
+  pods_json="$(safe_kubectl get pods --namespace "${namespace}" \
+    --selector "app.kubernetes.io/instance=${release}" --output json 2>/dev/null)" ||
+    return 1
+  jq -ce '
+    def statuses: ((.status.initContainerStatuses // []) + (.status.containerStatuses // []));
+    def unrelated_reason:
+      ["ErrImagePull", "ImagePullBackOff", "InvalidImageName",
+       "CreateContainerConfigError", "CreateContainerError", "RunContainerError"];
+    (.items // []) as $pods
+    | {
+        pods: ($pods | length),
+        unrelated: [
+          $pods[]
+          | select(
+              any(statuses[]; (.state.waiting.reason // "") as $r | any(unrelated_reason[]; . == $r))
+              or any((.status.conditions // [])[]; .type == "PodScheduled" and .status == "False")
+            )
+        ] | length,
+        app_failed: [
+          $pods[]
+          | select(
+              any(statuses[];
+                (.state.running != null and .ready != true)
+                or ((.state.terminated.exitCode // 0) != 0)
+                or ((.lastState.terminated.exitCode // 0) != 0)
+                or ((.state.waiting.reason // "") == "CrashLoopBackOff"))
+            )
+        ] | length
+      }
+  ' <<<"${pods_json}"
+}
+
+# Print the number of failed migration Jobs for a release. Migration Jobs are
+# identified by name or by their pod template component label.
+count_failed_migration_jobs() {
+  local release="$1"
+  local namespace="$2"
+  local jobs_json=""
+  jobs_json="$(safe_kubectl get jobs.batch --namespace "${namespace}" \
+    --selector "app.kubernetes.io/instance=${release}" --output json 2>/dev/null)" ||
+    return 1
+  jq -e '
+    [ (.items // [])[]
+      | select(
+          ((.metadata.name // "") | test("migrat"; "i"))
+          or ((.spec.template.metadata.labels["app.kubernetes.io/component"] // "") == "migration")
+        )
+      | select(any((.status.conditions // [])[]; .type == "Failed" and .status == "True"))
+    ] | length
+  ' <<<"${jobs_json}"
+}
+
+deployed_chart_matches_version() {
+  local release="$1"
+  local namespace="$2"
+  local version="$3"
+  local releases_json=""
+  [[ -n "${version}" ]] || return 0
+  releases_json="$(safe_helm list --namespace "${namespace}" \
+    --filter "^${release}$" --output json 2>/dev/null)" || return 1
+  jq -e --arg release "${release}" --arg version "${version}" \
+    'any(.[]; .name == $release and .status == "deployed"
+      and ((.chart // "") | endswith("-" + $version)))' \
+    >/dev/null 2>&1 <<<"${releases_json}"
 }
 
 dry_run_release() {
@@ -319,13 +410,46 @@ scenario_migration_failure() {
     return
   fi
 
-  if install_release "${release}" "${namespace}" "${CURRENT_VERSION}" \
+  # The upgrade is not atomic: an atomic rollback would delete the failed
+  # migration Job before its failure could be attributed. The harness proves
+  # the cause first, then rolls back explicitly.
+  if install_release_keep_failure "${release}" "${namespace}" "${CURRENT_VERSION}" \
     --values "${MIGRATION_FAILURE_VALUES}"; then
     emit_evidence "${scenario}" "FAIL" "migration unexpectedly succeeded"
-  elif release_is_deployed "${release}" "${namespace}"; then
-    emit_evidence "${scenario}" "PASS" "migration failed and atomic rollback retained the deployed release"
+    return
+  fi
+
+  local failed_jobs="" pod_summary="" unrelated=0
+  if ! failed_jobs="$(count_failed_migration_jobs "${release}" "${namespace}")"; then
+    failed_jobs=0
+  fi
+  if pod_summary="$(classify_release_pods "${release}" "${namespace}")"; then
+    unrelated="$(jq -r '.unrelated' <<<"${pod_summary}")"
+  fi
+
+  if ((failed_jobs == 0)); then
+    emit_evidence "${scenario}" "FAIL" "upgrade failed but no migration Job reached Failed=True" \
+      "$(json_object --argjson unrelated "${unrelated}" '{unrelated_pod_failures: $unrelated}')"
+    run_quiet safe_helm rollback "${release}" --namespace "${namespace}" \
+      --wait --wait-for-jobs --timeout "${TIMEOUT}" || true
+    return
+  fi
+  if ((unrelated > 0)); then
+    emit_evidence "${scenario}" "FAIL" "migration Job failed alongside unrelated image, config, or scheduling failures" \
+      "$(json_object --argjson unrelated "${unrelated}" '{unrelated_pod_failures: $unrelated}')"
+    run_quiet safe_helm rollback "${release}" --namespace "${namespace}" \
+      --wait --wait-for-jobs --timeout "${TIMEOUT}" || true
+    return
+  fi
+
+  if run_quiet safe_helm rollback "${release}" --namespace "${namespace}" \
+    --wait --wait-for-jobs --timeout "${TIMEOUT}" &&
+    release_is_deployed "${release}" "${namespace}" &&
+    deployed_chart_matches_version "${release}" "${namespace}" "${PREVIOUS_VERSION}"; then
+    emit_evidence "${scenario}" "PASS" "migration Job failed and rollback restored the previous deployed release" \
+      "$(json_object --argjson failed_jobs "${failed_jobs}" '{failed_migration_jobs: $failed_jobs}')"
   else
-    emit_evidence "${scenario}" "FAIL" "migration failed but previous release was not retained"
+    emit_evidence "${scenario}" "FAIL" "migration failed but the previous release was not restored"
   fi
 }
 
@@ -343,14 +467,32 @@ scenario_wrong_database() {
     return
   }
   require_apply "${scenario}" || return
+  # Baseline: the same chart, version, and base values must already have
+  # become ready, so a failure below can be attributed to the overlay.
+  if [[ "${FRESH_INSTALL_OK}" != true ]]; then
+    emit_evidence "${scenario}" "SKIP" "requires a passing fresh install with the same base values as a baseline"
+    return
+  fi
 
   if ! create_namespace "${namespace}"; then
     emit_evidence "${scenario}" "FAIL" "could not create isolated namespace"
-  elif install_release "${release}" "${namespace}" "${CURRENT_VERSION}" \
+    return
+  fi
+  if install_release_keep_failure "${release}" "${namespace}" "${CURRENT_VERSION}" \
     --values "${WRONG_DATABASE_VALUES}"; then
     emit_evidence "${scenario}" "FAIL" "release became ready with a known-wrong database"
+    return
+  fi
+
+  local pod_summary=""
+  if ! pod_summary="$(classify_release_pods "${release}" "${namespace}")"; then
+    emit_evidence "${scenario}" "FAIL" "install failed but release pods could not be inspected"
+  elif jq -e '.unrelated == 0 and .app_failed > 0' >/dev/null <<<"${pod_summary}"; then
+    emit_evidence "${scenario}" "PASS" "known-wrong database left started workloads unready while the baseline became ready" \
+      "${pod_summary}"
   else
-    emit_evidence "${scenario}" "PASS" "known-wrong database prevented readiness"
+    emit_evidence "${scenario}" "FAIL" "install failed for a reason not attributable to the wrong database" \
+      "${pod_summary}"
   fi
 }
 
