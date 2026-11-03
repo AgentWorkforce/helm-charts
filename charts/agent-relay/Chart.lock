@@ -1,7 +1,7 @@
 dependencies:
 - name: relaycast
   repository: file://../relaycast
-  version: 0.3.1
+  version: 0.3.2
 - name: relayauth
   repository: file://../relayauth
   version: 0.1.2
@@ -26,5 +26,5 @@ dependencies:
 - name: relayfile
   repository: file://../relayfile
   version: 0.2.0
-digest: sha256:43e0b3923627f7f49faa25042f7cb5b6cb58063dd20f8c99bbddd4e37c704bd0
-generated: "2026-11-03T10:18:40.215577-08:00"
+digest: sha256:3a1e8b73bbb5dd09e11168ffa0d7f7d5a0f4ccaf2eb2fe4a9602c2f733aa52c0
+generated: "2026-11-03T13:14:48.597974-08:00"

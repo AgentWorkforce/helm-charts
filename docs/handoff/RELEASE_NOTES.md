@@ -37,6 +37,15 @@ Desktop setup. Relayflows, durable actors and Relayfile are optional preview
 components, off by default. Billing, provider integrations and hosted fleet
 are out of scope.
 
+## agent-relay 0.3.3 (2026-11-03)
+
+Pins the attested Relaycast image: `relaycast-self-host@sha256:81274dca…`
+(relaycast main `bf713d86`, engine 12.7.0; SPDX SBOM, max-mode provenance and a
+GitHub build-provenance attestation; public, amd64+arm64). The relaycast leaf
+chart is now 0.3.2 with the same default. This image has not run the GKE
+upgrade/restore drills; its kind smoke runs in this repository's CI. It also carries the untagged 0.3.2 GKE proof-overlay refresh (proof
+values only). Everything else is as in 0.3.1.
+
 ## agent-relay 0.3.1 (2026-11-03): reviewable release
 
 This is the first release of the umbrella chart, to be published from the
@@ -62,7 +71,7 @@ exists and you pin it.
 | Control-plane API | `ghcr.io/agentworkforce/selfhost-api@sha256:535e6718…` | relaycontrol `8e989a1` | SBOM + max provenance; **private package, not pullable by customers yet** (installation blocker) |
 | Dashboard | `ghcr.io/agentworkforce/relay-dashboard@sha256:bbeca872…` | relay-dashboard `b213406` | SBOM + max provenance + GitHub attestation; public |
 | RelayAuth | `ghcr.io/agentworkforce/relayauth@sha256:c23c92d2…` | relayauth `784582e` | SBOM + provenance; public |
-| Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad…` | relaycast `bdf1b69` | public; **no SBOM, min-mode provenance only** (attested rebuild pending) |
+| Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:81274dca…` | relaycast `bf713d86` (engine 12.7.0) | SBOM + max provenance + GitHub attestation; public (0.3.2) |
 | Sessions wait-for-role | `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9…` | upstream `4c2710a` | upstream revision label `4c2710a`, run 40291448784; SBOM + SLSA attestation manifests; keyless cosign signature verified with `--certificate-github-workflow-sha` |
 | Sessions services | `ghcr.io/agentworkforce/96bulls-services` | no release revision yet (last audited private image: `7d7229b`; the release is to be built from `main` at or after `51b38ff`) | **not published** (zero digest): the attested publish needs the owner's dispatch; REQUIRED OVERRIDE, installation blocker |
 | RelayHistory | `ghcr.io/agentworkforce/relayhistory` | relayhistory-cloud | **not published** (zero digest): the self-host runtime PR is held; REQUIRED OVERRIDE, installation blocker |

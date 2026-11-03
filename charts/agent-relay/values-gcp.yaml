@@ -37,9 +37,10 @@ gkeIngress:
 relaycast:
   fullnameOverride: relaycast
   image:
-    # Release image (public GHCR, relaycast bdf1b69; an SBOM-attested rebuild is pending relaycast #619). Mirror by digest and override repository.
+    # Release image (public GHCR, relaycast main bf713d86, engine 12.7.0, SBOM +
+    # provenance). Mirror it by digest to your registry and override repository.
     repository: ghcr.io/agentworkforce/relaycast-self-host
-    digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
+    digest: sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e
   # REQUIRED OVERRIDE: must use the same cast host as gkeIngress.hosts.cast.
   baseUrl: https://cast.placeholder.company
   # REQUIRED OVERRIDE: existing Secret name; see README for required keys.

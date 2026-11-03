@@ -10,7 +10,7 @@ metadata:
   auditedAt: "2026-11-03"
   chart:
     name: agent-relay
-    version: 0.3.1
+    version: 0.3.3
     values:
       - charts/agent-relay/values-gcp.yaml
 
@@ -60,37 +60,43 @@ images:
       - Deployment/relaycast:relaycast
     current:
       repository: ghcr.io/agentworkforce/relaycast-self-host
-      digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762
+      digest: sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e
       chartStatus: shipped
     source:
       repository: https://github.com/AgentWorkforce/relaycast
-      revision: bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49
+      revision: bf713d86b366b46f491e287ce6117c7c5ff1f27a
       path: Dockerfile
       reproducibleReference: true
+      note: relaycast main after #618 and #619; engine 12.7.0 (docker/package.json pin).
     license:
       status: approved
       spdx: Apache-2.0
-      evidence: LICENSE at the source revision
+      evidence: https://github.com/AgentWorkforce/relaycast/blob/bf713d86b366b46f491e287ce6117c7c5ff1f27a/LICENSE
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
       status: verified
+      verificationAccess: anonymous
     release:
-      workflow: https://github.com/AgentWorkforce/relaycast/blob/bdf1b69ccaf1cd2bc7ce6c975c824907cc9eff49/.github/workflows/publish-container.yml
-      run: https://github.com/AgentWorkforce/relaycast/actions/runs/41161384835
+      workflow: https://github.com/AgentWorkforce/relaycast/blob/bf713d86b366b46f491e287ce6117c7c5ff1f27a/.github/workflows/publish-container.yml
+      run: https://github.com/AgentWorkforce/relaycast/actions/runs/41717074565
       trigger: workflow_dispatch
       buildsCommittedRevision: true
-      publishesSbom: false
-      # buildx default (mode=min, unsigned) attestation only; not verifiable.
-      publishesProvenance: false
-      provenanceMode: buildx-default
+      publishedTags: ["12.7.0"]
+      publishesSbom: true
+      publishesProvenance: true
+      provenanceMode: max-plus-github-attestation
     customerAcquisition:
       status: available-public
       procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
     approval:
-      status: blocked
-      blockingReasons: [IMG-BLOCK-005]
-
+      status: approved
+      basis: >-
+        Public digest from the reviewed publish-container workflow at the
+        recorded main revision, with an SPDX SBOM, max-mode provenance, a
+        GitHub build-provenance attestation, and amd64+arm64 verified
+        anonymously from the registry.
+      blockingReasons: []
   - id: relayauth
     active: true
     firstParty: true
@@ -454,10 +460,12 @@ blockers:
       - both platforms are verified anonymously from the registry
   - id: IMG-BLOCK-005
     severity: hard
-    images: [relaycast, sessions-services]
+    images: [sessions-services]
     summary: >-
-      The release workflows publish no SBOM and only buildx's default
-      (mode=min, unsigned) provenance, which is not verifiable provenance.
+      The recorded Sessions services digest was built before the workflow
+      gained an SBOM and signed provenance (sessions-pipeline #172, merged);
+      a new digest from the attested workflow is not published yet.
+      Relaycast was closed by relaycast #619 and the 12.7.0 digest.
     closeWhen:
       - the release workflow publishes an SBOM and signed provenance for the recorded revision
       - a new digest built that way is recorded here
