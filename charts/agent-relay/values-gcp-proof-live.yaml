@@ -29,7 +29,7 @@ relayhistory:
 
 relay-cloud-api:
   image:
-    digest: sha256:0452a72da76d36c9c69ac6de75e51299b1df1a0fdfaec37831bff6deb55c7cf8
+    digest: sha256:6942f8ede4f69ea7db0b2defdabf1ad04217ad6b6e275084126c1c6ab7f84ce3
   resources:
     requests: { cpu: 25m, memory: 128Mi }
     limits: { memory: 512Mi }
@@ -42,4 +42,4 @@ relay-cloud-api:
 
 relay-dashboard:
   image:
-    digest: sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe
+    digest: sha256:720ae773f2200afcf2512818cc45969b841d8330aec796482c9b4cba51aa5463
