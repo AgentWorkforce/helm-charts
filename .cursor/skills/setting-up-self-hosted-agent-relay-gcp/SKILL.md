@@ -22,9 +22,10 @@ Neither layout provisions GCP infrastructure.
   values, logs, receipts, temporary renders, or Relay messages.
 - Use Workload Identity and existing Kubernetes Secret references. Refuse
   service-account JSON keys and inline Helm secrets.
-- Treat the resolved `AGENT_RELAY_BASE_VALUES_FILE` as a structural base only.
-  It contains proof-specific domains, resource names, repositories, bucket,
-  region, and organization ID; never deploy it unchanged for a customer.
+- Treat the resolved `AGENT_RELAY_BASE_VALUES_FILE` (`values-gcp.yaml`) as a
+  structural base only. It contains placeholder domains, resource names,
+  repositories, zero image digests, bucket, region, and organization ID; never
+  deploy it unchanged for a customer.
 - This profile is `portable-single`. Relaycast, RelayAuth, and the stateful
   pipeline components are single-writer; never describe the installation as HA.
 - Never use Helm `--atomic` for this suite. Helm can remove or roll back
@@ -77,23 +78,31 @@ unset layout_exports
 printf 'Using %s layout at %s\n' "$AGENT_RELAY_LAYOUT" "$AGENT_RELAY_ROOT"
 
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+# Pin the exact gcloud-generated context. Every later kubectl and helm command
+# passes it explicitly, so switching contexts after preflight cannot redirect
+# a mutation to another cluster.
+export KUBE_CONTEXT="gke_${GCP_PROJECT_ID}_${GCP_REGION}_${GKE_CLUSTER}"
 bash "$SKILL_DIR/scripts/preflight.sh"
 ```
 
 The resolver supports:
 
-- a standalone extracted handoff containing one `agent-relay-*.tgz` and an
-  adjacent `values-gcp-proof.yaml`;
-- a standalone handoff where that package was also extracted to
-  `agent-relay/`;
-- a source repository containing `charts/agent-relay/`.
+- the extracted customer handoff archive or the source repository, both
+  containing `charts/agent-relay/` with `charts/agent-relay/values-gcp.yaml`;
+- a standalone directory containing one `agent-relay-*.tgz` and an adjacent
+  `values-gcp.yaml`;
+- a standalone directory where that package was also extracted to
+  `agent-relay/`.
 
 It exports `AGENT_RELAY_CHART_PATH`, `AGENT_RELAY_BASE_VALUES_FILE`, and
 optional repository-only check paths. Stop if resolution is ambiguous or
 fails; do not guess among multiple chart packages.
 
 The script verifies required variables and tools, active authentication,
-project identity, kube-context identity, and hostname syntax. It performs
+project identity, and hostname syntax. For kube-context identity it requires
+`KUBE_CONTEXT` and the current context to both equal
+`gke_<project>_<region>_<cluster>`, and the context's API server to equal an
+endpoint that `gcloud container clusters describe` reports for that cluster. It performs
 read-only GCP and Kubernetes configuration checks; it does not validate image
 pull access, existing infrastructure, or DNS ownership. Stop on any failure.
 
@@ -226,6 +235,7 @@ otherwise show the reviewed render. After explicit approval:
 
 ```bash
 helm install "$RELEASE" "$CHART" \
+  --kube-context "$KUBE_CONTEXT" \
   --namespace "$NAMESPACE" --create-namespace --no-hooks \
   -f "$BASE_VALUES" \
   -f "$CUSTOMER_VALUES_FILE" \
@@ -252,7 +262,7 @@ Create the three non-secret evidence files described in
 
 ```bash
 bash "$SKILL_DIR/scripts/pre-upgrade-check.sh" \
-  --context "$(kubectl config current-context)" \
+  --context "$KUBE_CONTEXT" \
   --namespace "$NAMESPACE" \
   --release "$RELEASE" \
   --target-chart "$CHART" \
@@ -267,6 +277,7 @@ separate approval:
 
 ```bash
 helm upgrade "$RELEASE" "$CHART" \
+  --kube-context "$KUBE_CONTEXT" \
   --namespace "$NAMESPACE" --no-hooks \
   -f "$BASE_VALUES" \
   -f "$CUSTOMER_VALUES_FILE" \
@@ -286,6 +297,47 @@ only after separate approval; even then the database remains migrated.
 
 Record the Helm revision, chart versions, image digests, namespace, migration
 results, recovery ID, and non-secret resource IDs.
+
+### Restore into a target
+
+`--no-hooks` does not stop migrations: the RelayHistory, control-plane API and
+96Bulls migration Jobs, and the 96Bulls locker init Job, are plain Jobs, not
+Helm hooks. Installing the chart over restored data would run them against
+it. For a restore (isolated drill or recovery), first create a non-secret
+restore overlay in the operator's configuration location, and pass it last:
+
+```yaml
+# restore-overlay.yaml: no migration, init or backup Jobs during a restore.
+relayhistory:
+  migrations:
+    enabled: false
+relay-cloud-api:
+  migrations:
+    enabled: false
+96bulls:
+  worker:
+    migrations:
+      enabled: false
+    lockerInit:
+      enabled: false
+relaycast:
+  backup:
+    enabled: false
+```
+
+```bash
+helm install "$RELEASE" "$CHART" \
+  --kube-context "$KUBE_CONTEXT" \
+  --namespace "$NAMESPACE" --create-namespace --no-hooks \
+  -f "$BASE_VALUES" \
+  -f "$CUSTOMER_VALUES_FILE" \
+  -f "$RESTORE_OVERLAY_FILE" \
+  --wait --timeout 20m
+```
+
+Render first and confirm the output contains no `Job` objects. Re-enable
+migrations only through a reviewed upgrade after the restored data and image
+versions are proven compatible.
 
 ## 6. Publish DNS and verify public endpoints
 

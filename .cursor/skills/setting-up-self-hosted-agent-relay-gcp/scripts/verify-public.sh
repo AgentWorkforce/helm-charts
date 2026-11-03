@@ -69,7 +69,12 @@ import sys
 from urllib.parse import urlsplit
 
 try:
-    parsed = urlsplit(sys.argv[1])
+    raw = sys.argv[1]
+    # urlsplit drops an empty query or fragment, so a bare trailing "?" or "#"
+    # would otherwise pass and turn origin+path into origin?/healthz.
+    if any(c in raw for c in "?#\\") or any(c.isspace() for c in raw):
+        raise ValueError
+    parsed = urlsplit(raw)
     host = parsed.hostname
     port = parsed.port or 443
     if (
