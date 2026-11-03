@@ -103,7 +103,7 @@ helm --kube-context "$CTX" upgrade --install agent-relay charts/agent-relay -n "
 PF_PIDS=()
 cleanup() { for pid in "${PF_PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; done; }
 trap cleanup EXIT
-"${K[@]}" port-forward svc/relayfile 28581:8080 >"$WORK/pf-relayfile.log" 2>&1 & PF_PIDS+=($!)
+"${K[@]}" port-forward svc/relayfile-server 28581:8080 >"$WORK/pf-relayfile.log" 2>&1 & PF_PIDS+=($!)
 "${K[@]}" port-forward svc/relaycast 28587:8787 >"$WORK/pf-relaycast.log" 2>&1 & PF_PIDS+=($!)
 sleep 3
 
