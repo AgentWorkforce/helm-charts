@@ -189,12 +189,15 @@ count and bytes.
 ### 1. Quiesce writes
 
 `WRITER_SELECTOR` (default `app.kubernetes.io/instance=<release>`) selects the
-Deployments and StatefulSets the script treats as writers. It records
-`writesQuiesced: true` only when at least one controller matches and every
-match has zero desired and zero running replicas, both before and after the
-capture. Otherwise the capture is recorded as crash-consistent with
-`writesQuiesced: false`, which the pre-upgrade gate rejects. With
-`REQUIRE_WRITES_QUIESCED=true` the script fails instead.
+Deployments, StatefulSets, and Pods the script treats as writers. It records
+`writesQuiesced: true` only when at least one controller matches, every match
+has zero desired and zero running replicas, and no matching Pod is left that is
+not `Succeeded` or `Failed` (a terminating Pod still counts), both before and
+after the capture. Before the capture it waits up to `QUIESCE_WAIT_SECONDS`
+(default 300) for scaled-down Pods to finish terminating. Otherwise the
+capture is recorded as crash-consistent with `writesQuiesced: false`, which the
+pre-upgrade gate rejects. With `REQUIRE_WRITES_QUIESCED=true` the script fails
+instead.
 
 Enable maintenance mode at the public edge. Record replica counts, then scale
 every writer to zero:

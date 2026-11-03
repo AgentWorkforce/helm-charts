@@ -468,6 +468,27 @@ jq --arg id "${recovery_id}" '.recoveryId = $id' "${tmp_root}/gate/restore.json"
 write_jobs "${complete}"
 run_pre_upgrade "${tmp_root}/gate" || fail "pre-upgrade rejected evidence produced by the backup script"
 
+# A controller at zero replicas whose old pod is still terminating is not
+# quiesced: the pod can still write while the capture runs.
+reset_fixtures
+write_backup_fixtures
+cat >"${fixtures}/deployments.apps,statefulsets.apps.json" <<'JSON'
+{"items":[{"kind":"Deployment","spec":{"replicas":0},"status":{"replicas":0}}]}
+JSON
+cat >"${fixtures}/pods.json" <<'JSON'
+{"items":[{"metadata":{"name":"relaycast-0","deletionTimestamp":"2026-01-01T00:00:00Z"},
+  "status":{"phase":"Running"}}]}
+JSON
+run_backup 7777aaaa QUIESCE_WAIT_SECONDS=0 ||
+  { cat "${tmp_root}/backup.out" >&2; fail "backup with a terminating writer pod failed"; }
+jq -e '.writesQuiesced == false and .consistency == "crash-consistent"' \
+  "$(latest_backup_evidence)" >/dev/null ||
+  fail "a terminating writer pod must not be recorded as writesQuiesced=true"
+if run_backup 8888bbbb QUIESCE_WAIT_SECONDS=0 REQUIRE_WRITES_QUIESCED=true; then
+  fail "REQUIRE_WRITES_QUIESCED accepted a terminating writer pod"
+fi
+pass "backup treats terminating writer pods as unquiesced"
+
 reset_fixtures
 write_backup_fixtures
 if run_backup 5555eeee REQUIRE_WRITES_QUIESCED=true; then

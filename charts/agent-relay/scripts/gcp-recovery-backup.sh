@@ -6,7 +6,10 @@
 #
 # The capture is crash-consistent unless the release's writers are verified
 # quiesced (every Deployment/StatefulSet matching WRITER_SELECTOR scaled to
-# zero with no remaining replicas) both before and after the capture. Only
+# zero with no remaining replicas, and no non-terminal pod matching
+# WRITER_SELECTOR, terminating ones included) both before and after the
+# capture. The preflight waits up to QUIESCE_WAIT_SECONDS (default 300) for
+# pods of scaled-down writers to finish terminating. Only
 # then does the evidence record writesQuiesced=true, which the pre-upgrade
 # gate requires. Set REQUIRE_WRITES_QUIESCED=true to fail instead of
 # recording a crash-consistent capture.
@@ -29,6 +32,7 @@ RECOVERY_URI=""
 SOURCE_REVISION=""
 WRITES_QUIESCED=false
 REQUIRE_WRITES_QUIESCED="${REQUIRE_WRITES_QUIESCED:-false}"
+QUIESCE_WAIT_SECONDS="${QUIESCE_WAIT_SECONDS:-300}"
 
 required_env=(
   PROJECT_ID CLOUDSQL_INSTANCE CLOUDSQL_DATABASES GCS_SOURCE_BUCKET
@@ -141,6 +145,8 @@ case "$REQUIRE_WRITES_QUIESCED" in
   true|false) ;;
   *) die "REQUIRE_WRITES_QUIESCED must be true or false" ;;
 esac
+[[ "$QUIESCE_WAIT_SECONDS" =~ ^[0-9]+$ ]] ||
+  die "QUIESCE_WAIT_SECONDS must be a non-negative integer"
 WRITER_SELECTOR="${WRITER_SELECTOR:-app.kubernetes.io/instance=${HELM_RELEASE}}"
 
 # Print the deployed Helm revision of HELM_RELEASE. Helm output is parsed in
@@ -164,7 +170,7 @@ print(revision)
 
 # Succeed only when at least one writer controller matches WRITER_SELECTOR
 # and every match is scaled to zero with no remaining replicas.
-writers_quiesced() {
+writer_controllers_at_zero() {
   kubectl --namespace "$KUBERNETES_NAMESPACE" \
     get deployments.apps,statefulsets.apps -l "$WRITER_SELECTOR" \
     -o json 2>/dev/null |
@@ -186,15 +192,49 @@ for item in items:
 '
 }
 
+# Succeed only when no pod matching WRITER_SELECTOR can still write. A
+# controller reports zero replicas while its old pods are still terminating,
+# so every pod that is not Succeeded/Failed counts, including pods with a
+# deletionTimestamp.
+writer_pods_gone() {
+  kubectl --namespace "$KUBERNETES_NAMESPACE" \
+    get pods -l "$WRITER_SELECTOR" -o json 2>/dev/null |
+    python3 -c '
+import json
+import sys
+
+for pod in json.load(sys.stdin).get("items", []):
+    if pod.get("status", {}).get("phase") not in ("Succeeded", "Failed"):
+        raise SystemExit(1)
+'
+}
+
+writers_quiesced() {
+  writer_controllers_at_zero && writer_pods_gone
+}
+
+# Wait up to QUIESCE_WAIT_SECONDS for the pods of scaled-down writers to
+# finish terminating. Fails at once when a controller is not at zero.
+wait_for_writers_quiesced() {
+  local waited=0
+  writer_controllers_at_zero || return 1
+  until writer_pods_gone; do
+    ((waited < QUIESCE_WAIT_SECONDS)) || return 1
+    sleep 5
+    waited=$((waited + 5))
+    writer_controllers_at_zero || return 1
+  done
+}
+
 PHASE="release-preflight"
 SOURCE_REVISION="$(deployed_revision)" ||
   die "cannot read a deployed Helm revision for $HELM_RELEASE"
 
 PHASE="quiesce-preflight"
-if writers_quiesced; then
+if wait_for_writers_quiesced; then
   WRITES_QUIESCED=true
 elif [[ "$REQUIRE_WRITES_QUIESCED" == true ]]; then
-  die "release writers matching WRITER_SELECTOR are not scaled to zero"
+  die "release writers matching WRITER_SELECTOR are not scaled to zero with no pods left"
 fi
 
 PHASE="archive-policy-preflight"
