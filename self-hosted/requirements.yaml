@@ -275,9 +275,9 @@ compatibility:
       depends:
         agent-relay: { relaycast: 0.2.1, relayauth: 0.1.2, 96bulls: 0.5.2, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0, relayflows: 0.2.4 }
       images:
-        relayhistory: { repository: ghcr.io/agentworkforce/relayhistory }
-        relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api }
-        relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard }
+        relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
+        relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
+        relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
       notes: 'GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim.'
     - id: relayfile-0.1.2
       status: unreleased
@@ -1544,7 +1544,9 @@ entries:
         keys:
           - { key: internal-secret, key_path: secretKeys.internalSecret }
           - { key: workspace-bootstrap-secret, key_path: secretKeys.bootstrapSecret }
-    verify: kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has both keys; helm template fails with "existingSecret is required" otherwise
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.credentialKeyring, optional: "required when credentials.authority=self (the ar_ tag keyring)" }
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.relayauthToken, optional: "required when credentials.authority=relayauth or credentials.relayauth.url is set (the RelayAuth token)" }
+    verify: kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has internal-secret and workspace-bootstrap-secret, plus the secretKeys.credentialKeyring key when credentials.authority=self or the secretKeys.relayauthToken key when credentials.authority=relayauth; helm template fails with "existingSecret is required", or the matching credentials error, otherwise
     sources:
       - "charts/relaycast/values.yaml:47"
       - "charts/relaycast/templates/deployment.yaml:61"
@@ -1628,7 +1630,7 @@ entries:
     verify: helm template refuses ingress with allowInsecureBaseUrl or an http baseUrl
     sources:
       - "charts/relaycast/values.yaml:36"
-      - "charts/relaycast/templates/_helpers.tpl:158"
+      - "charts/relaycast/templates/_helpers.tpl:168"
       - "charts/relaycast/templates/deployment.yaml:72"
 
   - id: opt.relaycast.workspace-create
@@ -1648,7 +1650,7 @@ entries:
     verify: POST /v1/workspaces without a key is refused
     sources:
       - "charts/relaycast/values.yaml:85"
-      - "charts/relaycast/templates/_helpers.tpl:159"
+      - "charts/relaycast/templates/_helpers.tpl:165"
 
   - id: opt.relaycast.retention
     kind: option
@@ -1736,7 +1738,7 @@ entries:
     verify: helm template refuses format=ar without an authority, authority=relayauth without url+token, and authority=self without secretKeys.credentialKeyring
     sources:
       - "charts/relaycast/values.yaml:75"
-      - "charts/relaycast/templates/_helpers.tpl:128"
+      - "charts/relaycast/templates/_helpers.tpl:133"
       - "charts/relaycast/templates/deployment.yaml:95"
 
   - id: opt.relaycast.network-policy
@@ -1800,7 +1802,10 @@ entries:
           - { key: internal-secret, key_path: secretKeys.internalSecret }
           - { key: signing-key.pem, key_path: secretKeys.signingKey }
           - { key: bootstrap-api-key, key_path: secretKeys.bootstrapApiKey }
-    verify: kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three keys; helm template fails with "existingSecret is required" otherwise
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.relaycastCredentialKeyring, optional: "set to issue relaycast ar_ credentials (requires relaycast.url and secretKeys.relaycastInternalSecret)" }
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.relaycastInternalSecret, optional: "required with secretKeys.relaycastCredentialKeyring (Relaycast internal API bearer)" }
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.relaycastServiceApiKey, optional: "only with secretKeys.relaycastCredentialKeyring" }
+    verify: kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three required keys, plus the relaycast* keys when secretKeys.relaycastCredentialKeyring is set; helm template fails with "existingSecret is required" (or the relaycast* pairing errors) otherwise
     sources:
       - "charts/relayauth/values.yaml:53"
       - "charts/relayauth/templates/deployment.yaml:65"

@@ -1,15 +1,19 @@
 # Third-party notices and redistribution status
 
-This file records source and license evidence for software directly vendored
+This file records source and license evidence for software bundled as chart dependencies
 or referenced by this Helm chart repository. AgentWorkforce-authored material
 in this repository, including first-party Helm chart code, is licensed under
 Apache License 2.0 by the root [`LICENSE`](LICENSE). Third-party components
 retain their own licenses and notices; this file does not relicense them and
 is not legal advice.
 
-Evidence was checked on 2026-11-02 against the chart archives in this
-repository and the linked upstream repositories. The vendored archives do not
-contain `LICENSE`, `NOTICE`, `COPYING`, or `COPYRIGHT` files.
+Evidence was checked on 2026-11-02 against the dependency chart archives that
+`helm dependency build` produced from the committed `Chart.lock` files, and
+against the linked upstream repositories. Those archives are not committed
+(`*.tgz` is ignored) and the customer handoff does not ship them: they are
+fetched at build or release time, pinned by name, version, and the
+`Chart.lock` digest. The archives do not contain `LICENSE`, `NOTICE`,
+`COPYING`, or `COPYRIGHT` files.
 
 ## License scope
 
@@ -20,21 +24,29 @@ container images, or application source code maintained in other repositories.
 Those materials remain subject to their respective license terms and the
 redistribution limits recorded below.
 
-## Vendored third-party Helm charts
+## Third-party Helm chart dependencies
 
-| Component | Vendored artifact | Upstream source | Upstream license evidence |
+The SHA-256 values are those of the archives fetched on 2026-11-02, recorded
+so a rebuilt archive can be compared; they are not files in this repository.
+`charts/96bulls/Chart.lock` (digest
+`sha256:9f168c6141ecd03c2d88e8d4f6b2420313a0f33f79536eef4f68a4ce7c999de2`)
+pins the versions.
+
+| Component | Dependency archive (produced by `helm dependency build charts/96bulls`) | Upstream source | Upstream license evidence |
 | --- | --- | --- | --- |
 | CloudNativePG cluster chart 0.9.0 | `charts/96bulls/charts/cluster-0.9.0.tgz` (SHA-256 `95b23ee4b7e2b24d7aec03a9b6a7b751ce42c7447f1299a34460764a43a8f030`) | [`cloudnative-pg/charts`, tag `cluster-v0.9.0`, commit `60fda2534060d41f3c9065adfbea0ede282f3920`](https://github.com/cloudnative-pg/charts/tree/cluster-v0.9.0/charts/cluster) | [Apache License 2.0 at that tag](https://github.com/cloudnative-pg/charts/blob/cluster-v0.9.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
 | MinIO chart 5.4.0 | `charts/96bulls/charts/minio-5.4.0.tgz` (SHA-256 `25fa2740480d1ebc9e64340854a6c42d3a7bc39c2a77378da91b21f144faa9af`) | [`minio/minio`, commit `43a74029685512ce9b1b76c053d48b43fc8d64fc`](https://github.com/minio/minio/tree/43a74029685512ce9b1b76c053d48b43fc8d64fc/helm/minio) (`helm/minio/Chart.yaml` is version 5.4.0) | [GNU Affero General Public License v3.0](https://github.com/minio/minio/blob/43a74029685512ce9b1b76c053d48b43fc8d64fc/LICENSE); local copy: [`docs/licenses/AGPL-3.0-only.txt`](docs/licenses/AGPL-3.0-only.txt); upstream notice reproduced below |
 | OpenTelemetry Collector chart 0.178.0 | `charts/96bulls/charts/opentelemetry-collector-0.178.0.tgz` (SHA-256 `9886a0cd6c5894bec18b628540428fda8bd32619715a64383348ebd662496024`) | [`open-telemetry/opentelemetry-helm-charts`, tag `opentelemetry-collector-0.178.0`, commit `7f0a8aa074b841451a32e4127b159685e8905959`](https://github.com/open-telemetry/opentelemetry-helm-charts/tree/opentelemetry-collector-0.178.0/charts/opentelemetry-collector) | [Apache License 2.0 at that tag](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/opentelemetry-collector-0.178.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
 
-The same third-party chart contents are unpacked inside
-`charts/agent-relay/charts/96bulls-0.5.2.tgz` (SHA-256
-`289b5aebc3a9c6cf58b62c5c23446f15dc03d5979a5cd9fefb0bb26bf0f4b9bc`).
-That archive also contains no license or notice file.
+`helm dependency build charts/agent-relay` packages the same third-party chart
+contents inside `charts/agent-relay/charts/96bulls-0.5.2.tgz`, whose bytes
+depend on that local build (one such build had SHA-256
+`289b5aebc3a9c6cf58b62c5c23446f15dc03d5979a5cd9fefb0bb26bf0f4b9bc`); it is not
+committed or shipped in the handoff. That archive also contains no license or
+notice file.
 
 The CloudNativePG operator chart 0.29.1 is an install prerequisite fetched by
-CI/release workflows, not a vendored archive in this checkout. Its source is
+CI/release workflows, not a chart dependency of any chart here. Its source is
 [`cloudnative-pg/charts` tag `cloudnative-pg-v0.29.1`, commit
 `effa01d9a7d6fa390712a83bbadad1784940f2f4`](https://github.com/cloudnative-pg/charts/tree/cloudnative-pg-v0.29.1/charts/cloudnative-pg)
 and that source repository identifies the chart under Apache License 2.0.
@@ -100,7 +112,7 @@ not cleared by this notice.
    images remains blocked until the copyright holder supplies applicable
    license terms and required notices. This does not change the Apache-2.0
    license of the Helm chart code in this repository.
-2. **Legal files are absent from the Helm packages.** The checked vendored
+2. **Legal files are absent from the Helm packages.** The checked dependency
    third-party archives and the generated `agent-relay`/`96bulls` archives
    contain no license or notice files. Root documentation is not automatically
    included by `helm package`. A release process must deliberately place the
