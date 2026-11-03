@@ -46,6 +46,7 @@ before installing. The required value overrides are:
 | `sessions-pipeline.worker.extraEnv` (shared with `alleyoop.extraEnv` through a YAML anchor) | Cloud SQL connection name, Memorystore host/port/server CA bundle, and Pub/Sub topic and subscription. `locker.provider=gcs` arms the Sessions services' GCS data-path readiness check, which requires them; the chart refuses to render without them. |
 | `relaycast.baseUrl` | `https://` plus `gkeIngress.hosts.cast`. |
 | `relayhistory.relayauth.historyOrigin` | `https://` plus `gkeIngress.hosts.history`. |
+| `sessions-pipeline.alleyoop.auth.historyOrigin` | Same origin as `relayhistory.relayauth.historyOrigin` (the History assertion audience couriers use). The umbrella refuses to render when the two differ. |
 | `relay-cloud-api.publicUrl` | `https://` plus `gkeIngress.hosts.api`. |
 | `relay-cloud-api.services.relaycastPublicUrl` | Same origin as `relaycast.baseUrl`. |
 | `relay-cloud-api.services.relayhistoryPublicUrl` | Same origin as `relayhistory.relayauth.historyOrigin`. |

@@ -189,7 +189,9 @@ sessions-pipeline:
       # rejects every RelayAuth-signed courier assertion.
       issuer: http://relayauth:8787
       # REQUIRED OVERRIDE: the bare origin couriers use as the History
-      # assertion audience (byte-equal to RELAYAUTH_HISTORY_ORIGIN).
+      # assertion audience (byte-equal to RELAYAUTH_HISTORY_ORIGIN). It must
+      # equal relayhistory.relayauth.historyOrigin (the chart refuses a
+      # mismatch) and relay-cloud-api.services.relayhistoryPublicUrl.
       historyOrigin: https://history.placeholder.company
   hoopdb:
     enabled: false
