@@ -49,23 +49,39 @@ Let:
 
 - `S` = accepted sessions/day (10,000 at the supported tier);
 - `R` = retained days;
-- `O95` = p95 object bytes stored per session;
-- `D95` = p95 PostgreSQL bytes per session including indexes and TOAST;
-- `M95` = p95 Relaycast message/file bytes attributable to a session;
+- `O` = measured object bytes stored per accepted session: total object bytes
+  added during the test window divided by sessions accepted in that window;
+- `D` = measured PostgreSQL bytes per accepted session including indexes,
+  TOAST, and bloat: total database growth over the window divided by sessions
+  accepted;
+- `M` = measured Relaycast message/file bytes per accepted session: total
+  Relaycast PVC growth over the window divided by sessions accepted;
+- `T` = tail allowance factor, at least 1.2, for day-to-day variation in the
+  daily total; raise it when the measured daily totals vary more than that;
 - `H` = headroom factor, initially 1.5 until growth and compaction are measured;
 - `B` = retained full-backup equivalents.
 
+Size from measured aggregate totals, not per-session percentiles. Retained
+bytes are a sum over sessions, so the mean per session (the total divided by
+the count) is what scales. A per-session p95 can sit below the mean when a few
+sessions carry large attachments, and multiplying it by the session count
+would then undersize storage.
+
 Plan minimum usable capacity as:
 
-- object storage: `S * R * O95 * H`;
-- PostgreSQL: `S * R * D95 * H`, plus WAL/PITR retention and maintenance
+- object storage: `S * R * O * T * H`;
+- PostgreSQL: `S * R * D * T * H`, plus WAL/PITR retention and maintenance
   workspace;
-- Relaycast PVC: `S * R * M95 * H`;
+- Relaycast PVC: `S * R * M * T * H`;
 - backup storage: measured protected bytes times `B * H`.
+
+Also record the largest single session and the p99 per-session size, so that
+upload limits and per-request memory are sized for the tail. These do not
+replace the aggregate totals above.
 
 The overlay starts Relaycast at 50 GiB, RelayAuth at 5 GiB, and the Relaycast
 backup PVC at 100 GiB. Those values are hypotheses. Before approval, replace
-the formula inputs with measured p95 values, document retention, prove backup
+the formula inputs with measured aggregate totals, document retention, prove backup
 completion within the 15-minute recovery-point cadence, and show at least 30%
 free capacity after the 24-hour run and compaction.
 
