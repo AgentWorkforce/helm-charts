@@ -42,7 +42,7 @@ pins the versions.
 `helm dependency build charts/agent-relay` packages the same third-party chart
 contents inside `charts/agent-relay/charts/96bulls-0.5.5.tgz`, whose bytes
 depend on that local build (the 2026-11-03 build had SHA-256
-`a9136ff647222c3370a37f20c85ce0c030848ecec7c0d673f45714acc3cd857a`); it is not
+`b9dedec3ad35dec5b3ad824780a51d700481afdad1dde086fcaa26fd6a95a9d3`); it is not
 committed or shipped in the handoff. That archive also contains no license or
 notice file.
 

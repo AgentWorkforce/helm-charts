@@ -4,7 +4,7 @@ dependencies:
   version: 0.5.3
 - name: alleyoop
   repository: file://../alleyoop
-  version: 0.3.6
+  version: 0.3.7
 - name: cluster
   repository: https://cloudnative-pg.github.io/charts
   version: 0.9.0
@@ -14,5 +14,5 @@ dependencies:
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   version: 0.178.0
-digest: sha256:ade2941ed0a75a418ea51e873a57e645d16d3a9ea8e5810c71c07430b1f079a2
-generated: "2026-11-03T01:34:33.357402-08:00"
+digest: sha256:4cf522ff3ef33cac5e166b882b17443435b35c2e6dbf19988f6f3b1fedd5e304
+generated: "2026-11-03T09:55:22.615115949-08:00"

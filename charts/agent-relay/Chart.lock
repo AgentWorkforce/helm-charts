@@ -7,7 +7,7 @@ dependencies:
   version: 0.1.2
 - name: 96bulls
   repository: file://../96bulls
-  version: 0.5.4
+  version: 0.5.5
 - name: relayhistory
   repository: file://../relayhistory
   version: 0.1.1
@@ -26,5 +26,5 @@ dependencies:
 - name: relayfile
   repository: file://../relayfile
   version: 0.2.0
-digest: sha256:e6d9824fd897eba81b899a299d825dcd2feebddd4c8a4f8e6745fa11530e8d9b
-generated: "2026-11-03T03:36:43.978729-08:00"
+digest: sha256:572674fea2327950790b7d2efa27aaf4f6af272b2fcf97f4b48e11c4e8c67ef8
+generated: "2026-11-03T09:55:24.293665004-08:00"
