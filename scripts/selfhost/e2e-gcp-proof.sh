@@ -181,8 +181,16 @@ remove_worker() {
   fi
 }
 
+# On an interrupted or aborted run, finish the control-plane cleanup case 15
+# would have done (the driver's cleanup phase is idempotent).
+CLEANUP_RAN=false
 cleanup_exit() {
   remove_worker
+  if $CLEANUP && ! $CLEANUP_RAN && [[ -s "$STATE" && -n "$(state_get a.workspaceId 2>/dev/null)" ]]; then
+    CLEANUP_RAN=true
+    printf '\n== interrupted: cleanup (%s)\n' "$(date -u +%FT%TZ)"
+    run_phase cleanup
+  fi
   if [[ -n "$API_POD" ]]; then
     "${KN[@]}" exec "$API_POD" -- rm -f /tmp/e2e-gcp-proof-driver.mjs >/dev/null 2>&1 || true
   fi
@@ -192,6 +200,8 @@ cleanup_exit() {
   rm -rf "$WORK"
 }
 trap cleanup_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # ---------------------------------------------------------------- reporting
 
@@ -383,6 +393,55 @@ printf 'E2E_BASE_DOMAIN=%s\n' "$BASE_DOMAIN"
   python3 -c 'import base64, sys; sys.stdout.write(base64.b64decode(sys.stdin.read() or b"").decode())' >"$RCS"
 [[ -s "$RCS" ]] || { printf 'E2E_RESULT=FAIL\nreason: relaycast-internal-secret not readable from %s\n' "$SECRET_NAME"; exit 1; }
 
+# ---------------------------------------------------------------- public edge readiness
+
+# Decided once, before any public request (case 11 runs before case 10), and
+# shared by every case that crosses the public edge (10, 11, 12, 14).
+cert_status() {
+  "${KN[@]}" get managedcertificate -o jsonpath='{range .items[*]}{.status.certificateStatus}{"\n"}{end}' 2>/dev/null |
+    sort -u | tr '\n' ' '
+}
+PUBLIC_READY=false
+PUBLIC_STATUS="--skip-public"
+PUBLIC_WAITED=0
+if ! $SKIP_PUBLIC; then
+  status="$(cert_status)"
+  while [[ "$status" != "Active " ]] && ((PUBLIC_WAITED < CERT_WAIT)); do
+    step=$((CERT_WAIT - PUBLIC_WAITED))
+    ((step > 30)) && step=30
+    sleep "$step"
+    PUBLIC_WAITED=$((PUBLIC_WAITED + step))
+    status="$(cert_status)"
+  done
+  if [[ "$status" == "Active " ]]; then
+    PUBLIC_READY=true
+    PUBLIC_STATUS="status=Active"
+  else
+    domains="$("${KN[@]}" get managedcertificate -o jsonpath='{range .items[*].status.domainStatus[*]}{.domain}={.status}{" "}{end}' 2>/dev/null)"
+    PUBLIC_STATUS="status=${status% } domains=${domains% } waited=${PUBLIC_WAITED}s"
+  fi
+fi
+printf 'E2E_PUBLIC_READY=%s\n' "$PUBLIC_READY"
+
+# public_gate <check prefix>: 0 when the case may use the public edge;
+# otherwise records a FAIL (--require-public) or SKIPs the case.
+public_gate() {
+  if $SKIP_PUBLIC; then
+    case_skip "--skip-public"
+  elif $PUBLIC_READY; then
+    return 0
+  elif $REQUIRE_PUBLIC; then
+    emit FAIL "$1.public_edge" "public edge not ready: $PUBLIC_STATUS"
+  else
+    case_skip "ManagedCertificate not Active"
+  fi
+  return 1
+}
+
+# has_capability <name>: the control plane serves that feature (detected in
+# case 1 from /openapi.yaml and route probes).
+has_capability() { [[ "$(state_get "capabilities.$1")" == True ]]; }
+
 # ---------------------------------------------------------------- cases 1-5
 
 case_begin 1 "bootstrap"
@@ -406,12 +465,12 @@ case_end 4 "reads: dashboard list/replay/search and RelayHistory direct"
 
 # Case 11 runs here, before erasure (case 9) removes the session.
 case_begin 11 "sessions API"
-if $SKIP_PUBLIC; then
-  case_skip "--skip-public"
-elif $DELIVERED; then
-  run_public_phase sessions
-else
+if ! $DELIVERED; then
   emit FAIL sessions.blocked "no delivered session"
+elif ! has_capability sessions; then
+  case_skip "control plane has no sessions API (activity/search/turns routes)"
+elif public_gate sessions; then
+  run_public_phase sessions
 fi
 case_end 11 "sessions API via the public /cloud/api: list, filters, transcript/turns, search, activity"
 
@@ -511,44 +570,29 @@ case_end 9 "erasure: session removed from list, replay, search and turns"
 # ---------------------------------------------------------------- case 10
 
 case_begin 10 "public edge"
-cert_status() {
-  "${KN[@]}" get managedcertificate -o jsonpath='{range .items[*]}{.status.certificateStatus}{"\n"}{end}' 2>/dev/null |
-    sort -u | tr '\n' ' '
-}
 if $SKIP_PUBLIC; then
   case_skip "--skip-public"
-else
-  waited=0
-  status="$(cert_status)"
-  while [[ "$status" != "Active " ]] && ((waited < CERT_WAIT)); do
-    step=$((CERT_WAIT - waited))
-    ((step > 30)) && step=30
-    sleep "$step"
-    waited=$((waited + step))
-    status="$(cert_status)"
-  done
-  if [[ "$status" != "Active " ]]; then
-    domains="$("${KN[@]}" get managedcertificate -o jsonpath='{range .items[*].status.domainStatus[*]}{.domain}={.status}{" "}{end}' 2>/dev/null)"
-    if $REQUIRE_PUBLIC; then
-      emit FAIL public.certificate "status=${status% } domains=${domains% }"
-    else
-      emit SKIP public.certificate "status=${status% } domains=${domains% }"
-      case_skip "ManagedCertificate not Active"
-    fi
+elif ! $PUBLIC_READY; then
+  if $REQUIRE_PUBLIC; then
+    emit FAIL public.certificate "$PUBLIC_STATUS"
   else
-    emit PASS public.certificate "status=Active"
-    if [[ -x "$VERIFY_PUBLIC" || -f "$VERIFY_PUBLIC" ]]; then
-      vp_out="$(BASE_DOMAIN="$BASE_DOMAIN" bash "$VERIFY_PUBLIC" 2>&1)"
-      vp_rc=$?
-      emit "$([[ $vp_rc -eq 0 ]] && echo PASS || echo FAIL)" public.verify_public \
-        "rc=$vp_rc last=$(tail -n 1 <<<"$vp_out" | sed 's/^verify-public: //')"
-      grep -E '^verify-public: ' <<<"$vp_out" | sed 's/^/  /'
-    else
-      emit FAIL public.verify_public "verify-public.sh not found"
-    fi
-    run_phase issue-public
-    state_pop_to_file publicHistoryToken "$WORK/history-token"
-    python3 - "$STATE" "$WORK" <<'PY'
+    emit SKIP public.certificate "$PUBLIC_STATUS"
+    case_skip "ManagedCertificate not Active"
+  fi
+else
+  emit PASS public.certificate "status=Active waited=${PUBLIC_WAITED}s"
+  if [[ -x "$VERIFY_PUBLIC" || -f "$VERIFY_PUBLIC" ]]; then
+    vp_out="$(BASE_DOMAIN="$BASE_DOMAIN" bash "$VERIFY_PUBLIC" 2>&1)"
+    vp_rc=$?
+    emit "$([[ $vp_rc -eq 0 ]] && echo PASS || echo FAIL)" public.verify_public \
+      "rc=$vp_rc last=$(tail -n 1 <<<"$vp_out" | sed 's/^verify-public: //')"
+    grep -E '^verify-public: ' <<<"$vp_out" | sed 's/^/  /'
+  else
+    emit FAIL public.verify_public "verify-public.sh not found"
+  fi
+  run_phase issue-public
+  state_pop_to_file publicHistoryToken "$WORK/history-token"
+  python3 - "$STATE" "$WORK" <<'PY'
 import json, os, sys
 state = json.load(open(sys.argv[1]))
 work = sys.argv[2]
@@ -562,37 +606,36 @@ header("h-agent", state["agents"]["alpha"]["token"])
 history = open(os.path.join(work, "history-token")).read()
 header("h-history", history)
 PY
-    rm -f "$WORK/history-token"
-    ws_a="$(state_get a.workspaceId)"
-    pub() { # check expected header-file url
-      local code
-      code="$(curl --disable --silent --output /dev/null --max-time 20 --proto '=https' \
-        --write-out '%{http_code}' ${3:+--header "@$WORK/$3"} "$4" 2>/dev/null)"
-      if [[ "$code" == "$2" ]]; then emit PASS "$1" "status=$code"; else emit FAIL "$1" "status=$code expected=$2"; fi
-    }
-    pub public.api_whoami 200 h-api "https://api.$BASE_DOMAIN/api/v1/auth/whoami"
-    pub public.api_resolve 200 h-api "https://api.$BASE_DOMAIN/api/v1/workspaces/$ws_a/resolve"
-    pub public.dashboard_sessions 200 h-api "https://$BASE_DOMAIN/cloud/api/v1/workspaces/$ws_a/sessions"
-    pub public.dashboard_cross_tenant 404 h-api-b "https://$BASE_DOMAIN/cloud/api/v1/workspaces/$ws_a/sessions"
-    pub public.api_anonymous 401 "" "https://api.$BASE_DOMAIN/api/v1/auth/whoami"
-    pub public.cast_roster 200 h-cast "https://cast.$BASE_DOMAIN/v1/agents"
-    pub public.cast_agent 200 h-agent "https://cast.$BASE_DOMAIN/v1/agent"
-    pub public.cast_anonymous 401 "" "https://cast.$BASE_DOMAIN/v1/agents"
-    code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' -X POST \
-      -H 'content-type: application/json' --data '{"name":"e2e-edge-probe"}' "https://cast.$BASE_DOMAIN/v1/workspaces")"
-    # The chart routes this path to a selector-less Service, so the Google edge
-    # answers 502 (no backend) and the request never reaches Relaycast.
-    [[ "$code" == 502 || "$code" == 404 || "$code" == 403 ]] && emit PASS public.cast_workspace_create_denied "status=$code edge_denied=true" ||
-      emit FAIL public.cast_workspace_create_denied "status=$code"
-    code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' "https://cast.$BASE_DOMAIN/internal/capabilities")"
-    # The chart routes this path to a selector-less Service, so the Google edge
-    # answers 502 (no backend) and the request never reaches Relaycast.
-    [[ "$code" == 502 || "$code" == 404 || "$code" == 403 ]] && emit PASS public.cast_internal_denied "status=$code edge_denied=true" ||
-      emit FAIL public.cast_internal_denied "status=$code"
-    pub public.history_sessions 200 h-history "https://history.$BASE_DOMAIN/v1/sessions?workspace=$ws_a&limit=1"
-    pub public.history_anonymous 401 "" "https://history.$BASE_DOMAIN/v1/delivery/limits"
-    rm -f "$WORK"/h-*
-  fi
+  rm -f "$WORK/history-token"
+  ws_a="$(state_get a.workspaceId)"
+  pub() { # check expected header-file url
+    local code
+    code="$(curl --disable --silent --output /dev/null --max-time 20 --proto '=https' \
+      --write-out '%{http_code}' ${3:+--header "@$WORK/$3"} "$4" 2>/dev/null)"
+    if [[ "$code" == "$2" ]]; then emit PASS "$1" "status=$code"; else emit FAIL "$1" "status=$code expected=$2"; fi
+  }
+  pub public.api_whoami 200 h-api "https://api.$BASE_DOMAIN/api/v1/auth/whoami"
+  pub public.api_resolve 200 h-api "https://api.$BASE_DOMAIN/api/v1/workspaces/$ws_a/resolve"
+  pub public.dashboard_sessions 200 h-api "https://$BASE_DOMAIN/cloud/api/v1/workspaces/$ws_a/sessions"
+  pub public.dashboard_cross_tenant 404 h-api-b "https://$BASE_DOMAIN/cloud/api/v1/workspaces/$ws_a/sessions"
+  pub public.api_anonymous 401 "" "https://api.$BASE_DOMAIN/api/v1/auth/whoami"
+  pub public.cast_roster 200 h-cast "https://cast.$BASE_DOMAIN/v1/agents"
+  pub public.cast_agent 200 h-agent "https://cast.$BASE_DOMAIN/v1/agent"
+  pub public.cast_anonymous 401 "" "https://cast.$BASE_DOMAIN/v1/agents"
+  code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' -X POST \
+    -H 'content-type: application/json' --data '{"name":"e2e-edge-probe"}' "https://cast.$BASE_DOMAIN/v1/workspaces")"
+  # The chart routes this path to a selector-less Service, so the Google edge
+  # answers 502 (no backend) and the request never reaches Relaycast.
+  [[ "$code" == 502 || "$code" == 404 || "$code" == 403 ]] && emit PASS public.cast_workspace_create_denied "status=$code edge_denied=true" ||
+    emit FAIL public.cast_workspace_create_denied "status=$code"
+  code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' "https://cast.$BASE_DOMAIN/internal/capabilities")"
+  # The chart routes this path to a selector-less Service, so the Google edge
+  # answers 502 (no backend) and the request never reaches Relaycast.
+  [[ "$code" == 502 || "$code" == 404 || "$code" == 403 ]] && emit PASS public.cast_internal_denied "status=$code edge_denied=true" ||
+    emit FAIL public.cast_internal_denied "status=$code"
+  pub public.history_sessions 200 h-history "https://history.$BASE_DOMAIN/v1/sessions?workspace=$ws_a&limit=1"
+  pub public.history_anonymous 401 "" "https://history.$BASE_DOMAIN/v1/delivery/limits"
+  rm -f "$WORK"/h-*
 fi
 case_end 10 "public: verify-public.sh and authenticated calls through the HTTPS edge"
 
@@ -601,9 +644,13 @@ case_end 10 "public: verify-public.sh and authenticated calls through the HTTPS 
 case_begin 12 "admin"
 if ! $BOOTSTRAPPED; then
   emit FAIL admin.blocked "no tenant"
-elif $SKIP_PUBLIC; then
-  case_skip "--skip-public"
+elif ! has_capability admin; then
+  case_skip "control plane has no workspace admin API (secrets routes)"
 else
+  # The in-cluster half does not need the public edge.
+  run_phase admin-internal
+fi
+if $BOOTSTRAPPED && has_capability admin && public_gate admin; then
   run_public_phase admin
   # /internal/* is the runtime contract (env and integration tokens for
   # workers). On the public api host the edge must answer it itself (the
@@ -649,8 +696,6 @@ else
   else
     emit FAIL admin.internal_edge_denied "${edge_detail% } waited=${waited}s"
   fi
-  # The same routes still exist in-cluster and refuse a user token.
-  run_phase admin-internal
 fi
 case_end 12 "admin: env var set/list masked/no plaintext/delete, audit, /internal denied at the edge"
 
@@ -736,6 +781,10 @@ if $SKIP_FLOWS; then
   case_skip "--skip-flows"
 elif ! $BOOTSTRAPPED; then
   emit FAIL flows.blocked "no tenant"
+elif ! has_capability flows; then
+  # Only a control plane with the worker protocol (relaycontrol flows API)
+  # can run this; one that declares it but fails still fails the case.
+  case_skip "control plane has no worker protocol (/api/v1/workers/enrollment-tokens absent)"
 else
   marker="$(state_get marker)"
   WORKER_POD="e2e-flows-worker-$marker"
@@ -798,9 +847,7 @@ case_end 13 "flows: enrollment token, in-namespace worker Pod, deterministic run
 # ---------------------------------------------------------------- case 14
 
 case_begin 14 "dashboard"
-if $SKIP_PUBLIC; then
-  case_skip "--skip-public"
-else
+if public_gate dashboard; then
   fetch() { # url file -> prints status
     curl --disable --silent --max-time 20 --proto '=https' --output "$2" --write-out '%{http_code} %{content_type}' "$1" 2>/dev/null
   }
@@ -864,6 +911,7 @@ case_end 14 "dashboard: new SPA at /, runtime-config appPath /, deep-link fallba
 
 case_begin 15 "cleanup"
 if $CLEANUP; then
+  CLEANUP_RAN=true
   run_phase cleanup
 else
   case_skip "--no-cleanup"

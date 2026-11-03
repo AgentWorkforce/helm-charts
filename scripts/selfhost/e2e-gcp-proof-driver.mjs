@@ -83,6 +83,45 @@ function errorCode(response) {
 // ---------------------------------------------------------------- bootstrap
 
 const bootstrapToken = () => readFileSync(BOOTSTRAP_FILE, "utf8").trim();
+const INTERNAL_TOKEN_FILE = "/var/run/agent-relay/secrets/selfhost-internal-token";
+
+// Every control-plane resource a phase creates in workspace A is recorded in
+// the state *before* any assertion can fail, so the cleanup phase (case 15,
+// or the shell's EXIT trap on interruption) can remove it even when the phase
+// that created it failed. Kinds: flows (id), envVars (name),
+// enrollmentTokens (id), workerNames (name).
+function track(kind, value) {
+  state.resources ??= {};
+  state.resources[kind] ??= [];
+  if (!state.resources[kind].includes(value)) state.resources[kind].push(value);
+}
+function untrack(kind, value) {
+  if (state.resources?.[kind]) state.resources[kind] = state.resources[kind].filter((item) => item !== value);
+}
+
+// Feature detection, so the proof also runs against a control plane without
+// the newer APIs: a feature is present when /openapi.yaml declares its route
+// or the route exists (an unknown route answers 404 not_found; a known one
+// answers 401 to an anonymous call). A present feature that is broken still
+// fails its case; only an absent one is skipped.
+async function detectCapabilities() {
+  const spec = await call("GET", `${API}/openapi.yaml`, { headers: { accept: "application/yaml" } });
+  const declared = (path) => spec.status === 200 && spec.text.includes(`\n  ${path}:`);
+  const routed = async (path) => {
+    const response = await call("GET", `${API}${path}`);
+    return !(response.status === 404 && errorCode(response) === "not_found");
+  };
+  const probe = randomUUID();
+  const capabilities = {
+    sessions: declared("/cloud/api/v1/workspaces/{workspaceId}/sessions/activity") ||
+      await routed(`/cloud/api/v1/workspaces/${probe}/sessions/activity?first=2020-01-01&last=2020-01-01`),
+    admin: declared("/api/v1/workspaces/{workspaceId}/secrets") ||
+      await routed(`/api/v1/workspaces/${probe}/secrets`),
+    flows: declared("/api/v1/workers/enrollment-tokens") ||
+      await routed("/api/v1/workers/enrollment-tokens"),
+  };
+  return { capabilities, openapi: spec.status };
+}
 
 // The control plane holds exactly one organization per installation. The
 // proof reuses it and adds two uniquely named test workspaces to it.
@@ -175,6 +214,10 @@ async function phaseBootstrap() {
   const after = await installationOrganization(bootstrap);
   must(after.organizationId === org.organizationId, "the installation organization changed");
   pass("bootstrap.single_organization", `second_org_create=${second.status} error=${errorCode(second)} organizations=1`);
+
+  const detected = await detectCapabilities();
+  state.capabilities = detected.capabilities;
+  pass("bootstrap.capabilities", `openapi=${detected.openapi} ${Object.entries(detected.capabilities).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 
   for (const label of ["a", "b"]) {
     const tenant = await createTenant(label, org);
@@ -673,98 +716,148 @@ function crossWorkspaceProbes(a, flowId) {
   const sessions = `/cloud/api/v1/workspaces/${a.workspaceId}/sessions`;
   const sid = encodeURIComponent(state.session.sessionId);
   const day = utcDay(state.startedAt);
+  // [name, capability, method, path, body]; "core" routes exist on every
+  // control plane this proof supports.
   return [
-    ["sessions.list", "GET", sessions],
-    ["sessions.list_filtered", "GET", `${sessions}?source=${SOURCE}&q=${state.marker}`],
-    ["sessions.events", "GET", `${sessions}/${sid}/events?source=${SOURCE}`],
-    ["sessions.turns", "GET", `${sessions}/${sid}/turns?source=${SOURCE}`],
-    ["sessions.timing", "GET", `${sessions}/${sid}/timing?source=${SOURCE}`],
-    ["sessions.catalog", "GET", `${sessions}/${sid}/catalog?source=${SOURCE}`],
-    ["sessions.search", "GET", `${sessions}/search?q=${state.marker}`],
-    ["sessions.activity", "GET", `${sessions}/activity?first=${day}&last=${today()}`],
-    ["sessions.output", "GET", `${sessions}/output?first=${day}&last=${today()}`],
-    ["history.session", "POST", `${ws}/relayhistory/session`, { mode: "read" }],
-    ["settings.resolve", "GET", `${ws}/resolve`],
-    ["settings.runtime_get", "GET", `${ws}/runtime`],
-    ["settings.runtime_put", "PUT", `${ws}/runtime`, { runtime: { e2e: state.marker } }],
-    ["env.list", "GET", `${ws}/secrets`],
-    ["env.create", "POST", `${ws}/secrets`, { name: isoEnvName(), value: `cross-${state.marker}` }],
-    ["env.get", "GET", `${ws}/secrets/${isoEnvName()}`],
-    ["env.delete", "DELETE", `${ws}/secrets/${isoEnvName()}`],
-    ["settings.integrations", "GET", `${ws}/integrations`],
-    ["settings.integration_providers", "GET", `${ws}/integrations/providers`],
-    ["settings.api_tokens_list", "GET", `${ws}/deployment-api-tokens`],
-    ["settings.api_tokens_create", "POST", `${ws}/deployment-api-tokens`, { label: `e2e-${state.marker}-cross` }],
-    ["settings.audit", "GET", `${ws}/admin/audit`],
-    ["flows.get", "GET", `/api/v1/flows/${flowId}`],
-    ["flows.patch", "PATCH", `/api/v1/flows/${flowId}`, { name: `e2e-${state.marker}-hijack` }],
-    ["flows.invoke", "POST", `/api/v1/flows/${flowId}/invoke`, {}],
-    ["flows.delete", "DELETE", `/api/v1/flows/${flowId}`],
-    ["flows.run_in_a", "POST", "/api/v1/workflows/run", { workspaceId: a.workspaceId, workflow: smokeFlowSource("x"), fileType: "yaml" }],
-    ["flows.enroll_in_a", "POST", "/api/v1/workers/enrollment-tokens", { workspaceId: a.workspaceId, name: `e2e-${state.marker}-cross` }],
-  ];
+    ["sessions.list", "core", "GET", sessions],
+    ["sessions.list_filtered", "core", "GET", `${sessions}?source=${SOURCE}&q=${state.marker}`],
+    ["sessions.events", "core", "GET", `${sessions}/${sid}/events?source=${SOURCE}`],
+    ["sessions.turns", "sessions", "GET", `${sessions}/${sid}/turns?source=${SOURCE}`],
+    ["sessions.timing", "sessions", "GET", `${sessions}/${sid}/timing?source=${SOURCE}`],
+    ["sessions.catalog", "sessions", "GET", `${sessions}/${sid}/catalog?source=${SOURCE}`],
+    ["sessions.search", "sessions", "GET", `${sessions}/search?q=${state.marker}`],
+    ["sessions.activity", "sessions", "GET", `${sessions}/activity?first=${day}&last=${today()}`],
+    ["sessions.output", "sessions", "GET", `${sessions}/output?first=${day}&last=${today()}`],
+    ["history.session", "core", "POST", `${ws}/relayhistory/session`, { mode: "read" }],
+    ["settings.resolve", "core", "GET", `${ws}/resolve`],
+    ["settings.runtime_get", "core", "GET", `${ws}/runtime`],
+    ["settings.runtime_put", "core", "PUT", `${ws}/runtime`, { runtime: { e2e: state.marker } }],
+    ["env.list", "admin", "GET", `${ws}/secrets`],
+    ["env.create", "admin", "POST", `${ws}/secrets`, { name: isoEnvName(), value: `cross-${state.marker}` }],
+    ["env.get", "admin", "GET", `${ws}/secrets/${isoEnvName()}`],
+    ["env.delete", "admin", "DELETE", `${ws}/secrets/${isoEnvName()}`],
+    ["settings.integrations", "admin", "GET", `${ws}/integrations`],
+    ["settings.integration_providers", "admin", "GET", `${ws}/integrations/providers`],
+    ["settings.api_tokens_list", "admin", "GET", `${ws}/deployment-api-tokens`],
+    ["settings.api_tokens_create", "admin", "POST", `${ws}/deployment-api-tokens`, { label: `e2e-${state.marker}-cross` }],
+    ["settings.audit", "admin", "GET", `${ws}/admin/audit`],
+    ["flows.get", "flows", "GET", `/api/v1/flows/${flowId}`],
+    ["flows.patch", "flows", "PATCH", `/api/v1/flows/${flowId}`, { name: `e2e-${state.marker}-hijack` }],
+    ["flows.invoke", "flows", "POST", `/api/v1/flows/${flowId}/invoke`, {}],
+    ["flows.delete", "flows", "DELETE", `/api/v1/flows/${flowId}`],
+    ["flows.run_in_a", "flows", "POST", "/api/v1/workflows/run", { workspaceId: a.workspaceId, workflow: smokeFlowSource("x"), fileType: "yaml" }],
+    ["flows.enroll_in_a", "flows", "POST", "/api/v1/workers/enrollment-tokens", { workspaceId: a.workspaceId, name: `e2e-${state.marker}-cross` }],
+  ].filter(([, capability]) => capability === "core" || state.capabilities?.[capability]);
+}
+
+// sha256 of A's variable as the runtime would receive it, read through the
+// in-cluster /internal route with the service token mounted in this pod.
+// Returns null when the token is not mounted. Never returns the value.
+async function runtimeValueHash(workspaceId, name) {
+  let token;
+  try {
+    token = readFileSync(INTERNAL_TOKEN_FILE, "utf8").trim();
+  } catch {
+    return null;
+  }
+  const response = await call("GET", `${API}/internal/v1/workspaces/${workspaceId}/environment`, { token });
+  must(response.status === 200 && response.json?.env && typeof response.json.env === "object",
+    `internal environment read status=${response.status}`);
+  const value = response.json.env[name];
+  return typeof value === "string" ? sha256(value) : "absent";
 }
 
 async function phaseIsolation() {
   const { sessionId } = state.session;
   const a = state.a;
   const b = state.b;
+  const caps = state.capabilities ?? {};
+  const isoValue = randomBytes(18).toString("base64url");
+  let flowId = randomUUID();
+  let envBefore = null;
 
   // A owns a flow and an env var; B must not see or touch either.
-  const isoValue = randomBytes(18).toString("base64url");
-  const flow = await call("POST", `${API}/api/v1/flows`, {
-    token: a.accessToken,
-    body: { name: `e2e-${state.marker}-isolation`, source: smokeFlowSource(`e2e-${state.marker}-isolation`) },
-  });
-  must(flow.status === 201 && flow.json?.flow?.id, `A flow create status=${flow.status} error=${errorCode(flow)}`);
-  const flowId = flow.json.flow.id;
-  const env = await call("POST", `${API}/api/v1/workspaces/${a.workspaceId}/secrets`, {
-    token: a.accessToken,
-    body: { name: isoEnvName(), value: isoValue },
-  });
-  must(env.status === 201, `A env create status=${env.status} error=${errorCode(env)}`);
+  if (caps.flows) {
+    const flow = await call("POST", `${API}/api/v1/flows`, {
+      token: a.accessToken,
+      body: { name: `e2e-${state.marker}-isolation`, source: smokeFlowSource(`e2e-${state.marker}-isolation`) },
+    });
+    if (flow.json?.flow?.id) track("flows", flow.json.flow.id);
+    must(flow.status === 201 && flow.json?.flow?.id, `A flow create status=${flow.status} error=${errorCode(flow)}`);
+    flowId = flow.json.flow.id;
+  }
+  if (caps.admin) {
+    track("envVars", isoEnvName());
+    const env = await call("POST", `${API}/api/v1/workspaces/${a.workspaceId}/secrets`, {
+      token: a.accessToken,
+      body: { name: isoEnvName(), value: isoValue },
+    });
+    must(env.status === 201, `A env create status=${env.status} error=${errorCode(env)}`);
+    envBefore = env.json;
+  }
 
   const results = [];
-  for (const [name, method, path, body] of crossWorkspaceProbes(a, flowId)) {
+  for (const [name, , method, path, body] of crossWorkspaceProbes(a, flowId)) {
     const response = await call(method, `${API}${path}`, { token: b.accessToken, body });
     must(response.status === 404, `B ${name} on A status=${response.status} error=${errorCode(response)}`);
     must(!response.text.includes(isoValue) && !response.text.includes(state.marker),
       `B ${name} on A leaked A's data in a 404 body`);
     results.push(name);
   }
-  pass("isolation.control_plane_routes", `b_on_a_404=${results.length}/${results.length} (${results.join(",")})`);
+  pass("isolation.control_plane_routes", `b_on_a_404=${results.length}/${results.length} (${results.join(",")}) capabilities=${Object.entries(caps).filter(([, v]) => v).map(([k]) => k).join(",") || "core"}`);
 
-  // B's own views do not contain A's resources.
-  const bFlows = await call("GET", `${API}/api/v1/flows`, { token: b.accessToken });
-  must(bFlows.status === 200 && Array.isArray(bFlows.json?.flows), `B flow list status=${bFlows.status}`);
-  must(!bFlows.json.flows.some((item) => item.id === flowId), "B's flow list contains A's flow");
-  const bEnv = await call("GET", `${API}/api/v1/workspaces/${b.workspaceId}/secrets`, { token: b.accessToken });
-  must(bEnv.status === 200 && Array.isArray(bEnv.json?.data?.items), `B env list status=${bEnv.status}`);
-  must(!bEnv.json.data.items.some((item) => item.name === isoEnvName()), "B's env list contains A's variable");
-  const bEnvItem = await call("GET", `${API}/api/v1/workspaces/${b.workspaceId}/secrets/${isoEnvName()}`, { token: b.accessToken });
-  must(bEnvItem.status === 404, `B reading A's variable name in its own workspace status=${bEnvItem.status}`);
-  const bRuns = await call("GET", `${API}/api/v1/workflows/runs`, { token: b.accessToken });
-  must(bRuns.status === 200 && Array.isArray(bRuns.json?.runs), `B run list status=${bRuns.status}`);
-  must(!bRuns.json.runs.some((run) => run.flowId === flowId), "B's run list contains a run of A's flow");
-  pass("isolation.b_own_views", `b_flows=${bFlows.json.flows.length} b_env=${bEnv.json.data.items.length} b_runs=${bRuns.json.runs.length} contains_a=false`);
-
-  // B's attempts changed nothing in A.
-  const aFlow = await call("GET", `${API}/api/v1/flows/${flowId}`, { token: a.accessToken });
-  must(aFlow.status === 200 && aFlow.json?.flow?.name === `e2e-${state.marker}-isolation`, `A flow after B status=${aFlow.status} renamed=${aFlow.json?.flow?.name !== `e2e-${state.marker}-isolation`}`);
-  must(Array.isArray(aFlow.json.recentRuns) && aFlow.json.recentRuns.length === 0, "B's invoke created a run of A's flow");
-  const aEnv = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${isoEnvName()}`, { token: a.accessToken });
-  must(aEnv.status === 200 && aEnv.json?.name === isoEnvName(), `A env after B status=${aEnv.status}`);
+  // B's own views do not contain A's resources, and B's attempts changed
+  // nothing in A.
+  const unchanged = [];
+  if (caps.flows) {
+    const bFlows = await call("GET", `${API}/api/v1/flows`, { token: b.accessToken });
+    must(bFlows.status === 200 && Array.isArray(bFlows.json?.flows), `B flow list status=${bFlows.status}`);
+    must(!bFlows.json.flows.some((item) => item.id === flowId), "B's flow list contains A's flow");
+    const bRuns = await call("GET", `${API}/api/v1/workflows/runs`, { token: b.accessToken });
+    must(bRuns.status === 200 && Array.isArray(bRuns.json?.runs), `B run list status=${bRuns.status}`);
+    must(bRuns.json.runs.length === 0, `B's run list has ${bRuns.json.runs.length} runs`);
+    const aFlow = await call("GET", `${API}/api/v1/flows/${flowId}`, { token: a.accessToken });
+    must(aFlow.status === 200 && aFlow.json?.flow?.name === `e2e-${state.marker}-isolation`, `A flow after B status=${aFlow.status} renamed=${aFlow.json?.flow?.name !== `e2e-${state.marker}-isolation`}`);
+    must(Array.isArray(aFlow.json.recentRuns) && aFlow.json.recentRuns.length === 0, "B's invoke created a run of A's flow");
+    const aEnroll = await call("GET", `${API}/api/v1/workers/enrollment-tokens`, { token: a.accessToken });
+    must(aEnroll.status === 200 && !aEnroll.text.includes(`e2e-${state.marker}-cross`), `A enrollment tokens after B status=${aEnroll.status}`);
+    unchanged.push("b_flows=0", "b_runs=0", "a_flow_name_unchanged=true", "a_flow_runs=0", "no_cross_enrollment=true");
+  }
+  if (caps.admin) {
+    const bEnv = await call("GET", `${API}/api/v1/workspaces/${b.workspaceId}/secrets`, { token: b.accessToken });
+    must(bEnv.status === 200 && Array.isArray(bEnv.json?.data?.items), `B env list status=${bEnv.status}`);
+    must(!bEnv.json.data.items.some((item) => item.name === isoEnvName()), "B's env list contains A's variable");
+    const bEnvItem = await call("GET", `${API}/api/v1/workspaces/${b.workspaceId}/secrets/${isoEnvName()}`, { token: b.accessToken });
+    must(bEnvItem.status === 404, `B reading A's variable name in its own workspace status=${bEnvItem.status}`);
+    const aEnv = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${isoEnvName()}`, { token: a.accessToken });
+    must(aEnv.status === 200 && aEnv.json?.name === isoEnvName(), `A env after B status=${aEnv.status}`);
+    // Same mask and same last-update stamp as right after A created it, and,
+    // where the service token is mounted, the very value the runtime gets.
+    must(aEnv.json.maskedValue === envBefore.maskedValue, "A's variable mask changed after B's probes");
+    for (const field of ["updatedAt", "updatedBy", "setBy"]) {
+      if (field in envBefore) must(aEnv.json[field] === envBefore[field], `A's variable ${field} changed after B's probes`);
+    }
+    const valueHash = await runtimeValueHash(a.workspaceId, isoEnvName());
+    if (valueHash !== null) must(valueHash === sha256(isoValue), "A's variable value changed after B's probes");
+    const aTokens = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/deployment-api-tokens`, { token: a.accessToken });
+    must(aTokens.status === 200 && !aTokens.text.includes(`e2e-${state.marker}-cross`), `A api tokens after B status=${aTokens.status}`);
+    unchanged.push(`b_env=${bEnv.json.data.items.length}`, "a_env_mask_unchanged=true", `a_env_value=${valueHash === null ? "not_checked_no_internal_token" : "hash_unchanged"}`, "no_cross_api_tokens=true");
+  }
   const aRuntime = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/runtime`, { token: a.accessToken });
   must(aRuntime.status === 200 && !JSON.stringify(aRuntime.json).includes(state.marker), "B's runtime write reached A");
-  const aTokens = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/deployment-api-tokens`, { token: a.accessToken });
-  must(aTokens.status === 200 && !aTokens.text.includes(`e2e-${state.marker}-cross`), `A api tokens after B status=${aTokens.status}`);
-  const aEnroll = await call("GET", `${API}/api/v1/workers/enrollment-tokens`, { token: a.accessToken });
-  must(aEnroll.status === 200 && !aEnroll.text.includes(`e2e-${state.marker}-cross`), `A enrollment tokens after B status=${aEnroll.status}`);
-  pass("isolation.a_unchanged", "flow_name_unchanged=true flow_runs=0 env_present=true runtime_untouched=true no_cross_tokens=true");
+  unchanged.push("a_runtime_untouched=true");
+  pass("isolation.a_unchanged", unchanged.join(" "));
 
-  const delFlow = await call("DELETE", `${API}/api/v1/flows/${flowId}`, { token: a.accessToken });
-  const delEnv = await call("DELETE", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${isoEnvName()}`, { token: a.accessToken });
-  must(delFlow.status === 200 && delEnv.status === 200, `A cleanup flow=${delFlow.status} env=${delEnv.status}`);
+  if (caps.flows) {
+    const delFlow = await call("DELETE", `${API}/api/v1/flows/${flowId}`, { token: a.accessToken });
+    must(delFlow.status === 200, `A flow cleanup status=${delFlow.status}`);
+    untrack("flows", flowId);
+  }
+  if (caps.admin) {
+    const delEnv = await call("DELETE", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${isoEnvName()}`, { token: a.accessToken });
+    must(delEnv.status === 200, `A env cleanup status=${delEnv.status}`);
+    untrack("envVars", isoEnvName());
+  }
 
   const ownSearch = await dashboardList(b, b.workspaceId, state.marker);
   must(ownSearch.status === 200, `B own search status=${ownSearch.status}`);
@@ -850,10 +943,10 @@ async function phaseSessions() {
     ["q_match", `?q=${state.marker}`, true],
     ["q_other", `?q=${state.marker}zz-no-such-text`, false],
   ];
-  if (item.project?.name) {
-    filters.push(["project_match", `?project=${encodeURIComponent(item.project.name)}`, true]);
-    filters.push(["project_other", `?project=${encodeURIComponent(`/e2e/${state.marker}-other`)}`, false]);
-  }
+  // The fixture session carries a project, so the list must expose it.
+  must(typeof item.project?.name === "string" && item.project.name.length > 0, "list item is missing the fixture project");
+  filters.push(["project_match", `?project=${encodeURIComponent(item.project.name)}`, true]);
+  filters.push(["project_other", `?project=${encodeURIComponent(`/e2e/${state.marker}-other`)}`, false]);
   const filterDetail = [];
   for (const [name, query, expected] of filters) {
     const response = await get(query);
@@ -873,9 +966,18 @@ async function phaseSessions() {
     `events=${replayed.length} expected=${state.session.projectedEvents} content_matches=${projectionMatches(replayed)}`);
   const ordered = events.json.events.every((event, index, all) => index === 0 || Date.parse(all[index - 1].ts) <= Date.parse(event.ts));
   must(ordered, "events are not in time order");
+  // order=desc&limit=2 must return the transcript's last two events. The
+  // control plane re-sorts a page ascending for display, so compare sets.
   const desc = await get(`/${sid}/events?source=${SOURCE}&order=desc&limit=2`);
   must(desc.status === 200 && Array.isArray(desc.json?.events) && desc.json.events.length === 2,
     `events limit=2 status=${desc.status} count=${desc.json?.events?.length}`);
+  const lastTwo = events.json.events.slice(-2).map((event) => event.eventId).sort();
+  const descIds = desc.json.events.map((event) => event.eventId).sort();
+  must(JSON.stringify(descIds) === JSON.stringify(lastTwo), "order=desc&limit=2 did not return the last two events");
+  const asc = await get(`/${sid}/events?source=${SOURCE}&order=asc&limit=2`);
+  const firstTwo = events.json.events.slice(0, 2).map((event) => event.eventId).sort();
+  must(asc.status === 200 && JSON.stringify(asc.json.events.map((event) => event.eventId).sort()) === JSON.stringify(firstTwo),
+    "order=asc&limit=2 did not return the first two events");
   const turns = await get(`/${sid}/turns?source=${SOURCE}`);
   must(turns.status === 200 && Array.isArray(turns.json?.turns), `turns status=${turns.status} error=${errorCode(turns)}`);
   const got = turns.json.turns.map((turn) => `${turn.turnIndex}:${turn.role}:${turn.content}`);
@@ -885,7 +987,7 @@ async function phaseSessions() {
   must(timing.status === 200 && "timing" in (timing.json ?? {}), `timing status=${timing.status} error=${errorCode(timing)}`);
   const catalog = await get(`/${sid}/catalog?source=${SOURCE}`);
   must(catalog.status === 200 && Array.isArray(catalog.json?.children), `catalog status=${catalog.status} error=${errorCode(catalog)}`);
-  pass("sessions.transcript", `events=${replayed.length} ordered=true limited_desc=${desc.json.events.length} turns=${turns.json.turns.length} turns_match=true timing=${timing.json.timing ? "present" : "null"} catalog=${catalog.status}`);
+  pass("sessions.transcript", `events=${replayed.length} ordered=true desc_limit_is_last_two=true asc_limit_is_first_two=true turns=${turns.json.turns.length} turns_match=true timing=${timing.json.timing ? "present" : "null"} catalog=${catalog.status}`);
 
   // Search (event-level matches with citation paths).
   const search = await get(`/search?q=${state.marker}`);
@@ -915,7 +1017,9 @@ async function phaseSessions() {
   pass("sessions.activity", `day=${day} conversations=${row.conversations} ${SOURCE}=${row.bySource[SOURCE]} non_matching_q_total=0 reversed_range=${backwards.status}`);
 
   // B's token on every one of these A routes, through the public edge.
-  const crossPaths = ["", `/${sid}/events?source=${SOURCE}`, `/${sid}/turns?source=${SOURCE}`, `/search?q=${state.marker}`, `/activity?first=${day}&last=${today()}`];
+  const crossPaths = ["", `/${sid}/events?source=${SOURCE}`, `/${sid}/turns?source=${SOURCE}`, `/${sid}/timing?source=${SOURCE}`,
+    `/${sid}/catalog?source=${SOURCE}`, `/search?q=${state.marker}`, `/activity?first=${day}&last=${today()}`,
+    `/output?first=${day}&last=${today()}`];
   for (const path of crossPaths) {
     const response = await get(path, state.b.accessToken);
     must(response.status === 404, `B on A ${path || "/"} status=${response.status}`);
@@ -940,6 +1044,7 @@ async function phaseAdmin() {
     masked.length === plain.length && masked.slice(-2) === plain.slice(-2);
   const bodies = [];
 
+  track("envVars", name);
   const created = await call("POST", base, { token: a.accessToken, body: { name, value } });
   bodies.push(["create", created]);
   must(created.status === 201 && created.json?.name === name, `create status=${created.status} error=${errorCode(created)}`);
@@ -968,6 +1073,7 @@ async function phaseAdmin() {
   const deleted = await call("DELETE", `${base}/${name}`, { token: a.accessToken });
   bodies.push(["delete", deleted]);
   must(deleted.status === 200, `delete status=${deleted.status}`);
+  untrack("envVars", name);
   const gone = await call("GET", `${base}/${name}`, { token: a.accessToken });
   must(gone.status === 404, `get after delete status=${gone.status}`);
   const after = await call("GET", base, { token: a.accessToken });
@@ -1004,10 +1110,16 @@ const workerName = () => `e2e-${state.marker}-worker`;
 
 async function phaseFlowsEnroll() {
   const a = state.a;
+  state.flows = { workerName: workerName() };
+  track("workerNames", workerName());
   const enroll = await call("POST", `${API}/api/v1/workers/enrollment-tokens`, {
     token: a.accessToken,
     body: { workspaceId: a.workspaceId, name: workerName(), expiresInMinutes: 30 },
   });
+  if (enroll.json?.id) {
+    state.flows.enrollmentTokenId = enroll.json.id;
+    track("enrollmentTokens", enroll.json.id);
+  }
   must(enroll.status === 200 && typeof enroll.json?.token === "string" && enroll.json.token.length >= 20,
     `enrollment token status=${enroll.status} error=${errorCode(enroll)}`);
   must(typeof enroll.json.registerCommand === "string" && enroll.json.registerCommand.includes("cloud worker register"), "no register command");
@@ -1020,7 +1132,6 @@ async function phaseFlowsEnroll() {
   must(bList.status === 200 && !bList.json.tokens.some((token) => token.id === enroll.json.id), `B enrollment list status=${bList.status}`);
   const bRevoke = await call("DELETE", `${API}/api/v1/workers/enrollment-tokens/${enroll.json.id}`, { token: state.b.accessToken });
   must(bRevoke.status === 404, `B revoking A's enrollment token status=${bRevoke.status}`);
-  state.flows = { enrollmentTokenId: enroll.json.id, workerName: workerName() };
   state.enrollmentToken = enroll.json.token;
   pass("flows.enrollment_token", `id=${enroll.json.id} expires=${enroll.json.expiresAt} listed=true plaintext_listed=false b_list_contains=false b_revoke=${bRevoke.status}`);
 }
@@ -1030,12 +1141,20 @@ async function phaseFlowsRun() {
   const flows = state.flows;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const workers = await call("GET", `${API}/api/v1/workers`, { token: a.accessToken });
-  must(workers.status === 200 && Array.isArray(workers.json?.workers), `worker list status=${workers.status}`);
-  const worker = workers.json.workers.find((entry) => entry.name === flows.workerName);
+  // The Pod prints its "registered" line before `worker start` connects, so
+  // wait for the worker to come online (heartbeat/queue) before invoking.
+  let worker = null;
+  const onlineBy = Date.now() + Number(process.env.E2E_WORKER_ONLINE_MS ?? 180_000);
+  for (;;) {
+    const workers = await call("GET", `${API}/api/v1/workers`, { token: a.accessToken });
+    must(workers.status === 200 && Array.isArray(workers.json?.workers), `worker list status=${workers.status}`);
+    worker = workers.json.workers.find((entry) => entry.name === flows.workerName) ?? null;
+    if (worker) flows.workerId = worker.id;
+    if (worker?.status === "online" || Date.now() >= onlineBy) break;
+    await sleep(3_000);
+  }
   must(worker, "the e2e worker is not registered in workspace A");
-  must(worker.status === "online", `worker status=${worker.status}`);
-  flows.workerId = worker.id;
+  must(worker.status === "online", `worker status=${worker.status} after waiting for online`);
   const bWorker = await call("GET", `${API}/api/v1/workers/${worker.id}`, { token: state.b.accessToken });
   must(bWorker.status === 404, `B reading A's worker status=${bWorker.status}`);
   const reuse = await call("POST", `${API}/api/v1/workers/register`, {
@@ -1050,8 +1169,11 @@ async function phaseFlowsRun() {
     token: a.accessToken,
     body: { name: flowName, description: "e2e-gcp-proof", source: smokeFlowSource(flowName) },
   });
+  if (flow.json?.flow?.id) {
+    flows.flowId = flow.json.flow.id;
+    track("flows", flows.flowId);
+  }
   must(flow.status === 201 && flow.json?.flow?.id, `flow create status=${flow.status} error=${errorCode(flow)}`);
-  flows.flowId = flow.json.flow.id;
   const invoked = await call("POST", `${API}/api/v1/flows/${flows.flowId}/invoke`, {
     token: a.accessToken,
     body: { runtime: { id: "worker", config: { workerId: worker.id } } },
@@ -1112,22 +1234,36 @@ async function phaseFlowsCleanup() {
   const a = state.a;
   const flows = state.flows ?? {};
   const done = [];
-  if (flows.workerId) {
-    const revoked = await call("DELETE", `${API}/api/v1/workers/${flows.workerId}`, { token: a.accessToken });
-    must(revoked.status === 200 && revoked.json?.status === "revoked", `worker revoke status=${revoked.status} result=${revoked.json?.status}`);
-    done.push(`worker=${revoked.json.status}`);
+  // Registration can succeed even when the run later fails before the id is
+  // saved, so look the worker up by its unique name when needed.
+  let workerId = flows.workerId;
+  if (!workerId && flows.workerName) {
+    const workers = await call("GET", `${API}/api/v1/workers`, { token: a.accessToken });
+    must(workers.status === 200 && Array.isArray(workers.json?.workers), `worker list status=${workers.status}`);
+    workerId = workers.json.workers.find((entry) => entry.name === flows.workerName)?.id;
   }
+  if (workerId) {
+    const revoked = await call("DELETE", `${API}/api/v1/workers/${workerId}`, { token: a.accessToken });
+    must(revoked.status === 200 && revoked.json?.status === "revoked", `worker revoke status=${revoked.status} result=${revoked.json?.status}`);
+    const after = await call("GET", `${API}/api/v1/workers/${workerId}`, { token: a.accessToken });
+    must(after.status === 200 && after.json?.worker?.status === "revoked", `worker after revoke status=${after.status} worker_status=${after.json?.worker?.status}`);
+    done.push(`worker=${workerId}:revoked`);
+  }
+  if (flows.workerName) untrack("workerNames", flows.workerName);
   if (flows.enrollmentTokenId) {
-    // Used tokens cannot be revoked; an unused one (failed registration) can.
+    // A used token can no longer be revoked (404); an unused one (the worker
+    // never registered) must be.
     const revoked = await call("DELETE", `${API}/api/v1/workers/enrollment-tokens/${flows.enrollmentTokenId}`, { token: a.accessToken });
-    must(revoked.status === (flows.workerId ? 404 : 200), `enrollment token revoke status=${revoked.status}`);
-    done.push(`enrollment_token=${flows.workerId ? "used" : "revoked"}`);
+    must(revoked.status === (workerId ? 404 : 200), `enrollment token revoke status=${revoked.status} worker_registered=${Boolean(workerId)}`);
+    untrack("enrollmentTokens", flows.enrollmentTokenId);
+    done.push(`enrollment_token=${workerId ? "used" : "revoked"}`);
   }
   if (flows.flowId) {
     const deleted = await call("DELETE", `${API}/api/v1/flows/${flows.flowId}`, { token: a.accessToken });
     must(deleted.status === 200, `flow delete status=${deleted.status}`);
     const gone = await call("GET", `${API}/api/v1/flows/${flows.flowId}`, { token: a.accessToken });
     must(gone.status === 404, `flow get after delete status=${gone.status}`);
+    untrack("flows", flows.flowId);
     done.push("flow=deleted");
   }
   pass("flows.cleanup", done.join(" ") || "nothing to clean");
@@ -1289,14 +1425,18 @@ async function phaseErasure() {
   );
   must(direct.status === 200 && Array.isArray(direct.json?.sessions), `relayhistory search after erasure status=${direct.status}`);
   must(!direct.json.sessions.some((item) => item.sessionId === sessionId), "relayhistory search still returns it");
-  const turns = await call("GET", `${API}/cloud/api/v1/workspaces/${state.a.workspaceId}/sessions/${encodeURIComponent(sessionId)}/turns?source=${SOURCE}`, { token: state.a.accessToken });
+  const turns = state.capabilities?.sessions
+    ? await call("GET", `${API}/cloud/api/v1/workspaces/${state.a.workspaceId}/sessions/${encodeURIComponent(sessionId)}/turns?source=${SOURCE}`, { token: state.a.accessToken })
+    : { status: 404, json: null, text: "" };
   const turnsLeft = turns.status === 200 && Array.isArray(turns.json?.turns) ? turns.json.turns.length : null;
   must(turns.status === 404 || turnsLeft !== null, `turns after erasure status=${turns.status}`);
   // Known RelayHistory gap: session erasure (sessions.set_session_uploads) and
   // the full reset never delete sessions.conversation_turns, so the turns
   // stay readable. Strict by default; --allow-known-gap relayhistory-turns-erasure
   // reports it as SKIP instead, never as PASS.
-  if (turns.status === 404 || turnsLeft === 0) {
+  if (!state.capabilities?.sessions) {
+    proof("SKIP", "erasure.turns_purged", "control plane has no sessions turns route");
+  } else if (turns.status === 404 || turnsLeft === 0) {
     pass("erasure.turns_purged", `turns_status=${turns.status} turns_left=0`);
   } else if ((state.allowedGaps ?? []).includes("relayhistory-turns-erasure")) {
     proof("SKIP", "erasure.turns_purged", `KNOWN GAP relayhistory-turns-erasure: turns_left=${turnsLeft} after erasure (allowed by --allow-known-gap)`);
@@ -1355,28 +1495,71 @@ async function phaseMint96bulls() {
   pass("pipeline.mint_assertion", `org=${bulls.orgId} workspace=${bulls.workspaceId} machine=${bulls.machineId} aud=${bulls.origin} ttl=60s`);
 }
 
+// Removes whatever tracked control-plane resources are still left in A
+// (normally none: each phase removes its own). Idempotent: already-gone
+// resources (404) count as removed.
+async function cleanupResources() {
+  const a = state.a;
+  const resources = state.resources ?? {};
+  const removed = [];
+  if (!a?.accessToken) return removed;
+  for (const name of [...(resources.workerNames ?? [])]) {
+    const workers = await call("GET", `${API}/api/v1/workers`, { token: a.accessToken });
+    must(workers.status === 200 && Array.isArray(workers.json?.workers), `worker list status=${workers.status}`);
+    for (const worker of workers.json.workers.filter((entry) => entry.name === name && entry.status !== "revoked")) {
+      const revoked = await call("DELETE", `${API}/api/v1/workers/${worker.id}`, { token: a.accessToken });
+      must([200, 404].includes(revoked.status), `worker ${worker.id} revoke status=${revoked.status}`);
+      removed.push(`worker:${worker.id}`);
+    }
+    untrack("workerNames", name);
+  }
+  const sweep = async (kind, url, label) => {
+    for (const id of [...(resources[kind] ?? [])]) {
+      const response = await call("DELETE", url(id), { token: a.accessToken });
+      must([200, 404].includes(response.status), `${label} ${id} delete status=${response.status}`);
+      if (response.status === 200) removed.push(`${label}:${id}`);
+      untrack(kind, id);
+    }
+  };
+  await sweep("enrollmentTokens", (id) => `${API}/api/v1/workers/enrollment-tokens/${id}`, "enrollment_token");
+  await sweep("flows", (id) => `${API}/api/v1/flows/${id}`, "flow");
+  await sweep("envVars", (name) => `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${name}`, "env_var");
+  return removed;
+}
+
+// Case 15, and the shell's EXIT trap after an interruption. Every step is
+// recorded in state.cleaned so a second invocation only finishes what is left.
 async function phaseCleanup() {
+  state.cleaned ??= {};
+  if (!state.cleaned.resources) {
+    const removed = await cleanupResources();
+    state.cleaned.resources = true;
+    pass("cleanup.control_plane_resources", removed.length ? `removed=${removed.join(",")}` : "leftover=0");
+  }
   for (const label of ["a", "b"]) {
     const tenant = state[label];
-    if (!tenant?.relaycastWorkspaceId) continue;
+    if (!tenant?.relaycastWorkspaceId || state.cleaned[`relaycast_${label}`]) continue;
     const response = await call("DELETE", `${RELAYCAST}/internal/workspaces/${tenant.relaycastWorkspaceId}`, {
       token: secrets.relaycastInternalSecret,
     });
     must(response.status === 204, `delete relaycast workspace ${label} status=${response.status}`);
+    state.cleaned[`relaycast_${label}`] = true;
     pass(`cleanup.relaycast_${label}`, `deleted=${tenant.relaycastWorkspaceId}`);
   }
   // Revoke the device sessions the run minted; revocation covers both the
   // access and the refresh token of the session.
   for (const label of ["a", "b"]) {
     const tenant = state[label];
-    if (!tenant?.accessToken) continue;
+    if (!tenant?.accessToken || state.cleaned[`tokens_${label}`]) continue;
     const revoked = await call("POST", `${API}/api/v1/auth/token/revoke`, { body: { token: tenant.accessToken } });
     must(revoked.status === 200 && revoked.json?.revoked === true, `revoke ${label} status=${revoked.status}`);
     const who = await call("GET", `${API}/api/v1/auth/whoami`, { token: tenant.accessToken });
     const refresh = await call("POST", `${API}/api/v1/auth/token/refresh`, { body: { refreshToken: tenant.refreshToken } });
     must(who.status === 401 && refresh.status === 403, `after revoke ${label} whoami=${who.status} refresh=${refresh.status}`);
+    state.cleaned[`tokens_${label}`] = true;
     pass(`cleanup.tokens_${label}`, `revoked=true whoami_after=${who.status} refresh_after=${refresh.status}`);
   }
+  if (!state.a?.workspaceId || !state.b?.workspaceId || state.cleaned.workspaces) return;
   // relaycontrol has no workspace (or user) delete route, so the two test
   // workspaces and the removed outsider user stay in the organization.
   const bootstrap = bootstrapToken();
@@ -1384,6 +1567,7 @@ async function phaseCleanup() {
   const listed = await call("GET", `${API}/api/v1/organizations/${state.org.organizationId}/workspaces`, { token: bootstrap });
   must(listed.status === 200, `workspace list status=${listed.status}`);
   const left = listed.json.workspaces.filter((workspace) => [state.a.workspaceId, state.b.workspaceId].includes(workspace.id));
+  state.cleaned.workspaces = true;
   if (probe.status === 404 && left.length === 2) {
     proof("SKIP", "cleanup.control_plane_workspaces",
       `no workspace delete API (DELETE answered ${probe.status}); kept ${left.map((w) => w.name).join(",")} in org ${state.org.organizationId}; outsider user ${state.outsider?.userId ?? "n/a"} has no membership`);
