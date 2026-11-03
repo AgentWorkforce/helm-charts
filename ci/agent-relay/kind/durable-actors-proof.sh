@@ -90,6 +90,8 @@ RELAYFILE_JWT=$(keep relayfile-actors RELAYFILE_JWT_SECRET 32)
   --from-literal=RELAYFILE_JWT_SECRET="$RELAYFILE_JWT" \
   --from-literal=DURABLE_ACTORS_SECRET="$(keep relayfile-actors DURABLE_ACTORS_SECRET)" \
   --dry-run=client -o yaml | "${K[@]}" apply -f - >/dev/null
+# Restart so MinIO always runs with the credentials in minio-root.
+"${K[@]}" rollout restart deploy/minio >/dev/null
 "${K[@]}" rollout status deploy/minio --timeout=180s
 
 log "helm install (umbrella, kind values)"
