@@ -8,9 +8,11 @@
 #     -t relaycast-actors-dev:kind <relaycast checkout>
 #
 # Kept here until the relaycast repo ships its own dev-runtime image.
+# node:22.23.2-bookworm-slim (multi-arch index), pinned so rebuilds are reproducible.
+ARG NODE_IMAGE=node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
 ARG DURABLE_ACTORS_TYPESCRIPT_IMAGE=us-central1-docker.pkg.dev/fluid-analogy-473415-c2/public/durable-actors@sha256:d5ad5fe0ade42e97670446666fa86f1c1dfcaaf1ef31246781642b7372ef5925
 
-FROM node:22.23.2-bookworm-slim AS build
+FROM ${NODE_IMAGE} AS build
 WORKDIR /workspace
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/a2a/package.json packages/a2a/tsconfig.json ./packages/a2a/
@@ -26,7 +28,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund \
   && npm run --workspace @relaycast/types build \
   && npm run --workspace @relaycast/engine build
 
-FROM node:22.23.2-bookworm-slim AS install
+FROM ${NODE_IMAGE} AS install
 WORKDIR /workspace
 COPY --from=build /workspace/package.json /workspace/package-lock.json ./
 COPY --from=build /workspace/packages/a2a/package.json ./packages/a2a/

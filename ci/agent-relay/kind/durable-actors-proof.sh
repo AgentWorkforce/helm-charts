@@ -107,7 +107,13 @@ cleanup() { for pid in "${PF_PIDS[@]:-}"; do kill "$pid" 2>/dev/null || true; do
 trap cleanup EXIT
 "${K[@]}" port-forward svc/relayfile-server 28581:8080 >"$WORK/pf-relayfile.log" 2>&1 & PF_PIDS+=($!)
 "${K[@]}" port-forward svc/relaycast 28587:8787 >"$WORK/pf-relaycast.log" 2>&1 & PF_PIDS+=($!)
-sleep 3
+# Poll both forwards instead of sleeping: fail if they never answer.
+ready=
+for _ in $(seq 60); do
+  if curl -fsS http://127.0.0.1:28581/health >/dev/null 2>&1 && curl -fsS http://127.0.0.1:28587/healthz >/dev/null 2>&1; then ready=1; break; fi
+  sleep 1
+done
+[ -n "$ready" ] || { echo "FAIL port-forwards not ready after 60s"; cat "$WORK"/pf-*.log; exit 1; }
 
 log "relayfile: health and Go relayfile-mount e2e through the chart"
 curl -fsS http://127.0.0.1:28581/health; echo
@@ -130,8 +136,17 @@ printf '{"content":"%s"}' "$big" >"$WORK/big.json"
 curl -fsS -X PUT "${H[@]}" -H 'if-match: *' -H 'content-type: application/json' --data-binary @"$WORK/big.json" \
   "http://127.0.0.1:28581/v1/workspaces/ws_kind/fs/file?path=/kind/big.txt" >/dev/null
 got=$(curl -fsS "${H[@]}" "http://127.0.0.1:28581/v1/workspaces/ws_kind/fs/file?path=/kind/big.txt" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).content))')
-[ "$got" = "$big" ] && echo "PASS relayfile large file stored in MinIO and hydrated through the chart" || { echo "FAIL large file"; exit 1; }
-"${K[@]}" exec deploy/minio -- sh -c "mc alias set m http://127.0.0.1:9000 \"\$MINIO_ROOT_USER\" \"\$MINIO_ROOT_PASSWORD\" >/dev/null 2>&1; mc ls -r m/relayfile | tail -3"
+if [ "$got" = "$big" ]; then echo "PASS relayfile large file round trip through the chart"; else echo "FAIL large file"; exit 1; fi
+# The 120 KB body is above blobStore.inlineMaxBytes, so its bytes must be a
+# content-addressed object in the relayfile MinIO bucket, not actor SQLite.
+blob_sha=$(printf '%s' "$big" | shasum -a 256 | cut -d' ' -f1)
+objects=$("${K[@]}" exec deploy/minio -- sh -c "mc alias set m http://127.0.0.1:9000 \"\$MINIO_ROOT_USER\" \"\$MINIO_ROOT_PASSWORD\" >/dev/null 2>&1 && mc ls -r m/relayfile") \
+  || { echo "FAIL listing the relayfile MinIO bucket"; exit 1; }
+if grep -q "$blob_sha" <<<"$objects"; then
+  echo "PASS relayfile large file stored in MinIO (blobs/sha256/${blob_sha:0:2}/$blob_sha)"
+else
+  echo "FAIL relayfile large file (sha256 $blob_sha) not found in the relayfile MinIO bucket"; exit 1
+fi
 
 log "relaycast: health, internal workspace create, agent + message round trip"
 curl -fsS http://127.0.0.1:28587/healthz; echo
@@ -141,8 +156,34 @@ WS=$(curl -fsS -X POST -H "authorization: Bearer $RELAYCAST_INTERNAL" -H 'conten
 API_KEY=$(node -e 'const j=JSON.parse(process.argv[1]); const d=j.data??j; process.stdout.write(d.api_key??d.apiKey??d.key??"")' "$WS")
 [ -n "$API_KEY" ] && echo "PASS relaycast workspace created in a Workspace actor (ar_ key issued)" || { echo "FAIL relaycast workspace: $(node -e 'console.log(Object.keys(JSON.parse(process.argv[1])))' "$WS")"; exit 1; }
 RC=(-H "authorization: Bearer $API_KEY" -H 'content-type: application/json')
-curl -fsS "${RC[@]}" http://127.0.0.1:28587/v1/workspace >/dev/null && echo "PASS relaycast GET /v1/workspace"
-"${K[@]}" logs deploy/relaycast -c durable-actors-dev --tail=200 2>/dev/null | grep -c "invoke" | xargs -I{} echo "relaycast actor invocations logged: {}"
+if curl -fsS "${RC[@]}" http://127.0.0.1:28587/v1/workspace >/dev/null; then echo "PASS relaycast GET /v1/workspace"; else echo "FAIL relaycast GET /v1/workspace"; exit 1; fi
+# Agent round trip through the Workspace actor: register two agents, one sends
+# a channel message, the other reads it back.
+B=http://127.0.0.1:28587 KEY="$API_KEY" node --input-type=module -e '
+  const { B, KEY } = process.env;
+  const j = async (method, path, tok, body) => {
+    const r = await fetch(B + path, { method, headers: { "content-type": "application/json", authorization: "Bearer " + tok }, body: body ? JSON.stringify(body) : undefined });
+    const text = await r.text();
+    let d; try { d = JSON.parse(text); } catch { d = text; }
+    return { s: r.status, d };
+  };
+  const fail = (m) => { console.log("FAIL " + m); process.exit(1); };
+  const suffix = Date.now().toString(36);
+  const alice = await j("POST", "/v1/agents", KEY, { name: "alice-" + suffix });
+  const bob = await j("POST", "/v1/agents", KEY, { name: "bob-" + suffix });
+  const at = alice.d?.data?.token, bt = bob.d?.data?.token;
+  if (!at || !bt) fail(`agent registration (status ${alice.s}/${bob.s})`);
+  console.log("PASS relaycast registered two agents");
+  const marker = "kind-roundtrip-" + suffix;
+  const sent = await j("POST", "/v1/channels/general/messages", at, { text: marker });
+  if (sent.s !== 201) fail(`send (status ${sent.s})`);
+  console.log("PASS relaycast agent sent a channel message");
+  const read = await j("GET", "/v1/channels/general/messages?limit=50", bt);
+  if (read.s !== 200 || !JSON.stringify(read.d).includes(marker)) fail(`receive (status ${read.s}): the other agent did not read the message`);
+  console.log("PASS relaycast agent received the message (send/receive round trip)");
+'
+invocations=$("${K[@]}" logs deploy/relaycast -c durable-actors-dev --tail=500 2>/dev/null | { grep -c "invoke" || true; })
+echo "relaycast actor invocations logged: ${invocations:-0}"
 
 echo
 echo "KIND PROOF PASS"
