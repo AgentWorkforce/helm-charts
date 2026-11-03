@@ -29,8 +29,8 @@ redistribution limits recorded below.
 | OpenTelemetry Collector chart 0.178.0 | `charts/96bulls/charts/opentelemetry-collector-0.178.0.tgz` (SHA-256 `9886a0cd6c5894bec18b628540428fda8bd32619715a64383348ebd662496024`) | [`open-telemetry/opentelemetry-helm-charts`, tag `opentelemetry-collector-0.178.0`, commit `7f0a8aa074b841451a32e4127b159685e8905959`](https://github.com/open-telemetry/opentelemetry-helm-charts/tree/opentelemetry-collector-0.178.0/charts/opentelemetry-collector) | [Apache License 2.0 at that tag](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/opentelemetry-collector-0.178.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
 
 The same third-party chart contents are unpacked inside
-`charts/agent-relay/charts/96bulls-0.5.1.tgz` (SHA-256
-`9799b223891971c825be382d96120f321c9b157daccd672996912bee73b7f5ff`).
+`charts/agent-relay/charts/96bulls-0.5.2.tgz` (SHA-256
+`289b5aebc3a9c6cf58b62c5c23446f15dc03d5979a5cd9fefb0bb26bf0f4b9bc`).
 That archive also contains no license or notice file.
 
 The CloudNativePG operator chart 0.29.1 is an install prerequisite fetched by

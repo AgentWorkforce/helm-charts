@@ -15,15 +15,15 @@ maintainers:
     url: https://github.com/AgentWorkforce
 dependencies:
   - name: relaycast
-    version: 0.2.0
+    version: 0.2.1
     repository: file://../relaycast
     condition: components.relaycast
   - name: relayauth
-    version: 0.1.1
+    version: 0.1.2
     repository: file://../relayauth
     condition: components.relayauth
   - name: 96bulls
-    version: 0.5.1
+    version: 0.5.2
     repository: file://../96bulls
     condition: components.sessionsPipeline
   - name: relayhistory
@@ -39,6 +39,6 @@ dependencies:
     repository: file://../relay-dashboard
     condition: components.dashboard
   - name: relayflows
-    version: 0.2.3
+    version: 0.2.4
     repository: file://../relayflows
     condition: components.relayflows

@@ -7,7 +7,7 @@ on control-plane endpoints the self-host API does not yet implement.
 
 ## Wiring
 
-`charts/agent-relay/Chart.yaml` depends on `relayflows` 0.2.3 under the
+`charts/agent-relay/Chart.yaml` depends on `relayflows` 0.2.4 under the
 `components.relayflows` condition. `relayflows.*` values pass through to the
 subchart unchanged; `charts/agent-relay/values-gcp.yaml` carries a commented
 reference block. Relayfile remains outside the suite.

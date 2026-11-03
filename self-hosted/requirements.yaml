@@ -172,19 +172,19 @@ compatibility:
       digest: sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9
       built_by: publish-image-ecr run 41375747474
   releases:
-    - id: 96bulls-0.5.1
-      status: shipped
+    - id: 96bulls-0.5.2
+      status: unreleased
       current: true
-      charts: { 96bulls: 0.5.1, 96bulls-worker: 0.5.1, alleyoop: 0.3.3 }
+      charts: { 96bulls: 0.5.2, 96bulls-worker: 0.5.2, alleyoop: 0.3.4 }
       depends:
-        96bulls: { worker: 0.5.1, alleyoop: 0.3.3, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
+        96bulls: { worker: 0.5.2, alleyoop: 0.3.4, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
       images:
         96bulls-worker: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
         alleyoop: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
       services:
         source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
         migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
-      notes: 'sessions-pipeline main 7d7229b (#124 session list RPC, #125 Supabase event-trigger boundary, #139 its manifest sync, #137 exact sessions function ACL). The AWS path pins the ECR digest of the same build.'
+      notes: 'License-annotation patch bump of 0.5.1; same services image and db combos.'
       db_combos:
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
@@ -195,6 +195,25 @@ compatibility:
       sources:
         - "charts/96bulls/Chart.yaml:4"
         - "ci/96bulls-profiles/matrix.sh:70"
+    - id: 96bulls-0.5.1
+      status: shipped
+      charts: { 96bulls: 0.5.1, 96bulls-worker: 0.5.1, alleyoop: 0.3.3 }
+      depends:
+        96bulls: { worker: 0.5.1, alleyoop: 0.3.3, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
+      images:
+        96bulls-worker: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
+        alleyoop: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
+      services:
+        source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
+        migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
+      notes: 'sessions-pipeline main 7d7229b (#124 session list RPC, #125 Supabase event-trigger boundary, #139 its manifest sync, #137 exact sessions function ACL). The AWS path pins the ECR digest of the same build. Superseded by 0.5.2.'
+      db_combos:
+        - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
+        - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
+        - { db_mode: cloudsql, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [gcp-cloudsql], notes: operator runs the Cloud SQL bootstrap files as the migration owner; roleBootstrap false }
+        - { db_mode: supabase, boundary: event-trigger, hoopdb: external, status: held, profiles: [external-supabase], notes: supabaseActivation.hold; migrate refuses until the reviewed event trigger is installed and --activation-check passes }
+        - { db_mode: supabase, boundary: null, hoopdb: external, status: fails closed, profiles: [aws-supabase], notes: renders; migrate refuses with function_boundary_unproven }
+        - { db_mode: local, boundary: null, hoopdb: any, status: dev only, profiles: [], notes: local stack only; never a self-host install }
     - id: 96bulls-next
       status: planned
       charts: { 96bulls: next }
@@ -204,14 +223,21 @@ compatibility:
       images_note: not built for the charts yet
       notes: 'Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/96bulls-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped.'
       db_combos: []
+    - id: relaycast-0.2.1
+      status: unreleased
+      current: true
+      charts: { relaycast: 0.2.1 }
+      app_versions: { relaycast: 12.2.1-selfhost.1 }
+      images:
+        relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762 }
+      notes: License-annotation patch bump of 0.2.0.
     - id: relaycast-0.2.0
       status: shipped
-      current: true
       charts: { relaycast: 0.2.0 }
       app_versions: { relaycast: 12.2.1-selfhost.1 }
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:a05732ad4f3614d057bb1460df40a30e3a9297c8930bfdda6d4e3d6dc9f41762 }
-      notes: engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md.
+      notes: engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md. Superseded by 0.2.1.
     - id: relaycast-0.1.0
       status: shipped
       charts: { relaycast: 0.1.0 }
@@ -219,14 +245,21 @@ compatibility:
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:5c86c095a335259060dc34ce7aa2e90809267395af915977a1ae608f93a83b98 }
       notes: 'image 8.0.0; superseded by 0.2.0. ci/relaycast/smoke.sh upgrades from it.'
+    - id: relayauth-0.1.2
+      status: unreleased
+      current: true
+      charts: { relayauth: 0.1.2 }
+      app_versions: { relayauth: 0.2.34 }
+      images:
+        relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288 }
+      notes: License-annotation patch bump of 0.1.1.
     - id: relayauth-0.1.1
       status: shipped
-      current: true
       charts: { relayauth: 0.1.1 }
       app_versions: { relayauth: 0.2.34 }
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288 }
-      notes: 'relayauth 784582ef (machine-bound History assertion contract, relayauth #113).'
+      notes: 'relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2.'
     - id: relayauth-0.1.0
       status: shipped
       charts: { relayauth: 0.1.0 }
@@ -240,28 +273,42 @@ compatibility:
       charts: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.2.0, relayauth: 0.1.1, 96bulls: 0.5.1, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0, relayflows: 0.2.3 }
+        agent-relay: { relaycast: 0.2.1, relayauth: 0.1.2, 96bulls: 0.5.2, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0, relayflows: 0.2.4 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard }
       notes: 'GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim.'
+    - id: relayfile-0.1.2
+      status: unreleased
+      current: true
+      charts: { relayfile: 0.1.2 }
+      app_versions: { relayfile: 0.1.0 }
+      images:
+        relayfile: { repository: ghcr.io/agentworkforce/relayfile }
+      notes: License-annotation patch bump of 0.1.1; image by tag (Chart.appVersion), not digest.
     - id: relayfile-0.1.1
       status: shipped
-      current: true
       charts: { relayfile: 0.1.1 }
       app_versions: { relayfile: 0.1.0 }
       images:
         relayfile: { repository: ghcr.io/agentworkforce/relayfile }
-      notes: image by tag (Chart.appVersion), not digest.
+      notes: image by tag (Chart.appVersion), not digest. Superseded by 0.1.2.
+    - id: relayflows-0.2.4
+      status: unreleased
+      current: true
+      charts: { relayflows: 0.2.4 }
+      app_versions: { relayflows: 2.0.50 }
+      images:
+        relayflows: { repository: node, tag: 22.23.3-bookworm-slim }
+      notes: License-annotation patch bump of 0.2.3; the stock image installs the pinned relayflows runtime at start.
     - id: relayflows-0.2.3
       status: shipped
-      current: true
       charts: { relayflows: 0.2.3 }
       app_versions: { relayflows: 2.0.50 }
       images:
         relayflows: { repository: node, tag: 22.23.3-bookworm-slim }
-      notes: the stock image installs the pinned relayflows runtime at start; production uses an immutable flow image.
+      notes: the stock image installs the pinned relayflows runtime at start; production uses an immutable flow image. Superseded by 0.2.4.
   # Combinations the chart refuses at render time (the migrator refuses them too).
   refused_combos:
     - { db_mode: selfhosted, boundary: event-trigger, notes: event-trigger is supabase only }
