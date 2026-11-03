@@ -51,6 +51,12 @@ durable-actors:
   ingress:
     enabled: false
   replicaCount: 1
+  # The proof's default pool is six e2-medium nodes (940m allocatable each),
+  # which run near full on CPU requests. The control plane and the pool
+  # manager are mostly idle here, so request 100m each (upstream: 250m).
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1Gi }
   actors:
     # Keep idle actor hosts for 2 minutes (upstream default 10 s is shorter
     # than relaycast's 15 s maintenance alarm, so idle workspaces would sleep

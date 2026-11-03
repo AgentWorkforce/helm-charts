@@ -46,8 +46,17 @@ relayfile:
       adminKeySecret:
         name: actors-credentials
         key: api-key
+      # CPU requests sized for the proof's e2-medium pool (see the
+      # durable-actors overlay); memory stays at the chart defaults.
       gateway:
         replicaCount: 2
+        resources:
+          requests: { cpu: 25m, memory: 128Mi }
+          limits: { memory: 512Mi }
+      broker:
+        resources:
+          requests: { cpu: 10m, memory: 64Mi }
+          limits: { memory: 256Mi }
       deployer:
         artifactBucket: agentrelay-96bulls-soc2-2610-actors
         backoffLimit: 10

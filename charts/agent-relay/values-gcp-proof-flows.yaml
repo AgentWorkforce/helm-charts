@@ -10,6 +10,10 @@ relayflows:
   runtimeInstaller:
     enabled: true
     relayflowsVersion: "2.0.50"
+  # The smoke Job runs once per Helm revision; 100m fits the proof's
+  # e2-medium pool next to the rest of the suite (chart default: 250m).
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
   standalone:
     backoffLimit: 0
     ttlSecondsAfterFinished: 86400
