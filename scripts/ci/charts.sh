@@ -130,11 +130,11 @@ for chart in "${charts[@]}"; do
         ;;
       dryrun)
         dryrun_out=$(render "$chart" "$v")
-        # Generic CI clusters do not install GKE's ManagedCertificate and
-        # FrontendConfig CRDs. Their schemas are covered by static rendering;
+        # Generic CI clusters do not install GKE's ManagedCertificate,
+        # FrontendConfig and BackendConfig CRDs. Their schemas are covered by static rendering;
         # dry-run the portable Kubernetes objects here.
         if [ "$chart" = agent-relay ]; then
-          dryrun_out=$(yq 'select(.kind != "ManagedCertificate" and .kind != "FrontendConfig")' <<<"$dryrun_out")
+          dryrun_out=$(yq 'select(.kind != "ManagedCertificate" and .kind != "FrontendConfig" and .kind != "BackendConfig")' <<<"$dryrun_out")
         fi
         kubectl apply --server-side --dry-run=server --field-manager=ci -n ci -f - <<<"$dryrun_out" >/dev/null \
           || err "$label: server-side dry-run apply failed"
@@ -161,6 +161,8 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing summary Secret" "summaryEncryption.existingSecret or existingSecret is required when bob-costas is enabled" --set summaryEncryption.existingSecret=
         expect_render_failure "$chart" "$v" "duplicate summary key env" "configure summaryEncryption instead of components.bob-costas.env" --set-json 'components.bob-costas.env=[{"name":"SUMMARY_MASTER_KEYS","value":"not-a-real-key"}]'
         expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
+        expect_render_failure "$chart" "$v" "extraEnv in-cluster http" "extraEnv must not set ALLOW_IN_CLUSTER_HTTP" --set-json 'extraEnv=[{"name":"ALLOW_IN_CLUSTER_HTTP","value":"true"}]'
+        expect_render_failure "$chart" "$v" "component in-cluster http" "components.referee.env must not set ALLOW_IN_CLUSTER_HTTP" --set-json 'components.referee.env=[{"name":"ALLOW_IN_CLUSTER_HTTP","value":"true"}]'
         ;;
       alleyoop)
         v=charts/alleyoop/ci/pod-identity-values.yaml
@@ -168,6 +170,12 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing database Secret" "hoopdb.existingSecret or existingSecret is required for HOOPDB_URL" --set hoopdb.existingSecret=
         expect_render_failure "$chart" "$v" "secret mode without endpoint" "locker.endpoint is required when locker.credentials.mode=secret" --set locker.credentials.mode=secret --set existingSecret=96bulls
         expect_render_failure "$chart" "$v" "local JWKS without Secret" "existingSecret is required when auth.localJwks=true" --set auth.jwksUrl= --set auth.localJwks=true
+        for origin in https://history.example.com/x https://history.example.com:99999 https://history.example.com:8a https://user@history.example.com 'https://history..example.com' https://-history.example.com ftp://history.example.com; do
+          expect_render_failure "$chart" "$v" "history origin $origin" "auth.historyOrigin must be a bare origin" --set "auth.historyOrigin=$origin"
+        done
+        for origin in https://history.gcp-proof.agentrelay.com http://relayhistory.relayhistory.svc:8080; do
+          render "$chart" "$v" --set "auth.historyOrigin=$origin" >/dev/null || err "$chart: valid auth.historyOrigin $origin rejected"
+        done
         ;;
       relayauth)
         v=charts/relayauth/ci/default-values.yaml

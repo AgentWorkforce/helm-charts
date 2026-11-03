@@ -39,6 +39,9 @@ shared: &shared
     existingSecret: hoopdb-app
     key: uri
   locker:
+    # The bundled MinIO (locker.enabled). LOCKER_ENDPOINT is not subject to
+    # ALLOW_IN_CLUSTER_HTTP, so this short http name is valid with
+    # allowInClusterHttp=false.
     endpoint: http://locker:9000
     bucket: locker
     region: us-east-1
@@ -53,6 +56,9 @@ shared: &shared
 
 worker:
   <<: *shared
+  # Plain http only to in-cluster Service FQDNs (ALLOW_IN_CLUSTER_HTTP) for
+  # the validated destination URLs; Locker and OTLP endpoints are exempt.
+  allowInClusterHttp: false
   # Use a separate owner URL for the one-shot migration Job (and its
   # wait-for-role) while services use the least-privilege URL in worker.hoopdb.
   # Both fields stay empty by default.
@@ -77,9 +83,15 @@ worker:
 
 alleyoop:
   <<: *shared
+  # Plain http only to in-cluster Service FQDNs (ALLOW_IN_CLUSTER_HTTP) for
+  # the validated destination URLs; Locker and OTLP endpoints are exempt.
+  allowInClusterHttp: false
   auth:
     # REQUIRED: RelayAuth JWKS URL (or auth.localJwks=true for kind/local).
     jwksUrl: ""
+    # Optional RELAYHISTORY_ORIGIN (bare origin; must equal the courier's
+    # RELAYAUTH_HISTORY_ORIGIN).
+    historyOrigin: ""
 
 # ---------------------------------------------------------------------------
 # HoopDb: a CloudNativePG Cluster (cnpg/cluster). Needs the CloudNativePG

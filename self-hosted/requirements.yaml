@@ -172,9 +172,31 @@ compatibility:
       digest: sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9
       built_by: publish-image-ecr run 41375747474
   releases:
-    - id: 96bulls-0.5.2
+    - id: 96bulls-0.5.4
       status: unreleased
       current: true
+      charts: { 96bulls: 0.5.4, 96bulls-worker: 0.5.3, alleyoop: 0.3.6 }
+      depends:
+        96bulls: { worker: 0.5.3, alleyoop: 0.3.6, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
+      images:
+        96bulls-worker: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
+        alleyoop: { repository: agentworkforce/96bulls-services, digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2 }
+      services:
+        source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
+        migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
+      notes: 'allowInClusterHttp (ALLOW_IN_CLUSTER_HTTP, default false) for alleyoop and the worker, and the optional alleyoop auth.historyOrigin (RELAYHISTORY_ORIGIN). Same services image and db combos. 96bulls 0.5.3 / alleyoop 0.3.5 are taken by the interim-bearer PR.'
+      db_combos:
+        - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
+        - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
+        - { db_mode: cloudsql, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [gcp-cloudsql], notes: operator runs the Cloud SQL bootstrap files as the migration owner; roleBootstrap false }
+        - { db_mode: supabase, boundary: event-trigger, hoopdb: external, status: held, profiles: [external-supabase], notes: supabaseActivation.hold; migrate refuses until the reviewed event trigger is installed and --activation-check passes }
+        - { db_mode: supabase, boundary: null, hoopdb: external, status: fails closed, profiles: [aws-supabase], notes: renders; migrate refuses with function_boundary_unproven }
+        - { db_mode: local, boundary: null, hoopdb: any, status: dev only, profiles: [], notes: local stack only; never a self-host install }
+      sources:
+        - "charts/96bulls/Chart.yaml:4"
+        - "ci/96bulls-profiles/matrix.sh:70"
+    - id: 96bulls-0.5.2
+      status: shipped
       charts: { 96bulls: 0.5.2, 96bulls-worker: 0.5.2, alleyoop: 0.3.4 }
       depends:
         96bulls: { worker: 0.5.2, alleyoop: 0.3.4, hoopdb: 0.9.0, locker: 5.4.0, otel: 0.178.0 }
@@ -184,7 +206,7 @@ compatibility:
       services:
         source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
         migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
-      notes: 'License-annotation patch bump of 0.5.1; same services image and db combos.'
+      notes: 'License-annotation patch bump of 0.5.1; same services image and db combos. Superseded by 0.5.4.'
       db_combos:
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
@@ -267,18 +289,18 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.1.0
+    - id: agent-relay-0.1.1
       status: unreleased
       current: true
-      charts: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
+      charts: { agent-relay: 0.1.1, relayhistory: 0.1.0, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.2.1, relayauth: 0.1.2, 96bulls: 0.5.2, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0, relayflows: 0.2.4 }
+        agent-relay: { relaycast: 0.2.1, relayauth: 0.1.2, 96bulls: 0.5.4, relayhistory: 0.1.0, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0, relayflows: 0.2.4 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: 'GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim.'
+      notes: 'relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim.'
     - id: relayfile-0.1.2
       status: unreleased
       current: true
@@ -643,6 +665,57 @@ entries:
       - "charts/alleyoop/values.yaml:81"
       - "charts/alleyoop/templates/_env.tpl:18"
       - "charts/alleyoop/templates/deployment.yaml:49"
+
+  - id: opt.96bulls.in-cluster-http
+    kind: option
+    title: Plain http to in-cluster Service FQDNs
+    description: |
+      allowInClusterHttp renders ALLOW_IN_CLUSTER_HTTP for alleyoop and every
+      worker component. false (default) keeps the validated destination URLs
+      (RelayAuth, Cloud, ingest, JWKS, history origin, model endpoint) https
+      (or loopback). true allows plain http only to <svc>.<ns>.svc or
+      <svc>.<ns>.svc.cluster.local, never public hosts, IPs or short names; for
+      example alleyoop.auth.jwksUrl=http://relayauth.relayauth.svc:8787/.well-known/jwks.json.
+      LOCKER_ENDPOINT and the OTLP endpoint are outside this policy, so the
+      bundled MinIO at http://locker:9000 works with the default false.
+    chart: 96bulls
+    values: [alleyoop.allowInClusterHttp, worker.allowInClusterHttp]
+    env: [ALLOW_IN_CLUSTER_HTTP]
+    profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
+    status: shipped
+    provided_by: operator
+    default: false
+    choices:
+      - { value: false }
+      - { value: true }
+    verify: helm template renders ALLOW_IN_CLUSTER_HTTP="false" by default and fails when extraEnv sets it
+    sources:
+      - "charts/alleyoop/values.yaml"
+      - "charts/alleyoop/templates/deployment.yaml"
+      - "charts/96bulls-worker/templates/_env.tpl"
+
+  - id: opt.alleyoop.history-origin
+    kind: option
+    title: RelayHistory origin expected by the ingest
+    description: |
+      alleyoop.auth.historyOrigin renders RELAYHISTORY_ORIGIN on the ingest: the
+      bare origin expected as the History assertion audience. It must be
+      byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Unset, nothing is
+      rendered (the services default applies).
+    chart: 96bulls
+    values: [alleyoop.auth.historyOrigin]
+    env: [RELAYHISTORY_ORIGIN]
+    profiles: [selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql]
+    status: shipped
+    provided_by: operator
+    default: unset
+    choices:
+      - { value: unset }
+      - { value: origin }
+    verify: helm template fails when auth.historyOrigin is not a bare origin or extraEnv also sets RELAYHISTORY_ORIGIN
+    sources:
+      - "charts/alleyoop/values.yaml"
+      - "charts/alleyoop/templates/deployment.yaml"
 
   # =========================================================================
   # 96bulls: database
@@ -1329,12 +1402,15 @@ entries:
     description: |
       packages/selfhost-api reads its runtime database, RelayAuth API key,
       bootstrap token and encryption key only from an existing Secret mounted
-      as files. The migration owner URL is projected only into the migration
+      as files. encryption.keyId (SELFHOST_ENCRYPTION_KEY_ID) is the required
+      non-secret id stored with every encrypted value; the API refuses to start
+      without it. The migration owner URL is projected only into the migration
       Job. Internal service origins are explicit chart values; Relaycast and
       RelayHistory public origins must use public multi-label HTTPS DNS.
     chart: relay-cloud-api
-    values: [publicUrl, "services.*", existingSecret, "secretKeys.*", "database.runtimeRole", ingress.tls, imagePullSecrets]
+    values: [publicUrl, "services.*", existingSecret, "secretKeys.*", "database.runtimeRole", encryption.keyId, ingress.tls, imagePullSecrets]
     env:
+      - SELFHOST_ENCRYPTION_KEY_ID
       - DATABASE_URL_FILE
       - DATABASE_MIGRATIONS_URL_FILE
       - SELFHOST_RUNTIME_DATABASE_ROLE
@@ -1363,10 +1439,153 @@ entries:
         note: kubernetes.io/tls, normally managed by the GKE ingress certificate path
       - name: "<imagePullSecrets[].name>"
         note: optional registry pull Secret
-    verify: helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url
+    verify: helm template fails without existingSecret, encryption.keyId, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url
     sources:
       - "charts/relay-cloud-api/values.yaml"
       - "charts/relay-cloud-api/templates/_helpers.tpl"
+
+  - id: opt.relay-cloud-api.encryption-rotation
+    kind: option
+    title: Previous encryption key during a key rotation
+    description: |
+      During a rotation the API decrypts with the previous key and encrypts
+      with the active one. encryption.previousKeyId and
+      secretKeys.previousEncryptionKey are set together or not at all (the API
+      refuses one without the other); the id must differ from encryption.keyId.
+    chart: relay-cloud-api
+    values: [encryption.previousKeyId, secretKeys.previousEncryptionKey]
+    env: [SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID, SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE]
+    profiles: [relay-cloud-api]
+    status: shipped
+    provided_by: operator
+    default: none
+    choices:
+      - { value: none }
+      - { value: previous key }
+    secrets:
+      - name: "<existingSecret>"
+        name_paths: [existingSecret]
+        keys:
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.previousEncryptionKey, optional: "only during a key rotation, with encryption.previousKeyId" }
+    verify: helm template fails when only one of encryption.previousKeyId and secretKeys.previousEncryptionKey is set
+    sources:
+      - "charts/relay-cloud-api/values.yaml"
+      - "charts/relay-cloud-api/templates/_helpers.tpl"
+
+  - id: opt.relay-cloud-api.internal-token
+    kind: option
+    title: Internal service token for /internal/v1
+    description: |
+      secretKeys.internalToken mounts SELFHOST_INTERNAL_TOKEN_FILE (at least 32
+      bytes). It enables /internal/v1: flows reads workspace env vars and
+      integration tokens through it, and in-cluster agents file telemetry
+      issue reports with it. Unset disables /internal/v1. The agent-relay GKE
+      ingress denies /internal on the api host.
+    chart: relay-cloud-api
+    values: [secretKeys.internalToken]
+    env: [SELFHOST_INTERNAL_TOKEN_FILE]
+    profiles: [relay-cloud-api]
+    status: shipped
+    provided_by: operator
+    default: disabled
+    choices:
+      - { value: disabled }
+      - { value: enabled }
+    secrets:
+      - name: "<existingSecret>"
+        name_paths: [existingSecret]
+        keys:
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.internalToken, optional: "enables /internal/v1 (flows env delivery, telemetry issue reports)" }
+    verify: kubectl exec deploy/<release>-relay-cloud-api (or the fullnameOverride, relay-cloud-api in the agent-relay GCP profiles) -- sh -c 'test "$(tr -d "\r\n" < "$SELFHOST_INTERNAL_TOKEN_FILE" | wc -c)" -ge 32' (expanded inside the pod; at least 32 bytes); curl https://<api host>/internal/v1/... is refused at the edge
+    sources:
+      - "charts/relay-cloud-api/values.yaml"
+      - "charts/relay-cloud-api/templates/_helpers.tpl"
+      - "charts/agent-relay/templates/gke-ingress.yaml"
+
+  - id: opt.relay-cloud-api.dashboard-url
+    kind: option
+    title: Dashboard URL for OAuth callbacks and flow run links
+    description: |
+      dashboardUrl (SELFHOST_DASHBOARD_URL) is where OAuth callback pages link
+      back and where mirrored flow runs build their runUrl. Unset, the API uses
+      publicUrl + "/", which is wrong when the dashboard has its own host (the
+      GKE profiles serve it on the root host).
+    chart: relay-cloud-api
+    values: [dashboardUrl]
+    env: [SELFHOST_DASHBOARD_URL]
+    profiles: [relay-cloud-api]
+    status: shipped
+    provided_by: operator
+    default: publicUrl + "/"
+    choices:
+      - { value: publicUrl + "/" }
+      - { value: dashboard origin }
+    verify: helm template renders SELFHOST_DASHBOARD_URL only when dashboardUrl is set and fails on credentials, query or fragment
+    sources:
+      - "charts/relay-cloud-api/values.yaml"
+      - "charts/relay-cloud-api/templates/_helpers.tpl"
+
+  - id: opt.relay-cloud-api.flows
+    kind: option
+    title: Relayflows control-plane storage and worker queue
+    description: |
+      flows.storage selects where run artifacts live: postgres (inline, the
+      default) or gcs (flows.gcsBucket required, flows.gcsPrefix optional;
+      Workload Identity on the API service account, and egress to
+      storage.googleapis.com when allowAllEgress=false).
+      flows.workerRelaycastUrl is the Relaycast origin handed to workers.
+      flows.queuePingMs is the worker queue SSE keepalive (1000-120000 ms) and
+      must stay below every proxy timeout in front of the API.
+    chart: relay-cloud-api
+    values: ["flows.*"]
+    env: [SELFHOST_FLOWS_STORAGE, SELFHOST_FLOWS_GCS_BUCKET, SELFHOST_FLOWS_GCS_PREFIX, SELFHOST_FLOWS_WORKER_RELAYCAST_URL, SELFHOST_FLOWS_QUEUE_PING_MS]
+    profiles: [relay-cloud-api]
+    status: shipped
+    provided_by: operator
+    default: postgres
+    choices:
+      - { value: postgres }
+      - { value: gcs }
+    verify: helm template fails for flows.storage=gcs without flows.gcsBucket, or flows.queuePingMs outside 1000-120000
+    sources:
+      - "charts/relay-cloud-api/values.yaml"
+      - "charts/relay-cloud-api/templates/_helpers.tpl"
+
+  - id: opt.relay-cloud-api.telemetry
+    kind: option
+    title: Self-host telemetry level and transport
+    description: |
+      telemetry.level (SELFHOST_TELEMETRY_LEVEL) is off, errors or full. The
+      chart default is off, the same as the API default; the product default
+      is a pending decision. Any level other than off needs telemetry.installId
+      and secretKeys.telemetryInstallKey (issued by Agent Relay), and with
+      transport https also telemetry.endpoint. transport file never sends
+      (air-gapped signed export). telemetry.probes and telemetry.deployment add
+      health probes and flat deployment-shape keys (scalar values only; the
+      chart-rendered keys cannot be overridden). A TCP 443 egress rule to
+      telemetry.egressTo is added only when networkPolicy.enabled=true,
+      allowAllEgress=false, the level is not off and the transport is https.
+    chart: relay-cloud-api
+    values: ["telemetry.*", secretKeys.telemetryInstallKey]
+    env: [SELFHOST_TELEMETRY_LEVEL, SELFHOST_TELEMETRY_TRANSPORT, SELFHOST_TELEMETRY_ENDPOINT, SELFHOST_TELEMETRY_INSTALL_ID, SELFHOST_TELEMETRY_INSTALL_KEY_FILE, SELFHOST_TELEMETRY_PROBES, SELFHOST_TELEMETRY_DEPLOYMENT]
+    profiles: [relay-cloud-api]
+    status: shipped
+    provided_by: operator
+    default: "off"
+    choices:
+      - { value: "off" }
+      - { value: errors }
+      - { value: full }
+    secrets:
+      - name: "<existingSecret>"
+        name_paths: [existingSecret]
+        keys:
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.telemetryInstallKey, optional: "required unless telemetry.level is off" }
+    verify: helm template fails for a level other than off without installId, install key, or (https) endpoint; ci/agent-relay/render.sh checks the egress rule renders only when telemetry is sent over https
+    sources:
+      - "charts/relay-cloud-api/values.yaml"
+      - "charts/relay-cloud-api/templates/_helpers.tpl"
+      - "charts/relay-cloud-api/templates/networkpolicy.yaml"
 
   - id: req.relayhistory.config
     kind: requirement
@@ -1464,7 +1683,15 @@ entries:
     description: |
       One GCE Ingress uses the reserved global address, one ManagedCertificate
       for all four hosts and a FrontendConfig HTTPS redirect. Leaf ingresses
-      are disabled and all ClusterIP backends use standalone NEGs.
+      are disabled and all ClusterIP backends use standalone NEGs. /internal is
+      denied at the edge on the cast and api hosts. The api Service is bound
+      (cloud.google.com/backend-config) to a BackendConfig whose timeoutSec
+      (gkeIngress.backends.api.timeoutSec, at least 60, default 3600) keeps the
+      flows worker queue SSE stream open past GCE's 30s default. The
+      BackendConfig is named <gkeIngress.name>-api (the name truncated to 59
+      characters first); relay-cloud-api renders the annotation from
+      relay-cloud-api.service.backendConfig, which must equal that name (the
+      render fails with the expected name otherwise).
     chart: agent-relay
     values:
       - gkeIngress.enabled
@@ -1481,7 +1708,7 @@ entries:
     choices:
       - { value: enabled }
       - { value: disabled }
-    verify: render contains exactly one Ingress, the four expected hosts, ManagedCertificate, FrontendConfig and NEG annotations
+    verify: render contains exactly one Ingress, the four expected hosts, ManagedCertificate, FrontendConfig, NEG annotations, the api BackendConfig and the /internal edge-deny on the api host
     sources:
       - "charts/agent-relay/templates/gke-ingress.yaml"
       - "charts/agent-relay/values-gcp-proof.yaml"

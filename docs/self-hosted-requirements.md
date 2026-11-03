@@ -14,7 +14,7 @@ registered, every shipped entry must exist in the charts, planned entries must
 not be referenced by any template, and the compatibility matrix must equal
 the pinned digests.
 
-Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 78 entries: 32 requirements (31 shipped, 1 planned), 46 options (44 shipped, 2 planned).
+Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 85 entries: 32 requirements (31 shipped, 1 planned), 53 options (51 shipped, 2 planned).
 
 ## Contents
 
@@ -48,7 +48,8 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 
 | row | status | charts | image | services source / generation | supported dbMode + boundary | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 96bulls-0.5.2 | unreleased | 96bulls 0.5.2<br>96bulls-worker 0.5.2<br>alleyoop 0.3.4<br>(deps: worker 0.5.2, alleyoop 0.3.4, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | License-annotation patch bump of 0.5.1; same services image and db combos. |
+| 96bulls-0.5.4 | unreleased | 96bulls 0.5.4<br>96bulls-worker 0.5.3<br>alleyoop 0.3.6<br>(deps: worker 0.5.3, alleyoop 0.3.6, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | allowInClusterHttp (ALLOW_IN_CLUSTER_HTTP, default false) for alleyoop and the worker, and the optional alleyoop auth.historyOrigin (RELAYHISTORY_ORIGIN). Same services image and db combos. 96bulls 0.5.3 / alleyoop 0.3.5 are taken by the interim-bearer PR. |
+| 96bulls-0.5.2 | shipped | 96bulls 0.5.2<br>96bulls-worker 0.5.2<br>alleyoop 0.3.4<br>(deps: worker 0.5.2, alleyoop 0.3.4, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | License-annotation patch bump of 0.5.1; same services image and db combos. Superseded by 0.5.4. |
 | 96bulls-0.5.1 | shipped | 96bulls 0.5.1<br>96bulls-worker 0.5.1<br>alleyoop 0.3.3<br>(deps: worker 0.5.1, alleyoop 0.3.3, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | sessions-pipeline main 7d7229b (#124 session list RPC, #125 Supabase event-trigger boundary, #139 its manifest sync, #137 exact sessions function ACL). The AWS path pins the ECR digest of the same build. Superseded by 0.5.2. |
 | 96bulls-next | **planned** | 96bulls next | not built for the charts yet | `475d503216a2` / `5ed119133e36` |  | Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/96bulls-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped. |
 | relaycast-0.2.1 | unreleased | relaycast 0.2.1 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | License-annotation patch bump of 0.2.0. |
@@ -57,7 +58,7 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 | relayauth-0.1.2 | unreleased | relayauth 0.1.2 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | License-annotation patch bump of 0.1.1. |
 | relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2. |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
-| agent-relay-0.1.0 | unreleased | agent-relay 0.1.0<br>relayhistory 0.1.0<br>relay-cloud-api 0.1.0<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.2.1, relayauth 0.1.2, 96bulls 0.5.2, relayhistory 0.1.0, relay-cloud-api 0.1.0, relay-dashboard 0.1.0, relayflows 0.2.4) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. |
+| agent-relay-0.1.1 | unreleased | agent-relay 0.1.1<br>relayhistory 0.1.0<br>relay-cloud-api 0.2.0<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.2.1, relayauth 0.1.2, 96bulls 0.5.4, relayhistory 0.1.0, relay-cloud-api 0.2.0, relay-dashboard 0.1.0, relayflows 0.2.4) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. |
 | relayfile-0.1.2 | unreleased | relayfile 0.1.2 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | License-annotation patch bump of 0.1.1; image by tag (Chart.appVersion), not digest. |
 | relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. Superseded by 0.1.2. |
 | relayflows-0.2.4 | unreleased | relayflows 0.2.4 | relayflows: `node:22.23.3-bookworm-slim` |  |  | License-annotation patch bump of 0.2.3; the stock image installs the pinned relayflows runtime at start. |
@@ -118,6 +119,8 @@ chart `96bulls` · values [`profiles/selfhost-postgres.yaml`](../charts/96bulls/
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -171,6 +174,8 @@ chart `96bulls` · values [`profiles/migration.yaml`](../charts/96bulls/profiles
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -221,6 +226,8 @@ chart `96bulls` · values [`profiles/external-selfhosted.yaml`](../charts/96bull
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -270,6 +277,8 @@ chart `96bulls` · values [`profiles/external-supabase.yaml`](../charts/96bulls/
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `supabase` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `event-trigger` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -323,6 +332,8 @@ chart `96bulls` · values [`ci/aws-cnpg-values.yaml`](../charts/96bulls/ci/aws-c
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `cnpg` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `selfhosted` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -372,6 +383,8 @@ chart `96bulls` · values [`ci/pod-identity-values.yaml`](../charts/96bulls/ci/p
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `supabase` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | (no default) | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -423,6 +436,8 @@ chart `96bulls` · values [`ci/gcp-cloudsql-values.yaml`](../charts/96bulls/ci/g
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [alleyoop token verification source](#opt-alleyoop-auth-mode) | `jwksUrl`, `localJwks` | `jwksUrl` | values `alleyoop.auth.jwksUrl`, `alleyoop.auth.localJwks`, `alleyoop.auth.issuer`, `alleyoop.auth.audience`, `alleyoop.secretKeys.jwksJson`; env `RELAYAUTH_JWKS_URL`, `JWKS_JSON`, `AUTH_ISSUER`, `AUTH_AUDIENCE`; Secret `<existingSecret>` keys `JWKS_JSON` (only with auth.localJwks=true) |
+| shipped | [Plain http to in-cluster Service FQDNs](#opt-96bulls-in-cluster-http) | `false`, `true` | `false` | values `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`; env `ALLOW_IN_CLUSTER_HTTP` |
+| shipped | [RelayHistory origin expected by the ingest](#opt-alleyoop-history-origin) | `unset`, `origin` | `unset` | values `alleyoop.auth.historyOrigin`; env `RELAYHISTORY_ORIGIN` |
 | shipped | [HoopDb backend](#opt-96bulls-hoopdb-backend) | `cnpg`, `external` | `external` | values `hoopdb.enabled` |
 | shipped | [Migrator database mode (HOOPDB_DB_MODE)](#opt-96bulls-db-mode) | `selfhosted`, `cloudsql`, `supabase`, `local` | `cloudsql` | values `worker.migrations.databaseMode`; env `HOOPDB_DB_MODE` |
 | shipped | [Function boundary mode (HOOPDB_FUNCTION_BOUNDARY_MODE)](#opt-96bulls-function-boundary-mode) | `global-default-revoke`, `event-trigger` | `global-default-revoke` | values `worker.migrations.functionBoundaryMode`; env `HOOPDB_FUNCTION_BOUNDARY_MODE`, `HOOPDB_FUNCTION_BOUNDARY_APPROVED` |
@@ -517,7 +532,17 @@ chart `relay-cloud-api` · values [`ci/default-values.yaml`](../charts/relay-clo
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [Self-host control-plane existing Secret and service configuration](#req-relay-cloud-api-config) | operator | values `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `ingress.tls`, `imagePullSecrets`; env `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`; Secret `<existingSecret>` keys `database-url`, `database-migrations-url`, `relayauth-api-key`, `selfhost-bootstrap-token`, `selfhost-encryption-key`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls, normally managed by the GKE ingress certificate path); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url |
+| shipped | [Self-host control-plane existing Secret and service configuration](#req-relay-cloud-api-config) | operator | values `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `encryption.keyId`, `ingress.tls`, `imagePullSecrets`; env `SELFHOST_ENCRYPTION_KEY_ID`, `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`; Secret `<existingSecret>` keys `database-url`, `database-migrations-url`, `relayauth-api-key`, `selfhost-bootstrap-token`, `selfhost-encryption-key`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls, normally managed by the GKE ingress certificate path); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | helm template fails without existingSecret, encryption.keyId, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url |
+
+**Options (choose)**
+
+| | option | choices | default here | maps to |
+| --- | --- | --- | --- | --- |
+| shipped | [Previous encryption key during a key rotation](#opt-relay-cloud-api-encryption-rotation) | `none`, `previous key` | `none` | values `encryption.previousKeyId`, `secretKeys.previousEncryptionKey`; env `SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID`, `SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
+| shipped | [Internal service token for /internal/v1](#opt-relay-cloud-api-internal-token) | `disabled`, `enabled` | `disabled` | values `secretKeys.internalToken`; env `SELFHOST_INTERNAL_TOKEN_FILE`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
+| shipped | [Dashboard URL for OAuth callbacks and flow run links](#opt-relay-cloud-api-dashboard-url) | `publicUrl + "/"`, `dashboard origin` | `publicUrl + "/"` | values `dashboardUrl`; env `SELFHOST_DASHBOARD_URL` |
+| shipped | [Relayflows control-plane storage and worker queue](#opt-relay-cloud-api-flows) | `postgres`, `gcs` | `postgres` | values `flows.*`; env `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX`, `SELFHOST_FLOWS_WORKER_RELAYCAST_URL`, `SELFHOST_FLOWS_QUEUE_PING_MS` |
+| shipped | [Self-host telemetry level and transport](#opt-relay-cloud-api-telemetry) | `off`, `errors`, `full` | `off` | values `telemetry.*`, `secretKeys.telemetryInstallKey`; env `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
 
 ### Profile: relay-dashboard
 
@@ -943,17 +968,19 @@ from a Secret, never values. Secret and value names are proposed.
 
 packages/selfhost-api reads its runtime database, RelayAuth API key,
 bootstrap token and encryption key only from an existing Secret mounted
-as files. The migration owner URL is projected only into the migration
+as files. encryption.keyId (SELFHOST_ENCRYPTION_KEY_ID) is the required
+non-secret id stored with every encrypted value; the API refuses to start
+without it. The migration owner URL is projected only into the migration
 Job. Internal service origins are explicit chart values; Relaycast and
 RelayHistory public origins must use public multi-label HTTPS DNS.
 
 - Provided by: operator
-- Values: `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `ingress.tls`, `imagePullSecrets`
-- Env: `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`
+- Values: `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `encryption.keyId`, `ingress.tls`, `imagePullSecrets`
+- Env: `SELFHOST_ENCRYPTION_KEY_ID`, `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`
 - Secret: `<existingSecret>` from `existingSecret`; keys `database-url` from `secretKeys.databaseUrl`; `database-migrations-url` from `secretKeys.databaseMigrationsUrl`; `relayauth-api-key` from `secretKeys.relayauthApiKey`; `selfhost-bootstrap-token` from `secretKeys.bootstrapToken`; `selfhost-encryption-key` from `secretKeys.encryptionKey`
 - Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls, normally managed by the GKE ingress certificate path
 - Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
-- Verify: helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url
+- Verify: helm template fails without existingSecret, encryption.keyId, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url
 - Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
 
 #### req.relayhistory.config
@@ -1154,6 +1181,48 @@ issuer/audience are the expected token claims.
 - Secret: `<existingSecret>`; keys `JWKS_JSON` from `alleyoop.secretKeys.jwksJson`. only with auth.localJwks=true
 - Verify: helm template fails with "set auth.jwksUrl OR auth.localJwks, not both" or with neither
 - Sources: [`charts/alleyoop/values.yaml:81`](../charts/alleyoop/values.yaml#L81), [`charts/alleyoop/templates/_env.tpl:18`](../charts/alleyoop/templates/_env.tpl#L18), [`charts/alleyoop/templates/deployment.yaml:49`](../charts/alleyoop/templates/deployment.yaml#L49)
+
+#### opt.96bulls.in-cluster-http
+
+<a id="opt-96bulls-in-cluster-http"></a>
+
+**Plain http to in-cluster Service FQDNs** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+
+allowInClusterHttp renders ALLOW_IN_CLUSTER_HTTP for alleyoop and every
+worker component. false (default) keeps the validated destination URLs
+(RelayAuth, Cloud, ingest, JWKS, history origin, model endpoint) https
+(or loopback). true allows plain http only to <svc>.<ns>.svc or
+<svc>.<ns>.svc.cluster.local, never public hosts, IPs or short names; for
+example alleyoop.auth.jwksUrl=http://relayauth.relayauth.svc:8787/.well-known/jwks.json.
+LOCKER_ENDPOINT and the OTLP endpoint are outside this policy, so the
+bundled MinIO at http://locker:9000 works with the default false.
+
+- Default: `false`
+- Choices: `false`; `true`
+- Provided by: operator
+- Values: `alleyoop.allowInClusterHttp`, `worker.allowInClusterHttp`
+- Env: `ALLOW_IN_CLUSTER_HTTP`
+- Verify: helm template renders ALLOW_IN_CLUSTER_HTTP="false" by default and fails when extraEnv sets it
+- Sources: [`charts/alleyoop/values.yaml`](../charts/alleyoop/values.yaml), [`charts/alleyoop/templates/deployment.yaml`](../charts/alleyoop/templates/deployment.yaml), [`charts/96bulls-worker/templates/_env.tpl`](../charts/96bulls-worker/templates/_env.tpl)
+
+#### opt.alleyoop.history-origin
+
+<a id="opt-alleyoop-history-origin"></a>
+
+**RelayHistory origin expected by the ingest** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+
+alleyoop.auth.historyOrigin renders RELAYHISTORY_ORIGIN on the ingest: the
+bare origin expected as the History assertion audience. It must be
+byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Unset, nothing is
+rendered (the services default applies).
+
+- Default: `unset`
+- Choices: `unset`; `origin`
+- Provided by: operator
+- Values: `alleyoop.auth.historyOrigin`
+- Env: `RELAYHISTORY_ORIGIN`
+- Verify: helm template fails when auth.historyOrigin is not a bare origin or extraEnv also sets RELAYHISTORY_ORIGIN
+- Sources: [`charts/alleyoop/values.yaml`](../charts/alleyoop/values.yaml), [`charts/alleyoop/templates/deployment.yaml`](../charts/alleyoop/templates/deployment.yaml)
 
 #### opt.96bulls.hoopdb-backend
 
@@ -1506,6 +1575,114 @@ key Secret (req.secret.model-api-key). Values names are proposed.
 - Verify: not applicable until charted
 - Sources: `sessions-pipeline@475d503:src/session-brief/config.ts:4`, `sessions-pipeline@475d503:src/session-brief/main.ts:2`
 
+#### opt.relay-cloud-api.encryption-rotation
+
+<a id="opt-relay-cloud-api-encryption-rotation"></a>
+
+**Previous encryption key during a key rotation** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+During a rotation the API decrypts with the previous key and encrypts
+with the active one. encryption.previousKeyId and
+secretKeys.previousEncryptionKey are set together or not at all (the API
+refuses one without the other); the id must differ from encryption.keyId.
+
+- Default: `none`
+- Choices: `none`; `previous key`
+- Provided by: operator
+- Values: `encryption.previousKeyId`, `secretKeys.previousEncryptionKey`
+- Env: `SELFHOST_ENCRYPTION_PREVIOUS_KEY_ID`, `SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE`
+- Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.previousEncryptionKey` (optional: only during a key rotation, with encryption.previousKeyId)
+- Verify: helm template fails when only one of encryption.previousKeyId and secretKeys.previousEncryptionKey is set
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
+
+#### opt.relay-cloud-api.internal-token
+
+<a id="opt-relay-cloud-api-internal-token"></a>
+
+**Internal service token for /internal/v1** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+secretKeys.internalToken mounts SELFHOST_INTERNAL_TOKEN_FILE (at least 32
+bytes). It enables /internal/v1: flows reads workspace env vars and
+integration tokens through it, and in-cluster agents file telemetry
+issue reports with it. Unset disables /internal/v1. The agent-relay GKE
+ingress denies /internal on the api host.
+
+- Default: `disabled`
+- Choices: `disabled`; `enabled`
+- Provided by: operator
+- Values: `secretKeys.internalToken`
+- Env: `SELFHOST_INTERNAL_TOKEN_FILE`
+- Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.internalToken` (optional: enables /internal/v1 (flows env delivery, telemetry issue reports))
+- Verify: kubectl exec deploy/<release>-relay-cloud-api (or the fullnameOverride, relay-cloud-api in the agent-relay GCP profiles) -- sh -c 'test "$(tr -d "\r\n" < "$SELFHOST_INTERNAL_TOKEN_FILE" \| wc -c)" -ge 32' (expanded inside the pod; at least 32 bytes); curl https://<api host>/internal/v1/... is refused at the edge
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl), [`charts/agent-relay/templates/gke-ingress.yaml`](../charts/agent-relay/templates/gke-ingress.yaml)
+
+#### opt.relay-cloud-api.dashboard-url
+
+<a id="opt-relay-cloud-api-dashboard-url"></a>
+
+**Dashboard URL for OAuth callbacks and flow run links** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+dashboardUrl (SELFHOST_DASHBOARD_URL) is where OAuth callback pages link
+back and where mirrored flow runs build their runUrl. Unset, the API uses
+publicUrl + "/", which is wrong when the dashboard has its own host (the
+GKE profiles serve it on the root host).
+
+- Default: `publicUrl + "/"`
+- Choices: `publicUrl + "/"`; `dashboard origin`
+- Provided by: operator
+- Values: `dashboardUrl`
+- Env: `SELFHOST_DASHBOARD_URL`
+- Verify: helm template renders SELFHOST_DASHBOARD_URL only when dashboardUrl is set and fails on credentials, query or fragment
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
+
+#### opt.relay-cloud-api.flows
+
+<a id="opt-relay-cloud-api-flows"></a>
+
+**Relayflows control-plane storage and worker queue** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+flows.storage selects where run artifacts live: postgres (inline, the
+default) or gcs (flows.gcsBucket required, flows.gcsPrefix optional;
+Workload Identity on the API service account, and egress to
+storage.googleapis.com when allowAllEgress=false).
+flows.workerRelaycastUrl is the Relaycast origin handed to workers.
+flows.queuePingMs is the worker queue SSE keepalive (1000-120000 ms) and
+must stay below every proxy timeout in front of the API.
+
+- Default: `postgres`
+- Choices: `postgres`; `gcs`
+- Provided by: operator
+- Values: `flows.*`
+- Env: `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX`, `SELFHOST_FLOWS_WORKER_RELAYCAST_URL`, `SELFHOST_FLOWS_QUEUE_PING_MS`
+- Verify: helm template fails for flows.storage=gcs without flows.gcsBucket, or flows.queuePingMs outside 1000-120000
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
+
+#### opt.relay-cloud-api.telemetry
+
+<a id="opt-relay-cloud-api-telemetry"></a>
+
+**Self-host telemetry level and transport** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+telemetry.level (SELFHOST_TELEMETRY_LEVEL) is off, errors or full. The
+chart default is off, the same as the API default; the product default
+is a pending decision. Any level other than off needs telemetry.installId
+and secretKeys.telemetryInstallKey (issued by Agent Relay), and with
+transport https also telemetry.endpoint. transport file never sends
+(air-gapped signed export). telemetry.probes and telemetry.deployment add
+health probes and flat deployment-shape keys (scalar values only; the
+chart-rendered keys cannot be overridden). A TCP 443 egress rule to
+telemetry.egressTo is added only when networkPolicy.enabled=true,
+allowAllEgress=false, the level is not off and the transport is https.
+
+- Default: `off`
+- Choices: `off`; `errors`; `full`
+- Provided by: operator
+- Values: `telemetry.*`, `secretKeys.telemetryInstallKey`
+- Env: `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`
+- Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, no default>` from `secretKeys.telemetryInstallKey` (optional: required unless telemetry.level is off)
+- Verify: helm template fails for a level other than off without installId, install key, or (https) endpoint; ci/agent-relay/render.sh checks the egress rule renders only when telemetry is sent over https
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl), [`charts/relay-cloud-api/templates/networkpolicy.yaml`](../charts/relay-cloud-api/templates/networkpolicy.yaml)
+
 #### opt.relay-dashboard.ingress
 
 <a id="opt-relay-dashboard-ingress"></a>
@@ -1534,13 +1711,21 @@ routes through its single umbrella Ingress.
 
 One GCE Ingress uses the reserved global address, one ManagedCertificate
 for all four hosts and a FrontendConfig HTTPS redirect. Leaf ingresses
-are disabled and all ClusterIP backends use standalone NEGs.
+are disabled and all ClusterIP backends use standalone NEGs. /internal is
+denied at the edge on the cast and api hosts. The api Service is bound
+(cloud.google.com/backend-config) to a BackendConfig whose timeoutSec
+(gkeIngress.backends.api.timeoutSec, at least 60, default 3600) keeps the
+flows worker queue SSE stream open past GCE's 30s default. The
+BackendConfig is named <gkeIngress.name>-api (the name truncated to 59
+characters first); relay-cloud-api renders the annotation from
+relay-cloud-api.service.backendConfig, which must equal that name (the
+render fails with the expected name otherwise).
 
 - Default: `disabled`
 - Choices: `enabled`; `disabled`
 - Provided by: chart
 - Values: `gkeIngress.enabled`, `gkeIngress.staticIpName`, `gkeIngress.managedCertificateName`, `gkeIngress.frontendConfigName`, `gkeIngress.hosts.*`, `gkeIngress.backends.*`, `relayauth.jwksIngress.enabled`
-- Verify: render contains exactly one Ingress, the four expected hosts, ManagedCertificate, FrontendConfig and NEG annotations
+- Verify: render contains exactly one Ingress, the four expected hosts, ManagedCertificate, FrontendConfig, NEG annotations, the api BackendConfig and the /internal edge-deny on the api host
 - Sources: [`charts/agent-relay/templates/gke-ingress.yaml`](../charts/agent-relay/templates/gke-ingress.yaml), [`charts/agent-relay/values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`ci/agent-relay/render.sh`](../ci/agent-relay/render.sh)
 
 #### opt.agent-relay.relayflows

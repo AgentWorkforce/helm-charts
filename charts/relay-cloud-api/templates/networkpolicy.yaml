@@ -26,6 +26,12 @@ spec:
     - ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
+    {{- if include "relay-cloud-api.telemetryEgress" . }}
+    # Telemetry delivery to telemetry.endpoint over HTTPS.
+    - to: {{ toYaml .Values.telemetry.egressTo | nindent 8 }}
+      ports:
+        - { protocol: TCP, port: 443 }
+    {{- end }}
     {{- with .Values.networkPolicy.additionalEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

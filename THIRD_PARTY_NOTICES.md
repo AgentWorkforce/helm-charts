@@ -39,8 +39,8 @@ pins the versions.
 | OpenTelemetry Collector chart 0.178.0 | `charts/96bulls/charts/opentelemetry-collector-0.178.0.tgz` (SHA-256 `9886a0cd6c5894bec18b628540428fda8bd32619715a64383348ebd662496024`) | [`open-telemetry/opentelemetry-helm-charts`, tag `opentelemetry-collector-0.178.0`, commit `7f0a8aa074b841451a32e4127b159685e8905959`](https://github.com/open-telemetry/opentelemetry-helm-charts/tree/opentelemetry-collector-0.178.0/charts/opentelemetry-collector) | [Apache License 2.0 at that tag](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/opentelemetry-collector-0.178.0/LICENSE); local copy: [`docs/licenses/Apache-2.0.txt`](docs/licenses/Apache-2.0.txt) |
 
 `helm dependency build charts/agent-relay` packages the same third-party chart
-contents inside `charts/agent-relay/charts/96bulls-0.5.2.tgz`, whose bytes
-depend on that local build (one such build had SHA-256
+contents inside `charts/agent-relay/charts/96bulls-0.5.4.tgz`, whose bytes
+depend on that local build (one 0.5.2 build had SHA-256
 `289b5aebc3a9c6cf58b62c5c23446f15dc03d5979a5cd9fefb0bb26bf0f4b9bc`); it is not
 committed or shipped in the handoff. That archive also contains no license or
 notice file.

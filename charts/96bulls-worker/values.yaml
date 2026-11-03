@@ -79,6 +79,14 @@ deployment:
   name: selfhost      # DEPLOYMENT
   id: ""              # DEPLOYMENT_ID; defaults to the release namespace/name
 environment: production
+# ALLOW_IN_CLUSTER_HTTP for every component. false (default): the validated
+# destination URLs (RelayAuth, Cloud, ingest, JWKS, model endpoint) must be
+# https (or loopback). true allows plain http only to in-cluster Service FQDNs
+# (<svc>.<ns>.svc[.cluster.local]), never public hosts, IPs or short names.
+# LOCKER_ENDPOINT (the bundled MinIO's http://locker:9000) and the OTLP
+# endpoint are outside this policy (96BullSessions README, runtime
+# destinations), so the bundled Locker works with false.
+allowInClusterHttp: false
 # Extra env for every component: [{ name: X, value: y }].
 extraEnv: []
 
