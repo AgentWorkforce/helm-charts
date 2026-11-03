@@ -70,12 +70,12 @@ flowchart TB
     Worker["96bulls sessions workers<br/>index · summarize · eval · health :8081"]
     Flows["relayflows runner<br/>Job / CronJob · optional"]
 
-    subgraph Planned["planned terse-actors backend — not shipped"]
+    subgraph Planned["opt-in durable-actors backend (runtime.backend=durable-actors)"]
       direction TB
-      GW["relaycast gateway<br/>Bun · :8787"]
-      CP["terse control plane ×2<br/>:7100"]
-      SB["Workspace actor pods<br/>gVisor · terse-sandboxes ns<br/>engine on actor SQLite"]
-      GW -->|"invoke Workspace[wsid]<br/>ar_ credential routes"| CP
+      GW["relaycast / relayfile gateways<br/>stateless · :8787 / :8080"]
+      CP["durable-actors control plane<br/>:7100 · Redis for &gt;1 replica"]
+      SB["Workspace actor pods<br/>gVisor · &lt;ns&gt;-&lt;release&gt; sandbox ns<br/>engine on actor SQLite"]
+      GW -->|"invoke Workspace[wsid]<br/>verified credential routes"| CP
       CP -->|"proxy invocation<br/>:7101/:7102"| SB
     end
   end
@@ -85,7 +85,7 @@ flowchart TB
     SQL[("Cloud SQL PostgreSQL<br/>control-api · relayhistory · hoopdb<br/>runtime role ≠ migration owner<br/>URLs held in Secrets")]
     GCS[("Cloud Storage<br/>sessions Locker bucket + backup bucket<br/>native GCS API")]
     WI["GKE Workload Identity<br/>worker + alleyoop KSAs → GCS IAM<br/>storage only, not Cloud SQL"]
-    TGCS[("future terse GCS — 4 bucket roles<br/>authority · artifact · archive<br/>· 2× zonal Rapid")]
+    TGCS[("durable-actors GCS<br/>one Standard bucket (state + code)<br/>Rapid optional · file-store buckets")]
     PVCs[("Retained RWO PVCs<br/>relaycast.db · relayauth.db · files")]
     Snap[("VolumeSnapshots — operator-run<br/>backup runbook · not rendered by the chart")]
     SM["Secret Manager /<br/>existing Kubernetes Secrets<br/>DB URLs · signing keys"]
@@ -123,7 +123,7 @@ flowchart TB
   SM -.->|"credentials at mount time"| NS
   Flows -->|"ClusterIP calls<br/>creds via env"| Cast
 
-  GW -.->|"replaces engine pod<br/>when runtime.backend=terse-actors"| Cast
+  GW -.->|"replaces engine pod<br/>when runtime.backend=durable-actors"| Cast
   SB -.-> TGCS
 ```
 
@@ -169,17 +169,18 @@ flowchart LR
 | Workload Identity | GKE KSA → GCP service account → bucket IAM | — | grants worker and AlleyOop KSAs GCS object access; databases still use Secret-held URLs |
 | VolumeSnapshots | operator-run, [backup runbook](../selfhost-backup-restore.md) | — | Relaycast and RelayAuth PVC recovery sets; not rendered by any chart |
 | Secrets | existing Secrets or Secret Manager (ESO) | — | DB URLs, signing keys, internal secrets; Relayflows enrollment token unless set inline (then chart-rendered) |
-| terse control plane (planned) | vendored `charts/terse`, `components.terseActors` | 7100 | terse Postgres registry + 4 GCS bucket roles (authority, artifact, archive, 2× zonal Rapid) |
-| Workspace actors (planned) | gVisor sandbox pods, `terse-sandboxes` ns | 7101/7102 | actor SQLite derived per activation from GCS logs/snapshots |
-| relaycast gateway (planned) | `charts/relaycast` `runtime.backend=terse-actors` | 8787 | file blobs on PVC until an object-store backend lands |
+| durable-actors control plane (opt-in) | vendored `charts/durable-actors`, `components.durableActors` | 7100 | PostgreSQL registry + one Standard GCS bucket (Rapid optional); Redis for more than one replica |
+| Workspace actors (opt-in) | gVisor sandbox pods, `<namespace>-<release>` ns | 7101/7102 | actor SQLite derived per activation from GCS |
+| relaycast / relayfile gateways (opt-in) | `charts/relaycast` and `charts/relayfile` `runtime.backend=durable-actors` | 8787 / 8080 | file bytes in GCS or S3 (local PVC for one Relaycast replica) |
 
 ## Key flows
 
 - **Agent messaging:** agent → `cast` host → relaycast :8787 (WSS + REST) →
-  SQLite/files on its RWO PVC. With the planned `terse-actors` backend, the
-  pod becomes a stateless gateway: the `ar_` credential names the workspace,
-  the terse control plane proxies the invocation to a `Workspace` actor pod,
-  and the actor's SQLite is derived from GCS logs/snapshots.
+  SQLite/files on its RWO PVC. With the opt-in `durable-actors` backend
+  ([docs](../self-hosted-durable-actors.md)), the pod becomes a stateless
+  gateway: the `ar_` credential names the workspace, the durable-actors control
+  plane proxies the invocation to a `Workspace` actor pod, and the actor's
+  SQLite is derived from GCS.
 - **Sessions:** session chunks from in-cluster callers → alleyoop :8080
   (courier JWT verified against RelayAuth JWKS; `ClusterIP` only, with no
   ingress route, so external agents cannot reach it today) → objects in the

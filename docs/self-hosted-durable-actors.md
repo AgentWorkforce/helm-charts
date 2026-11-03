@@ -1,410 +1,240 @@
-# Self-hosted Relaycast on TerseAI/durable-actors
+# Self-hosted Relaycast and Relayfile on TerseAI durable-actors
 
-Status: design. Replaces the single-node SQLite Relaycast backend with the
-open-source, self-hostable Terse durable-actors runtime running in-cluster.
+Status: implemented in the charts (render-tested), behind opt-in values.
+Relaycast and Relayfile can each run their stateful core as one TerseAI
+durable-actors `Workspace` actor per workspace, behind a stateless gateway,
+instead of the single-node SQLite (Relaycast) or Go-server (Relayfile)
+deployments. The umbrella can run the durable-actors control plane itself.
 
-## Goal
+| Piece | Where |
+| --- | --- |
+| Control plane | `charts/durable-actors`, the upstream release chart vendored verbatim at v0.14.6 (`charts/durable-actors/UPSTREAM.md`), umbrella `components.durableActors`, values key `durable-actors` |
+| Relaycast actor mode | `charts/relaycast` `runtime.backend: durable-actors` (env contract v1, below) |
+| Relayfile actor mode | `charts/relayfile` `runtime.backend: durable-actors`, umbrella `components.relayfile` |
+| Requirements and options | `self-hosted/requirements.yaml` profiles `durable-actors`, `relaycast-durable-actors`, `relayfile-durable-actors`, `agent-relay-durable-actors` |
+| Render contract | `ci/agent-relay/render.sh`, `scripts/ci/charts.sh static` |
 
-Run the relaycast engine on [TerseAI/durable-actors](https://github.com/TerseAI/durable-actors)
-(MIT) instead of the single-process Node + SQLite deployment. One `Workspace`
-actor per relaycast workspace, each with its own SQLite state inside the
-actor — the open-source, self-hostable replacement for the Cloudflare Durable
-Objects shape used by the hosted "armadillo" proof.
-
-The actor adapter already exists and is merged upstream:
-
-- `@relaycast/engine/adapters/actor` (`packages/engine/src/adapters/actor/`,
-  relaycast PR #599, requires durable-actors >= 0.14.5). `createActorRuntime`
-  runs the full engine on the actor's SQLite: one actor call = one
-  transaction; engine write groups nest inside it; maintenance (webhooks,
-  deliveries, A2A egress, sweeps, retention) runs on the actor alarm, never
-  inside a request.
-- `@relaycast/engine/gateway` exports the gateway helpers
-  (`createCredentialTagSigner`, `parseArCredential`, `verifyFileToken`,
-  `generateWorkspaceId`, `ACTOR_FILE_ROUTE`, ...).
-- `examples/terse/` in the relaycast repo is the working proof:
-  `actor/src/workspace.ts` (the `Workspace` actor) and `gateway/server.ts`
-  (Bun gateway routing by `ar_` credential).
+One backend name is used everywhere: `durable-actors` (upstream renamed the
+project and chart from Terse to durable-actors; `TERSE_*` env names are gone).
 
 ## Architecture
 
 ```
-client ──HTTPS──▶ cast.<domain> (existing gke-ingress / leaf ingress)
-                    │  /internal, /v1/workspaces exact → edge-deny (unchanged)
+client ──HTTPS──▶ cast.<domain> / files.<domain> (umbrella GKE Ingress)
+                    │  cast: /internal and /v1/workspaces exact → edge-deny (unchanged)
                     ▼
-            relaycast gateway (new Deployment, Bun, replaces engine pod)
-                    │  Bearer ar_<kind>_<wsid>_<tag>_<secret><crc>
-                    │  ├─ POST /v1/workspaces → sign tag for new snowflake
-                    │  └─ keyring verifies tag; forged/typo creds never create actors
+        relaycast gateway / relayfile gateway   (stateless Deployments, N replicas)
+                    │  route by verified credential → Workspace[<workspace id>]
+                    │  file bytes → GCS or S3 (never inside actors)
                     ▼
-            terse-sdk createActorStub("Workspace", wsid)
-                    │  POST {cp}/v1/projects/{p}/actors/Workspace/{id}/invoke
+        durable-actors control plane  <release>-durable-actors:7100
+                    │  placement, host start, invocation proxy, socket grants
+                    │  publicUrl https://actors.<domain> (SDK follow-up calls, actor WebSockets)
                     ▼
-            terse control plane (Deployment x2, in release namespace)
-                    │  resolves placement, starts host if cold,
-                    │  proxies the invocation to the actor host
-                    ▼
-            Workspace actor pod (gVisor sandbox in terse-sandboxes ns,
-            runtime image = durable-actors image, code from artifact bucket)
-                    │  engine on actor SQLite; state in GCS (2x Rapid + Standard)
-                    └─ alarm: maintenance, outbound HTTP, blob cleanup
+        Workspace actor pods (gVisor, sandbox namespace <ns>-<release>)
+                    engine on actor SQLite; state in the Standard GCS bucket
+                    alarm: maintenance, outbound delivery
 ```
 
-Request flow details:
+- Actor hosts are created by the control plane with `runtimeClassName: gvisor`,
+  `nodeSelector: sandbox.gke.io/runtime=gvisor` and a zone affinity from
+  `placement.zone`. GKE's `gvisor` RuntimeClass adds the sandbox node taint
+  toleration. Nothing in this repo patches that.
+- The sandbox NetworkPolicy (upstream) admits only control-plane pods on
+  7101/7102 and allows egress to the control plane, DNS and **public** addresses
+  only (RFC1918, link-local and CGNAT are denied). Anything an actor fetches,
+  such as Relaycast's own `RELAYCAST_PUBLIC_URL`, must be a public HTTPS origin.
+- The umbrella adds a NetworkPolicy for the control plane (port 7100): pods in
+  the release namespace, the sandbox namespace and, with
+  `gkeIngress.hosts.actors`, the GKE load balancer ranges.
+- `publicUrl` is required and HTTPS. With `gkeIngress.hosts.actors` the
+  umbrella routes it on the suite load balancer (same static IP and managed
+  certificate) through an umbrella-owned edge Service that selects the control
+  plane pods, carries the NEG annotation and a BackendConfig with a long
+  timeout (`gkeIngress.actorsBackendTimeoutSec`, default 3600 s) for actor
+  WebSockets. Set `durable-actors.ingress.enabled=false` then (one edge only).
 
-- The relaycast gateway is stateless for routing: an `ar_` credential names
-  its workspace (64-bit snowflake), the gateway's
-  `RELAYCAST_CREDENTIAL_KEYRING` (`{"current":"a","keys":{"a":"<secret>"}}`)
-  verifies the embedded tag, then the call goes to `Workspace[wsid].handle`.
-  Rotation adds a key version and makes it current; removing a version locks
-  out every credential tagged under it.
-- `terse-sdk` first calls the control plane `/invoke`, which performs the
-  invocation itself and returns `{route, token}`. `route` is
-  `DURABLE_ACTORS_PUBLIC_URL` whenever the gateway origin is configured (it
-  always is in the upstream chart — `publicUrl` is required and must be
-  `https://`; `src/control_plane/process.rs` requires HTTPS). Follow-up calls
-  go to `publicUrl`, which routes through the L7 LB back to the same
-  control-plane service, which proxies to the host. So **every actor call is
-  proxied by the control plane**; the public URL hop costs one extra LB
-  traversal for in-cluster callers. Options, in order of preference for the
-  GCP proof:
-  1. `publicUrl` = a real DNS host on the cluster's external LB
-     (e.g. `actors.<domain>`). In-cluster calls hairpin through the LB — fine,
-     and it also makes future external actor WebSocket URLs work.
-  2. `publicUrl` = an internal HTTPS name (schema only requires `https://`).
-     Needs TLS for that name (cert-manager private issuer + pod trust) — more
-     PKI work for no functional gain. Only if public ingress is impossible.
-- Clients (and the relaycast gateway) never talk to actor pods directly. The
-  vendored sandbox NetworkPolicy already enforces this: only control-plane
-  pods reach sandbox 7101/7102.
-- File blobs never enter actors. `SignedUrlFileStorage` in the actor mints
-  signed URLs at `{RELAYCAST_PUBLIC_URL}/_relayfiles?token=…`; the gateway's
-  `serveFile` does PUT/GET/HEAD/DELETE against its file store. Actor pods do
-  HEAD (upload completion) and DELETE (cleanup) against that public URL, so
-  **`baseUrl`/`RELAYCAST_PUBLIC_URL` must be reachable from sandbox egress** —
-  the vendored sandbox NetworkPolicy allows public egress but *blocks*
-  RFC1918/private ranges. The `allowInsecureBaseUrl` cluster-internal path
-  therefore cannot work for this backend without loosening the sandbox egress
-  policy (a candidate vendored patch). For the GCP proof, `cast.<domain>` is
-  public and works as shipped.
-- Outbound webhooks/http_push/A2A egress run from the actor alarm only,
-  HTTPS-only with SSRF checks (same as hosted).
-- Known functional gap vs the sqlite backend: the example gateway serves no
-  `/v1/ws` or `/v1/node/ws`, and `wait` returns immediately inside an actor
-  (no deliveryWaiters — a parked wait would deadlock the mailbox). Realtime
-  node transport over actor WebSockets is relaycast-repo work (below).
+## Upstream durable-actors (0.14.6) facts the charts rely on
 
-### What runs where
+- Chart `charts/durable-actors` (also `oci://ghcr.io/terseai/charts/durable-actors`).
+  Required values: `publicUrl` (https), `placement.zone`, `storage.bucket`,
+  `serviceAccount.googleServiceAccount`. Image digests are pinned by the release.
+- Storage: **one Standard GCS bucket** (ownership, compiled code under
+  `durable-actors/v3/artifacts/<uuid>/`, state snapshots). Rapid
+  (`storage.mode: rapid`, one or two RAPID buckets in distinct zones) is optional.
+  No lifecycle deletion on any of them. No S3, MinIO or PVC provider exists.
+- `credentialsSecret` keys: `postgres-url`, `jwt-signing-key` (base64 Ed25519
+  PKCS#8 DER, stable), `api-key`, plus `redis-url` (and `redis-ca`) when
+  `replicaCount > 1`; more than one controller requires Redis.
+- Providers: GKE Sandbox or Modal only. `durable-actors dev` (single process,
+  local storage, binds 127.0.0.1, actors inherit its process env, secretRefs
+  rejected) is the only way to run actors without GKE + GCS.
+- Auth: a single administrative `api-key` (`DURABLE_ACTORS_SECRET`). Auth is
+  disabled when it is unset, so every chart here fails closed without one.
+  `POST /v1/projects/{project}/sessions` (admin key) issues sessions of at most
+  60 s that can invoke actors of one project but cannot register deployments or
+  get socket grants. A scoped invoke-only key is proposed upstream, not shipped.
+- Deployments are registered with `PUT /v1/projects/{project}/deployment` (admin
+  key): a compiled bundle in the artifact bucket, its contract and optional
+  `secretRefs` (Secrets in the sandbox namespace labelled
+  `terse.ai/customer-secret=true` whose keys become actor env).
 
-| Component | Runs as | State |
-| --- | --- | --- |
-| terse control plane | Deployment x2 (upstream chart enforces >= 2) in release ns | Postgres (registry, traces, spare pool); state in GCS buckets |
-| actor host pods | 1 gVisor pod per active actor, `sandboxNamespace` (default `terse-sandboxes`), runtime image = `image.repository@digest` from the terse chart | actor SQLite is *derived* per activation from GCS logs/snapshots; nothing durable on the pod |
-| spare pool | `pool.idle` (default 64) prewarmed sandboxes per region; `capacityBuffer` GKE CapacityBuffer optional | none |
-| relaycast gateway | Deployment (new backend mode in `charts/relaycast`), ClusterIP `relaycast:8787` | file blobs on `RELAYCAST_FILE_DIR` (PVC) until an object-store backend lands upstream |
-| terse Postgres | Cloud SQL proxy sidecar or direct `postgres-url` | can share the 96bulls Cloud SQL instance with its own database |
+Vendored-chart patch: the upstream schema forbids the `global` key Helm
+injects into every subchart, so the vendored schema allows a root `global`
+object (recorded in `UPSTREAM.md`; report upstream).
 
-### Storage choices
+## Relaycast env contract v1 (`runtime.backend: durable-actors`)
 
-Actor state storage is **GCS-only** in the upstream Kubernetes provider
-(`src/sandbox/gke.rs` + `charts/terse`):
+Frozen by the relaycast branch `selfhost/terse-actors-relaycast`. All wiring is
+in `charts/relaycast/templates/_actors.tpl`.
 
-- `storage.authorityBucket` — Standard GCS, CAS ownership/leases.
-- `storage.artifactBucket` — Standard GCS, immutable compiled actor code.
-- `storage.archiveBucket` — Standard GCS, permanent manifests/checkpoints/
-  archived log segments.
-- `storage.rapid.buckets` — **exactly two** GCS Rapid (hierarchical namespace)
-  buckets in distinct zones; every acknowledged write flushes to both.
-- Postgres — control-plane registry/trace/spare bookkeeping; chart supports
-  Cloud SQL (`cloudSql.instanceConnectionName`, proxy sidecar) or a direct
-  `postgres-url` in `credentialsSecret` (e.g. an in-cluster CNPG instance or a
-  second database on the 96bulls Cloud SQL instance).
+| Process | Variables (chart source) |
+| --- | --- |
+| gateway (`relaycast-actors-gateway`, PORT 8787, `/healthz` liveness, `/readyz` readiness) | `DURABLE_ACTORS_CONTROL_PLANE_URL` (default `http://<release>-durable-actors.<ns>.svc.cluster.local:7100`), `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_SECRET` (from `runtime.durableActors.invocationSecret`, its own Secret), `DURABLE_ACTORS_HOME_REGION` (optional), `RELAYCAST_FILE_SIGNING_SECRET` (existingSecret key `fileSigningSecretKey`), `RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_PUBLIC_WORKSPACE_CREATE` (`publicWorkspaceCreate`, default false), `RELAYCAST_FILE_STORE` local\|gcs\|s3 with `RELAYCAST_FILE_DIR` / `RELAYCAST_GCS_BUCKET`,`_PREFIX` / `RELAYCAST_S3_BUCKET`,`_REGION`,`_ENDPOINT`,`_PREFIX`,`_FORCE_PATH_STYLE` (+ `AWS_*` from `fileStore.s3.existingSecret`), `RELAYCAST_MAX_UPLOAD_BYTES`, `RELAYCAST_SHUTDOWN_GRACE_MS`, `RELAYCAST_LOG_FORMAT`, `RELAYCAST_ENV` |
+| Workspace actor (customer Secret in the sandbox namespace, `runtime.durableActors.actorEnvSecrets`) | `RELAYCAST_PUBLIC_URL` (= `baseUrl`, public HTTPS), `RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_INTERNAL_SECRET`, optional `RELAYCAST_MAX_UPLOAD_BYTES`, `RELAYCAST_MESSAGE_TTL_DAYS`, `RELAYCAST_MAILBOX_TTL_MS`, `RELAYCAST_MAILBOX_DEPTH_CAP`, `RELAYCAST_RATE_LIMIT_PER_MINUTE`, `RELAYCAST_ENV` |
+| deployer Job (`relaycast-actors-deployer`) | `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_ORGANIZATION_ID`, `DURABLE_ACTORS_SECRET` (admin, `adminKeySecret`), `DURABLE_ACTORS_ARTIFACT_BUCKET`, `DURABLE_ACTORS_SECRET_REFS` |
 
-There is **no S3/MinIO/PVC actor-storage backend upstream** for the k8s path.
-`DURABLE_ACTORS_STORAGE=local` exists only for the single-process
-`durable-actors dev` mode. Non-GKE self-host (generic PVC/MinIO, non-gVisor
-sandboxes) is an upstream gap — out of scope for the GCP proof; if needed we
-would have to contribute a provider upstream.
+Chart behaviour and validation:
 
-Relaycast file blobs are separate: today the example gateway writes them to
-its own disk (`RELAYCAST_FILE_DIR`). Options: (a) RWO PVC + gateway
-`replicaCount: 1` — same single-writer constraint as today's sqlite chart,
-fine for the proof; (b) shared object store (GCS/MinIO) behind `serveFile` —
-relaycast-repo change, required before running >1 gateway replica or losing
-the file store on node failure.
+- The gateway Deployment keeps the SQLite Deployment's name and selector, so the
+  Service, edge-deny Service, Ingress, umbrella `gkeIngress` and NetworkPolicy are
+  unchanged. The SQLite render is byte-identical apart from the chart label.
+- The gateway never mounts the admin key: `invocationSecret` must differ from
+  `adminKeySecret` and from `existingSecret`. `invocationSecret.scope: admin`
+  records that it is still a copy of the admin key (NOT release-grade); when
+  upstream ships the invoke-only key, change the Secret's value and set
+  `scope: invoke-only`.
+- Requires `credentials.format=ar` and a keyring, an HTTPS public `baseUrl` (no
+  `allowInsecureBaseUrl`), and no SQLite-only settings (`backup`, `retention`,
+  `mailbox`, `bootstrapProofRequired`; set those as actor env instead).
+- `gateway.replicaCount > 1` requires `fileStore` gcs or s3. `local` renders the
+  data PVC and one replica.
+- The deployer is a plain Job whose name carries a hash of its pod template:
+  installs run `helm template --no-hooks`, so Helm hooks never run. New inputs
+  give a new Job; an unchanged re-apply is a no-op.
+- `devRuntime` (kind/CI only, `acknowledgeNonProduction: true`): a
+  `durable-actors dev` sidecar in the gateway pod (image
+  `relaycast-actors-dev`, the durable-actors TypeScript runtime plus the
+  relaycast actor project and the full `durable-actors` npm package). The actor
+  env is set on the sidecar.
 
-## Chart strategy — vendor `charts/terse`
+Fresh-install backend: SQLite workspaces are not migrated and legacy
+credentials are refused; keep the SQLite release for existing workspaces.
 
-Decision: **vendor the upstream `charts/terse` chart, unpacked, at
-`charts/terse/` in this repo**, pinned to an upstream release tag (currently
-`v0.7.9`, chart `0.7.9`), and add it to the umbrella as a `file://../terse`
-dependency conditioned on `components.terseActors`.
+## Relayfile env contract v1 (`runtime.backend: durable-actors`)
 
-Why not the alternatives:
+All wiring is in `charts/relayfile/templates/actors/_helpers.tpl`. One image
+`relayfile-actors` with three commands.
 
-- **Helm dependency on a published repo/OCI:** not possible. Upstream's
-  release workflow (`.github/workflows/release.yml`) only runs
-  `helm package charts/terse` and `gh release upload` — the chart ships as a
-  release asset `terse-0.7.9.tgz` on the git tag. There is no Helm repo
-  `index.yaml` and no `oci://` push, and a Chart.yaml `repository:` cannot
-  point at a bare release-asset URL.
-- **Thin wrapper chart (`charts/terse-actors`):** rejected. It would add no
-  capability the upstream values schema lacks (the chart is already fully
-  values-driven), would still need to vendor or duplicate the upstream
-  templates, and would obscure provenance. Prefer carrying zero or minimal
-  patches on the vendored copy and pushing fixes upstream.
-- **Download the tgz at build time:** makes renders network-dependent and
-  harder to review than a committed, reviewed copy; the umbrella already
-  vendors all leaf charts by `file://` sibling reference with committed tgzs
-  in `charts/agent-relay/charts/`.
+| Process | Variables |
+| --- | --- |
+| `gateway` (Deployment `<fullname>-server`, port `server.port`) | `PORT`, `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `RELAYFILE_ACTORS_BROKER_URL`, `RELAYFILE_ACTORS_BROKER_TOKEN`, `RELAYFILE_JWT_SECRET` and/or `RELAYAUTH_JWKS_URL`, optional `RELAYFILE_INTERNAL_HMAC_SECRET`, `RELAYFILE_BLOB_STORE` gcs\|s3\|inline, `RELAYFILE_BLOB_BUCKET`, `RELAYFILE_BLOB_PREFIX`, `RELAYFILE_BLOB_INLINE_MAX_BYTES`, `RELAYFILE_S3_ENDPOINT`,`_REGION`,`_FORCE_PATH_STYLE` + `AWS_*`; devRuntime only: `DURABLE_ACTORS_SECRET`, `RELAYFILE_ACTORS_ALLOW_ADMIN_KEY=true` |
+| `session-broker` (internal Deployment + Service, port 8090) | `PORT`, `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_SECRET` (admin), `RELAYFILE_ACTORS_BROKER_TOKEN` |
+| `deploy` (Job) | `DURABLE_ACTORS_CONTROL_PLANE_URL`, `DURABLE_ACTORS_PROJECT_ID`, `DURABLE_ACTORS_SECRET` (admin), `DURABLE_ACTORS_ORGANIZATION_ID`, `DURABLE_ACTORS_ARTIFACT_BUCKET` |
+| Workspace actor | none (no secrets in actors; bytes stay in the gateway's object store) |
 
-Vendoring procedure (when implemented): copy `charts/terse/` from the
-upstream tag verbatim, record tag + sha256 of the upstream tgz in
-`docs/` or a `charts/terse/UPSTREAM` note, and update deliberately. Known
-upstream quirks to note (report upstream rather than patch, unless blocking):
+- Least privilege without an upstream scoped key: the session broker is the only
+  long-running workload that reads the admin key. It issues 60 s sessions
+  (invoke only) and Workspace socket grants to the gateway, authenticated by the
+  broker token, and its NetworkPolicy admits only gateway pods.
+- The gateway Deployment keeps the Go server's name and selector (Service,
+  Ingress, HPA, PDB, NetworkPolicy shared). The default `go` render is unchanged.
+- `adminKeySecret` must differ from `runtime.durableActors.existingSecret`;
+  `blobStore.driver: inline` is refused unless `devRuntime`; images by digest
+  (a tag is accepted for local proofs only).
 
-- `templates/control-plane.yaml` reads `.Values.storage.durability` but
-  `values.schema.json` declares `storage` with `additionalProperties: false`
-  and no `durability` key, so it can never be set (evaluates nil, i.e. not
-  `"zonal"` → `minDomains: 2` always applies).
-- `networkPolicy.enabled` is `const: true` in the schema and
-  `replicaCount >= 2` plus `>= 2` zones per region are enforced by
-  `terse.validate` — single-zone/single-replica dev installs are refused by
-  design.
-- Sandbox egress policy denies RFC1918 — matters only if we ever point
-  `RELAYCAST_PUBLIC_URL` at a private address (see above).
+## Umbrella wiring (`charts/agent-relay`)
 
-## Values schema sketch
+- `components.durableActors` needs an actor-mode consumer; an actor-mode
+  consumer needs `components.durableActors` (or its own `controlPlaneUrl`).
+- Consumers' `adminKeySecret.name` must equal `durable-actors.credentialsSecret`
+  and `deployer.artifactBucket` must equal `durable-actors.storage.bucket`.
+- `gkeIngress.hosts.actors` requires `durable-actors.publicUrl` =
+  `https://<hosts.actors>`; `gkeIngress.hosts.files` routes Relayfile and requires
+  `relayfile.service.annotations["cloud.google.com/neg"]`.
+- GKE overlay: `charts/agent-relay/values-gcp-proof-durable-actors.yaml`
+  (apply after the proof profile; supply the three actor image digests).
+- kind shape: `ci/agent-relay/kind-durable-actors-values.yaml` (devRuntime
+  sidecars and MinIO; no control plane).
 
-### Umbrella (`charts/agent-relay`)
+## GCP provisioning (per installation)
 
-```yaml
-components:
-  terseActors: false          # new; requires components.relaycast
-  # ...existing keys
+Placeholders: `PROJECT`, `REGION`, `ZONE` (a zone of the GKE Sandbox node
+pool), release `REL` in namespace `NS` (sandbox namespace `NS-REL`).
 
-terse:                        # passed through to the vendored chart
-  image:
-    repository: us-central1-docker.pkg.dev/fluid-analogy-473415-c2/public/durable-actors
-    digest: ""                # REQUIRED, sha256 (chart requires it)
-  replicaCount: 2
-  publicUrl: https://actors.<domain>   # REQUIRED, https origin
-  region: north-america-west           # a supported canonical region
-  zones:
-    north-america-west: [us-west4-a, us-west4-b, us-west4-c]
-  storage:
-    authorityBucket: <name>
-    artifactBucket: <name>
-    archiveBucket: <name>
-    rapid:
-      buckets:
-        - { bucket: <name>, zone: us-west4-a }
-        - { bucket: <name>, zone: us-west4-b }
-  cloudSql:
-    instanceConnectionName: ""  # or direct postgres-url in credentialsSecret
-  credentialsSecret: terse-credentials   # keys: postgres-url, jwt-signing-key, api-key
-  serviceAccount:
-    googleServiceAccount: terse@<project>.iam.gserviceaccount.com
-  pool: { idle: 8, fleetMaximum: 64, maxStarting: 8, idleTtlSeconds: 600,
-          cpuMillis: 1000, memoryMiB: 256 }   # sized down from upstream defaults for proof
-  capacityBuffer: { enabled: false, replicas: 32 }  # needs GKE preview API; off by default
-  gateway:
-    enabled: true               # front the control plane on publicUrl
-    className: gke-l7-global-external-managed
-    tlsSecret: ""               # or preSharedCert; exactly one required when enabled
-  networkPolicy: { enabled: true, dnsCidrs: [] }
+1. Cluster: GKE Standard, Workload Identity, NetworkPolicy enforcement, a GKE
+   Sandbox (gVisor) node pool with nodes in `ZONE`.
+2. Buckets (uniform access, public access prevention, no lifecycle deletion):
+   - `PROJECT-actors`: STANDARD, `REGION` (durable-actors state and code).
+   - `PROJECT-relaycast-files`: STANDARD, `REGION` (Relaycast `/_relayfiles`).
+   - `PROJECT-relayfile`: STANDARD, `REGION` (Relayfile blobs).
+   - Optional Rapid: two RAPID buckets with hierarchical namespace in two zones.
+3. Google service accounts and Workload Identity bindings
+   (`roles/iam.workloadIdentityUser` on member
+   `serviceAccount:PROJECT.svc.id.goog[NS/<ksa>]`):
+   - `durable-actors@` → KSA `REL-durable-actors`; `roles/storage.objectUser`
+     on `PROJECT-actors` (and `roles/storage.legacyBucketReader` for Rapid).
+   - `actors-deployer@` → KSAs `<relaycast fullname>-actors-deploy` and
+     `<relayfile fullname>-actors-deploy`; `roles/storage.objectUser` on
+     `PROJECT-actors`.
+   - `relaycast-files@` → KSA of the relaycast chart; `roles/storage.objectUser`
+     on `PROJECT-relaycast-files`.
+   - `relayfile@` → KSA of the relayfile chart; `roles/storage.objectUser` on
+     `PROJECT-relayfile`.
+4. PostgreSQL: a database and a role allowed to run migrations (for example a
+   `durable_actors` database on an existing Cloud SQL instance, reached through
+   a Cloud SQL proxy or private IP, TLS for remote connections).
+5. Redis (Memorystore, TLS) only for `durable-actors.replicaCount > 1`.
+6. Secrets (namespace `NS` unless noted; generate with `openssl`, never commit):
+   - `actors-credentials`: `postgres-url`, `jwt-signing-key`
+     (`openssl genpkey -algorithm ED25519 -outform DER | openssl base64 -A`),
+     `api-key` (`openssl rand -hex 32`), optional `redis-url`/`redis-ca`.
+   - Relaycast `existingSecret`: `internal-secret`, `workspace-bootstrap-secret`,
+     the credential keyring (`{"current":"a","keys":{"a":"<random>"}}`), the file
+     signing secret.
+   - Relaycast invocation Secret (for example `relaycast-durable-actors-invoke`):
+     `durable-actors-invoke-key` = the `api-key` value until an invoke-only key exists.
+   - Sandbox namespace `NS-REL`: `relaycast-actor-env`, labelled
+     `terse.ai/customer-secret=true`, with `RELAYCAST_PUBLIC_URL`,
+     `RELAYCAST_FILE_SIGNING_SECRET` (same value), `RELAYCAST_INTERNAL_SECRET`
+     (same value). The chart renders the sandbox Namespace, so create this Secret
+     after the first install, or pre-create the Namespace with Helm ownership
+     metadata (`app.kubernetes.io/managed-by: Helm`, annotations
+     `meta.helm.sh/release-name: REL`, `meta.helm.sh/release-namespace: NS`) so
+     the release adopts it. A deployer Job that ran before the Secret existed
+     must be deleted to run again.
+   - `relayfile-actors`: `RELAYFILE_JWT_SECRET` (unless `auth.jwksUrl`),
+     `RELAYFILE_ACTORS_BROKER_TOKEN`, optional `RELAYFILE_INTERNAL_HMAC_SECRET`.
+7. DNS: `actors.<domain>` and `files.<domain>` A records on the suite static IP
+   (the managed certificate gains both domains).
+8. Images (by digest): `relaycast-actors-gateway`, `relaycast-actors-deployer`
+   (relaycast repo `docker/actors-gateway.Dockerfile`,
+   `docker/actors-deployer.Dockerfile`), `relayfile-actors` (relayfile repo).
+   The durable-actors images are pinned by the vendored chart.
+
+## kind / local proof
+
+kind cannot run the upstream control plane (no GKE Sandbox, no GCS). The kind
+shape runs each gateway with a `durable-actors dev` sidecar (`devRuntime`),
+MinIO for file bytes, and locally built images loaded with `kind load
+docker-image` (tag `kind`, `pullPolicy: Never`):
+
+```sh
+helm install agent-relay charts/agent-relay -n agent-relay \
+  -f ci/agent-relay/kind-durable-actors-values.yaml
 ```
 
-Plus a new `gkeIngress.hosts.actors` (or reuse of the terse chart's own
-Gateway) so `publicUrl` terminates TLS. The vendored chart renders its own
-`Gateway`/`HTTPRoute`/`HealthCheckPolicy`/`GCPBackendPolicy` when
-`gateway.enabled`; using it avoids touching `gke-ingress.yaml`, at the cost
-of a second LB. Folding the actors host into the umbrella's existing GCE
-Ingress is also possible (neg annotation on `<release>-terse:7100`) —
-choose one; don't render both.
+The dev runtime needs the full `durable-actors` npm package (the published
+runtime image ships only the actor host, not the compiler) and
+`--sdk-host <project>/node_modules/durable-actors/dist/host.js`.
 
-### Leaf (`charts/relaycast`), `runtime.backend: terse-actors`
+## Known gaps
 
-`runtime.backend` gains a second allowed value. In this mode the Deployment
-runs the **gateway image**, not the engine; the Service stays
-`<fullname>:8787` so the umbrella, ingress, edge-deny rules and
-`relay-cloud-api` (`services.relaycastUrl`) are unchanged. Engine-only values
-(`persistence`, `backup`, `secretKeys.internalSecret`,
-`publicWorkspaceCreate`, `retention`, `mailbox`) are refused or ignored —
-retention/mailbox are engine config compiled into the actor bundle, not
-gateway env (see relaycast-repo changes).
-
-```yaml
-runtime:
-  backend: terse-actors
-  terseActors:
-    gatewayImage:
-      repository: ghcr.io/agentworkforce/relaycast-actors-gateway
-      digest: ""                # REQUIRED sha256
-    replicaCount: 1             # 1 until file blobs move to object storage
-    controlPlaneUrl: ""         # default http://<release>-terse.<ns>.svc:7100
-    existingSecret: ""          # REQUIRED; keys below
-    secretKeys:
-      invokeKey: terse-gateway-invoke-key    # least-privilege; NOT the terse admin api-key
-      fileSigningSecret: relaycast-file-signing-secret
-      credentialKeyring: relaycast-credential-keyring   # JSON keyring
-    files:
-      persistence: { existingClaim: "", storageClass: "", size: 10Gi }
-      # future: files.objectStore: { bucket: "", prefix: "" }
-```
-
-The gateway is internet-facing, so it must not hold the terse control-plane
-admin `api-key` (which can register deployments, `PUT
-/v1/projects/{project}/deployment`). `secretKeys.invokeKey` names a separate
-credential scoped to invoking `Workspace` actors in this project only, and
-validation should refuse a value equal to the terse `credentialsSecret`
-`api-key`. If the terse control plane cannot issue an invocation-only
-credential, that is a release blocker for `runtime.backend: terse-actors` (see
-"Implementable now vs blocked").
-
-Validation additions: `runtime.backend ∈ {sqlite, terse-actors}`;
-`terse-actors` requires HTTPS `baseUrl` reachable from sandbox egress (forbid
-`allowInsecureBaseUrl`), refuses sqlite-only blocks (`backup.enabled`,
-non-null `retention`/`mailbox`, `publicWorkspaceCreate`, `internalSecret`
-key requirement), keeps `networkPolicy` mandatory, and keeps ingress/gke
-edge-deny semantics identical. `TERSE_ACTOR_URL` is set from
-`controlPlaneUrl` (default derived); `TERSE_API_KEY`,
-`RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_CREDENTIAL_KEYRING` come from the
-mounted secret; `RELAYCAST_PUBLIC_URL = baseUrl`.
-
-## Secrets
-
-| Secret | Namespace | Keys | Used by |
-| --- | --- | --- | --- |
-| `credentialsSecret` (e.g. `terse-credentials`) | release ns | `postgres-url`, `jwt-signing-key` (base64 Ed25519 PKCS#8, stable), `api-key` | control-plane env |
-| customer env secret (e.g. `relaycast-actor-env`) | `sandboxNamespace` | `RELAYCAST_PUBLIC_URL`, `RELAYCAST_FILE_SIGNING_SECRET` | injected into actor pods as `DURABLE_ACTORS_CUSTOMER_ENV`; **must carry label `terse.ai/customer-secret: "true"`** and be listed in the deployment's `secretRefs` |
-| relaycast gateway `existingSecret` | release ns | `terse-gateway-invoke-key` (invocation-only; never the admin `api-key`), `relaycast-file-signing-secret`, `relaycast-credential-keyring` | gateway env |
-
-Notes: the actor env secret lives in the *sandbox* namespace (control plane
-reads it via its Role) while the file-signing value must equal the gateway's
-— two copies by design; keep them in one ExternalSecret source. `api-key` is
-the terse admin secret and stays with the control plane and the deployer; it
-must not be copied into the gateway Secret. The gateway authenticates with the
-separate invocation-only credential, and egress to the control plane should
-still stay inside the cluster.
-
-## NetworkPolicy
-
-- Vendored chart already renders: sandbox-ns deny-by-default with ingress
-  only from control-plane pods on 7101/7102, egress to control plane 7100,
-  DNS, and public internet (needed for `storage.googleapis.com` and for actor
-  calls to `baseUrl`). Control plane↔GCS and control plane↔Cloud SQL egress
-  is unrestricted by that policy (it covers the sandbox ns only); rely on the
-  cluster default or add a control-plane policy as a vendored patch.
-- `charts/relaycast` netpol in terse-actors mode: ingress from release-ns
-  pods + GFE ranges (unchanged); egress must allow the terse control-plane
-  service and `publicUrl` (public LB egress — same shape the sandbox policy
-  uses), plus DNS.
-
-## Migration story (sqlite → terse-actors)
-
-No upstream import tooling exists; treat `terse-actors` as a **fresh-install
-backend** initially:
-
-- Workspace data model differs fundamentally: sqlite = one DB holding many
-  workspaces; actors = one SQLite per workspace actor. Migration means
-  exporting each workspace's rows and replaying them into a new
-  `Workspace` actor (via its engine API or a bespoke importer) and re-minting
-  every credential as `ar_` — legacy `rk_`/`at_`/`nt_` credentials are
-  refused by design on this backend (`restrictToArCredentials`; no
-  `/v1/credentials/upgrade` endpoint).
-- Practical path for existing installs: keep the sqlite release serving old
-  workspaces read/write, stand up terse-actors alongside, migrate workspace
-  by workspace behind the same `cast` host (cut over at the LB or in
-  cloud-api routing), then retire the PVC. This is relaycast-repo migration
-  tooling we do not have yet — **blocked**.
-- Until then the chart should keep `sqlite` as the only permitted backend by
-  default and gate `terse-actors` behind the new value plus the umbrella's
-  `components.terseActors`, matching the existing "HA adapters must be
-  proven in the engine first" stance — the engine side is now proven by the
-  `examples/terse` proof; the chart side is what this doc defines.
-
-## Required relaycast-repo changes (upstream, blocking)
-
-1. **Gateway image.** Promote `examples/terse/gateway` to a published,
-   digest-pinned image (`ghcr.io/agentworkforce/relaycast-actors-gateway`):
-   Bun server + `@relaycast/engine/gateway` + `terse-sdk`; add `/healthz`,
-   graceful shutdown, structured logs. Today it is example code only.
-2. **Object-store file backend for `serveFile`** (GCS and/or S3-compatible),
-   so file blobs survive pod loss and the gateway can run >1 replica.
-   `SignedUrlFileStorage` already speaks signed URLs; only the serving side
-   is disk-bound. Until then: PVC + 1 replica.
-3. **Deploy mechanism for self-host.** The k8s provider requires a *compiled
-   GCS bundle* (`durable-actors/v3/artifacts/{uuid}/…` in `artifactBucket`) +
-   contract + `secretRefs`, registered via
-   `PUT /v1/projects/{project}/deployment` with the admin api-key
-   (`src/sandbox/gke.rs` refuses `localSource` on GKE: "compiled GCS code
-   artifact required"). `terse deploy` (hosted terse-cli) doesn't target a
-   self-hosted control plane, and the OSS `durable-actors` CLI has no remote
-   deploy command. Needed: a small deployer (CI script or Job image) that
-   runs the SDK compiler (`sdk/src/compiler` `bundleActor`/contract), uploads
-   to `artifactBucket`, and PUTs the deployment with
-   `secretRefs: [<actor env secret>]`. Until then, deploy is a manual runbook
-   step after `helm install`.
-4. **Realtime transport.** `/v1/node/ws` and `/v1/ws` over actor WebSockets
-   (`prepareWebsocket` → control-plane `/v1/socket` bridge), plus a
-   decision on `wait` semantics (returns immediately inside actors today).
-   Required for feature parity with the sqlite backend; agents use the node
-   transport by default.
-5. **Workspace provisioning path.** The actor-mode entrypoint is anonymous
-   `POST /v1/workspaces` via the gateway (snowflake + signed tag). There is
-   no `/internal` admin API in actor mode (nothing holds a cross-workspace
-   DB), and the edge-deny rules block public workspace create. Decide how
-   `relay-cloud-api` (and the first-run flow) provisions workspaces: gate
-   `POST /v1/workspaces` behind the existing internal-secret pattern at the
-   gateway, or add a cloud-api-authenticated create path.
-6. **Env contract, frozen and documented** (currently only in the example):
-
-   | Process | Variables |
-   | --- | --- |
-   | gateway | `TERSE_ACTOR_URL` (control-plane origin; `DURABLE_ACTORS_CONTROL_PLANE_URL` equivalent), `TERSE_API_KEY` (`DURABLE_ACTORS_SECRET`; the least-privilege invocation credential, never the admin api-key), `RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_CREDENTIAL_KEYRING` (JSON), `RELAYCAST_FILE_DIR` or object-store config, `PORT` (8787) |
-   | `Workspace` actor (via customer-env secret/`secretRefs`) | `RELAYCAST_PUBLIC_URL` (gateway public origin, embeds in signed file URLs), `RELAYCAST_FILE_SIGNING_SECRET` |
-   | deployer | control-plane URL + api-key, artifact-bucket write creds |
-
-7. **Engine config plumbing.** `retention.messageTtlDays`, `mailbox.*`,
-   `maxUploadBytes` are `createActorRuntime({config})` inputs today
-   (hardcoded 64 MiB upload cap in the example). Decide whether they remain
-   baked into the actor bundle (rebuild to change) or arrive via customer
-   env; chart values must match that choice.
-
-## Implementable now vs blocked
-
-Now (this repo, no relaycast changes):
-
-- Vendor `charts/terse` at the pinned tag; add `components.terseActors` and a
-  `terse` dependency to the umbrella; write the `values-gcp-proof`-style
-  values for buckets/zones/GSA/credentialsSecret.
-- Provision the GCP side from the proof scripts: 2 Rapid + 3 Standard
-  buckets, GSA + Workload Identity binding `<ns>/<release>-terse`,
-  `terse-credentials` secret, Cloud SQL database or direct postgres-url.
-- Choose the actors edge (vendored Gateway vs umbrella gkeIngress host).
-
-Blocked on relaycast-repo work:
-
-- Everything under "Required relaycast-repo changes": gateway image,
-  self-host deployer, file object store (for >1 replica), realtime
-  WebSockets, workspace-provisioning auth story, env contract freeze.
-- Therefore `runtime.backend: terse-actors` in `charts/relaycast` should land
-  only once at least items 1, 3, 4 and 5 exist, and the gateway can run with a
-  least-privilege invocation credential separate from the terse admin
-  `api-key`. Item 4 is part of the gate because agents use the node WebSocket
-  transport by default; without it actor mode cannot serve default agents.
-  The umbrella can ship the terse subchart first so infra is exercised
-  independently.
-
-Open questions:
-
-- Do we want actor pods' outbound webhook/A2A traffic egress-controlled
-  further than "public HTTPS only" (the actor adapter already enforces public
-  HTTPS URLs; sandbox netpol allows all public egress)?
-- Resolved: the gateway never shares the terse admin `api-key`. It uses a
-  separate invocation-only credential (see the values sketch); a missing
-  terse capability for scoped credentials blocks release rather than
-  justifying a shared key.
-- CapacityBuffer: keep off for the proof (requires GKE 1.35.2+ preview API);
-  revisit for burst headroom.
+- Upstream has no invoke-only credential: Relaycast's gateway still holds a copy
+  of the admin key (`invocationSecret.scope: admin`); Relayfile isolates it in
+  the session broker. Socket grants (`find-websocket`) need the admin key.
+- No SQLite → actors migration tooling; actor mode is a fresh-install backend.
+- Non-GKE self-host (generic Kubernetes, S3/MinIO actor storage) is an upstream
+  gap.
+- Changing an installation's `storage.mode` or bucket identities needs a data
+  migration; a values change alone does not move actor state.
