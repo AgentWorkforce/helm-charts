@@ -249,42 +249,42 @@ images:
       - Deployment/relay-cloud-api:api
       - Job/relay-cloud-api-migrate-*:migrate
     current:
-      repository: <private-proof-registry-not-for-customer-use>/selfhost-api
-      digest: sha256:0452a72da76d36c9c69ac6de75e51299b1df1a0fdfaec37831bff6deb55c7cf8
-      proofTag: null
-      chartStatus: proof-only
+      repository: ghcr.io/agentworkforce/selfhost-api
+      digest: sha256:48ba1877d97e47b523e859a0e532bc7f5c4a3920b999f0fbea86f3bbb04fee84
+      proofTag: "0.1.0"
+      chartStatus: published-awaiting-visibility
     source:
-      repository: https://github.com/AgentWorkforce/cloud
-      revision: null
-      baseRevision: b2d7b2d5781b8f601c19fbcbf0d495e40b217904
-      path: packages/selfhost-api
-      reproducibleReference: false
+      repository: https://github.com/AgentWorkforce/relaycontrol
+      revision: 10c069bb8adf15cae39f8d4e61a0a3b33fcb116c
+      baseRevision: 10c069bb8adf15cae39f8d4e61a0a3b33fcb116c
+      path: .
+      reproducibleReference: true
       note: >-
-        The package and Dockerfile were untracked and package manifests were
-        modified when this image was built. The base revision does not contain
-        the image source, so no commit can reproduce the digest.
+        Extracted from AgentWorkforce/cloud packages/selfhost-api into the
+        dedicated relaycontrol repository; the published image builds exactly
+        this committed revision (tags 0.1.0 and sha-10c069b...).
     license:
       status: approved-package-scope
       spdx: Apache-2.0
       evidence: Canonical packages/selfhost-api/LICENSE and package/image metadata.
     platforms:
       expected: [linux/amd64, linux/arm64]
-      verifiedFromRegistry: [linux/amd64]
-      status: incomplete
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: complete
     release:
-      workflow: null
-      run: null
-      trigger: manual-local-docker-build-and-push
-      buildsCommittedRevision: false
-      publishesSbom: false
-      publishesProvenance: unknown
+      workflow: release-selfhost-api-image.yml
+      run: https://github.com/AgentWorkforce/relaycontrol/actions/runs/41556195969
+      trigger: workflow_dispatch
+      buildsCommittedRevision: true
+      publishesSbom: true
+      publishesProvenance: max
     customerAcquisition:
       status: blocked
-      procedure: null
+      procedure: copy-by-digest
       requiredAction: >-
-        Commit and review the complete package and Dockerfile, approve its
-        source snapshot, add a multi-platform release workflow, and publish an
-        approved customer image from that exact commit.
+        The GHCR package is currently private (anonymous pull returns 401);
+        flip the package to public or copy the verified digest to the
+        customer's authorized registry, then pin it in the chart values.
     approval:
       status: blocked
       blockingReasons: [IMG-BLOCK-003]
@@ -377,11 +377,17 @@ blockers:
   - id: IMG-BLOCK-003
     severity: hard
     images: [selfhost-api]
-    summary: The API digest was built from uncommitted source, is amd64-only, and has no approved release workflow or customer channel.
+    summary: >-
+      Source and release are now canonical (relaycontrol 10c069b, amd64+arm64,
+      SBOM+provenance, run 41556195969); the GHCR package is still private, so
+      a customer pull path and promotion evidence remain open.
     closeWhen:
       - complete source is committed and reviewed
       - release workflow publishes amd64 and arm64 from that commit
       - approved customer channel and promotion evidence exist
+    status: >-
+      partially resolved — first two closeWhen items done; blocked on GHCR
+      package visibility (org admin) or digest copy to a customer registry.
   - id: IMG-BLOCK-004
     severity: hard
     images: [relay-dashboard]
