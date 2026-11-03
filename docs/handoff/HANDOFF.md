@@ -2,35 +2,55 @@
 
 ## Deliverables
 
-- `agent-relay-0.1.0.tgz`: self-contained umbrella Helm chart with Relaycast,
-  RelayAuth, 96Bulls Sessions, RelayHistory, the headless control-plane API,
-  and Relay Dashboard.
-- `setting-up-self-hosted-agent-relay-gcp-skill.tar.gz`: setup, safety,
-  preflight, deployment, Desktop, and public-verification guidance.
-- `AGENT_PROMPTS.md`: copy/paste prompts for planning, installation, Desktop
-  bootstrap, end-to-end proof, and recovery.
-- `HUMAN_QUICKSTART.md`: operator quick-start.
-- `ARCHITECTURE.md`: deployment architecture and trust boundaries.
-- `selfhost-backup-restore.md`: backup, isolated restore, rollback, and
-  recovery verification for Cloud SQL, GCS, Relaycast, and RelayAuth.
-- `SHA256SUMS`: checksums for the chart, skill, prompts, and guides.
+`scripts/package-customer-handoff.sh build` produces three files for one source
+revision (`<rev12>` is the first 12 characters of the commit SHA):
 
-## Proof environment
+- `agent-relay-customer-handoff-<rev12>.tar.gz`
+- `agent-relay-customer-handoff-<rev12>.zip`: the same content as the tarball
+- `SHA256SUMS`: checksums of the two archives
 
-- Project: `agentrelay-96bulls-soc2-2610` (`955297012355`)
-- Region/cluster: `us-central1` / `awf-conformance-gke`
-- Namespace/release: `agent-relay` / `agent-relay`, Helm revision 4
-- Ingress address: `34.111.70.61`
-- Dashboard: `https://gcp-proof.agentrelay.com`
-- API: `https://api.gcp-proof.agentrelay.com`
-- Relaycast: `https://cast.gcp-proof.agentrelay.com`
-- RelayHistory: `https://history.gcp-proof.agentrelay.com`
+A build made with `--mode preview` is named
+`agent-relay-customer-handoff-<rev12>-DEVELOPMENT-PREVIEW.*` and is not for
+production or customer installation. An archive that also carries
+`-INCOMPLETE` is missing required inputs and must not be used.
 
-The workloads and load-balancer backends are healthy. Public DNS and TLS remain
-pending until the parent `agentrelay.com` zone delegates `gcp-proof` to the
-four Google Cloud DNS nameservers printed by the setup process.
+Both archives unpack to one `agent-relay-customer-handoff/` directory:
+
+| Path | Contents |
+| --- | --- |
+| `charts/agent-relay/` | Umbrella chart source, with `values.yaml` and the structural `values-gcp.yaml` example |
+| `charts/relaycast/`, `charts/relayauth/`, `charts/96bulls/`, `charts/96bulls-worker/`, `charts/alleyoop/`, `charts/relayhistory/`, `charts/relay-cloud-api/`, `charts/relay-dashboard/` | Leaf chart sources the umbrella depends on |
+| `.cursor/skills/setting-up-self-hosted-agent-relay-gcp/` | Setup, safety, preflight, deployment, Desktop, pre-upgrade, and public-verification skill |
+| `docs/` | Reference architecture, image supply chain, backup/restore runbook, conformance contract, and licenses |
+| `scripts/selfhost/`, `scripts/release/`, `scripts/conformance/` | Read-only verification, pre-upgrade gate, release validator, and conformance tests |
+| `self-hosted/` | Customer image manifest and release evidence |
+| `deps/`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Dependency pins and license notices |
+| `RELEASE-MANIFEST.json` | Source revision, tree, release mode, production-gate status, and per-file SHA-256 |
+| `SHA256SUMS` | Checksums of every file in the archive plus the manifest |
+
+The charts ship as source, not as a packaged `.tgz`. Vendored dependency
+archives are not included: run `helm dependency build` at install time (see
+[`HUMAN_QUICKSTART.md`](HUMAN_QUICKSTART.md)).
+
+## Verify
+
+```bash
+sha256sum -c SHA256SUMS            # macOS: shasum -a 256 -c SHA256SUMS
+tar -xzf agent-relay-customer-handoff-<rev12>.tar.gz
+cd agent-relay-customer-handoff
+sha256sum -c SHA256SUMS
+jq '{releaseMode, productionGate, source, incomplete}' RELEASE-MANIFEST.json
+```
+
+Require `releaseMode` to be `release`, `productionGate.status` to be `passed`,
+and `incomplete` to be `false`. Anyone with a checkout of the source repository
+can also run `scripts/package-customer-handoff.sh verify <directory>
+--expect-revision <rev>` against the downloaded files.
 
 ## Verified behavior
+
+An internal GCP proof environment, which is not part of this handoff,
+demonstrated:
 
 - all four workloads and both migration Jobs ready;
 - idempotent Helm upgrade completed;
@@ -42,12 +62,12 @@ four Google Cloud DNS nameservers printed by the setup process.
 
 ## Customer use
 
-Treat `values-gcp-proof.yaml` as a structural example, not customer
-configuration. Follow the bundled skill to create a non-secret customer
-overlay and replace every proof-specific domain, project, bucket, registry,
+Treat `charts/agent-relay/values-gcp.yaml` as a structural example, not
+customer configuration. Follow the bundled skill to create a non-secret
+customer overlay and replace every example domain, project, bucket, registry,
 Secret reference, database role, and image digest.
 
-This is a `portable-single` proof, not an HA claim. The RelayHistory image is
-an experimental proof build and the proof images in the private Artifact
-Registry are not a customer distribution channel. Publish approved images to
-the customer's authorized registry before installation.
+This is a `portable-single` deployment, not an HA claim. The RelayHistory image
+is an experimental build, and images in the internal proof registry are not a
+customer distribution channel. Publish approved images to the customer's
+authorized registry before installation.

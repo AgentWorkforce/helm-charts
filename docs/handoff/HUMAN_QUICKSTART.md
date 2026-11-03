@@ -1,6 +1,6 @@
 # Human quick start: self-hosted Agent Relay on GCP
 
-This proof installs Relaycast, RelayAuth, 96Bulls Sessions, RelayHistory, the
+This handoff installs Relaycast, RelayAuth, 96Bulls Sessions, RelayHistory, the
 headless control-plane API, and Relay Dashboard. It intentionally excludes
 Flows, Relayfile, billing, hosted fleet, and provider integrations.
 
@@ -8,33 +8,51 @@ The deployment is `portable-single`, not highly available.
 
 ## 1. Prerequisites
 
-- GKE 1.28+ with Workload Identity
+- GKE 1.28+
 - PostgreSQL 17 with `vector` and `pg_trgm`
 - separate runtime and migration-owner database roles
 - a dedicated RelayHistory database (never reuse the 96Bulls `hoopdb`)
-- GCS, Artifact Registry, a global static address, and authoritative DNS
+- a GCS bucket for Sessions objects, reached through the S3-compatible
+  endpoint `https://storage.googleapis.com` with an HMAC key held in an
+  existing Kubernetes Secret
+- Artifact Registry, a global static address, and authoritative DNS
 - `gcloud`, `kubectl`, `helm`, `kubeconform`, `jq`, `yq`, Node, and OpenSSL
 - approved immutable images in a registry the customer GKE nodes can pull
 
-The proof’s API, Dashboard, and RelayHistory images are not a public customer
-distribution channel. Promote approved builds into the customer registry and
+The internal proof API, Dashboard, and RelayHistory images are not a public
+customer distribution channel. Promote approved builds into the customer registry and
 replace every repository and digest in the values overlay.
 
-## 2. Unpack
+## 2. Verify, unpack, and build chart dependencies
+
+The handoff is `agent-relay-customer-handoff-<rev12>.tar.gz` (or the identical
+`.zip`) plus `SHA256SUMS`; see [`HANDOFF.md`](HANDOFF.md) for the layout.
 
 ```bash
-tar -xzf agent-relay-selfhost-gcp-handoff-0.1.0.tar.gz
-tar -xzf agent-relay-0.1.0.tgz
-cp agent-relay/values-gcp.yaml customer-values.yaml
+sha256sum -c SHA256SUMS            # macOS: shasum -a 256 -c SHA256SUMS
+tar -xzf agent-relay-customer-handoff-<rev12>.tar.gz
+cd agent-relay-customer-handoff
+sha256sum -c SHA256SUMS
+
+# The charts ship as source. Build the nested 96Bulls chart first: Helm does
+# not vendor the dependencies of a file:// dependency recursively.
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm repo add minio https://charts.min.io/
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm dependency build charts/96bulls
+helm dependency build charts/agent-relay
+
+cp charts/agent-relay/values-gcp.yaml customer-values.yaml
 ```
 
 Install the skill by copying
-`setting-up-self-hosted-agent-relay-gcp/` into the agent’s skills directory,
-or give its `SKILL.md` to the deployment agent as the operating procedure.
+`.cursor/skills/setting-up-self-hosted-agent-relay-gcp/` into the agent’s
+skills directory, or give its `SKILL.md` to the deployment agent as the
+operating procedure.
 
 ## 3. Customize
 
-Edit `customer-values.yaml` and replace every proof-specific:
+Edit `customer-values.yaml` and replace every example:
 
 - project, region, bucket, registry, and organization ID;
 - Dashboard, API, Relaycast, and RelayHistory hostname;
@@ -50,30 +68,32 @@ and the control API each need separate runtime and migration database URLs.
 ## 4. Validate
 
 ```bash
-helm lint --strict ./agent-relay -f customer-values.yaml
-helm template agent-relay ./agent-relay \
+helm lint --strict charts/agent-relay -f customer-values.yaml
+helm template agent-relay charts/agent-relay \
   --namespace agent-relay --no-hooks \
   -f customer-values.yaml |
   kubeconform -strict -summary -ignore-missing-schemas
 ```
 
 Confirm the render contains no Secret objects, mutable image tags, public
-LoadBalancer Services, Helm hooks, or proof-specific names.
+LoadBalancer Services, Helm hooks, or example names.
 
 ## 5. Install
 
 ```bash
-helm install agent-relay ./agent-relay \
+helm install agent-relay charts/agent-relay \
   --namespace agent-relay --create-namespace --no-hooks \
   -f customer-values.yaml \
   --wait --wait-for-jobs --timeout 20m
 ```
 
 Do not add `--atomic`: Helm rollback does not reverse completed database
-migrations. Upgrades require the bundled pre-upgrade evidence gate and a tested
-isolated restore.
+migrations. Upgrades require the pre-upgrade recovery gate in
+`docs/selfhost-backup-restore.md` (a quiesced recovery set, a tested isolated
+restore, and `scripts/selfhost/pre-upgrade-check.sh`) and explicit approval
+before `helm upgrade`.
 
-Wait for both migration Jobs, all Deployments, GKE backends, public DNS, and
+Wait for the migration Jobs, all Deployments, GKE backends, public DNS, and
 the managed certificate.
 
 ## 6. Connect Desktop
@@ -93,7 +113,9 @@ Run the bundled skill’s `scripts/verify-public.sh`, then:
 3. retry the identical batch and require the same durable receipt;
 4. verify Dashboard list, search, and replay;
 5. verify cross-workspace denial and restart persistence;
-6. run an idempotent Helm upgrade and test restore into an isolated database.
+6. capture a quiesced recovery set and test restore into an isolated target;
+   only then, with the pre-upgrade gate passing and explicit approval, run an
+   idempotent Helm upgrade.
 
 Do not claim customer readiness until all checks pass with the customer’s
 domains, registry, identities, and backup policy.
