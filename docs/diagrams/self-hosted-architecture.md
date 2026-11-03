@@ -5,13 +5,8 @@ Rendered exports of the diagrams below: [architecture SVG](self-hosted-architect
 [relayflows modes SVG](self-hosted-relayflows-modes.svg) ·
 [relayflows modes PNG](self-hosted-relayflows-modes.png).
 They are generated from the mermaid source in this file with
-`@mermaid-js/mermaid-cli`; the mermaid blocks are the source of truth.
-
-> **The architecture SVG and PNG are stale.** The mermaid source below was
-> corrected (native GCS through Workload Identity,
-> Secret-held database URLs, operator-run VolumeSnapshots, no external route to
-> AlleyOop, planned Sessions search/replay) after they were rendered. Re-render
-> them with `mmdc` before relying on the images.
+`@mermaid-js/mermaid-cli` (`mmdc -b white`, PNG at `-s 2`); the mermaid
+blocks are the source of truth.
 
 One Helm release (`charts/agent-relay`) deploys the full suite into the
 customer's GKE cluster and VPC-adjacent managed services. All public traffic
