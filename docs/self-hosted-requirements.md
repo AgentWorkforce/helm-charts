@@ -573,7 +573,7 @@ chart `relay-dashboard` · values [`ci/default-values.yaml`](../charts/relay-das
 
 ### Profile: agent-relay
 
-**GCP messaging and Sessions suite.** Relaycast, RelayAuth, Sessions pipeline, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
+**GCP messaging and Sessions suite.** Relaycast, RelayAuth, Sessions Pipeline, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
 
 chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm install agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml --set relay-cloud-api.image.digest=sha256:<digest>`
 

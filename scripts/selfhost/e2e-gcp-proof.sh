@@ -4,7 +4,7 @@
 # layout): Relaycast messaging, control-plane bootstrap and device auth,
 # RelayHistory durable delivery, dashboard reads, the sessions API, workspace
 # isolation, restart durability, RelayAuth token verification, erasure, the
-# Sessions pipeline, the public HTTPS edge, workspace admin (env vars,
+# Sessions Pipeline, the public HTTPS edge, workspace admin (env vars,
 # /internal edge denial), Relayflows on a registered worker, and the dashboard
 # SPA.
 #
@@ -73,7 +73,7 @@ Required:
 Options:
   -n, --namespace NAME        agent-relay namespace (default: agent-relay)
       --sessions-namespace NAME
-                              Sessions pipeline namespace (default: 96bulls,
+                              Sessions Pipeline namespace (default: 96bulls,
                               the live proof's namespace; --bulls-namespace is
                               an alias)
       --secret NAME           release Secret holding the Relaycast internal secret
@@ -82,7 +82,7 @@ Options:
                               relay-cloud-api SELFHOST_PUBLIC_URL)
       --skip-restart          do not restart relayhistory/relaycast (case 6 SKIP)
       --skip-sessions-pipeline
-                              skip the Sessions pipeline (case 8 SKIP;
+                              skip the Sessions Pipeline (case 8 SKIP;
                               --skip-96bulls is a deprecated alias)
       --skip-public           skip the public HTTPS checks (case 10 SKIP)
       --require-public        fail (not skip) case 10 when the cert is not Active
@@ -564,7 +564,7 @@ case_end 7 "auth: JWKS, RelayAuth assertion signature, token verification"
 
 # ---------------------------------------------------------------- case 8
 
-case_begin 8 "Sessions pipeline"
+case_begin 8 "Sessions Pipeline"
 if $SKIP_SESSIONS_PIPELINE; then
   case_skip "--skip-sessions-pipeline"
 else
@@ -623,7 +623,7 @@ else
     fi
   fi
 fi
-case_end 8 "Sessions pipeline: courier push, indexer, referee, bob-costas, bucket"
+case_end 8 "Sessions Pipeline: courier push, indexer, referee, bob-costas, bucket"
 
 # ---------------------------------------------------------------- case 9
 

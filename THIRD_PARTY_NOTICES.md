@@ -99,7 +99,7 @@ cover an image's transitive packages.
 | Relay Dashboard | [`AgentWorkforce/relay-dashboard`](https://github.com/AgentWorkforce/relay-dashboard) | Repository contains an [Apache-2.0 `LICENSE`](https://github.com/AgentWorkforce/relay-dashboard/blob/main/LICENSE). |
 | Relayflows | [`AgentWorkforce/flows`](https://github.com/AgentWorkforce/flows) | Repository contains an [Apache-2.0 `LICENSE`](https://github.com/AgentWorkforce/flows/blob/main/LICENSE). |
 | Relayfile | [`AgentWorkforce/relayfile`](https://github.com/AgentWorkforce/relayfile) | Repository contains an [Apache-2.0 `LICENSE`](https://github.com/AgentWorkforce/relayfile/blob/main/LICENSE). |
-| Sessions pipeline worker and AlleyOop | Chart metadata names the private `AgentWorkforce/sessions-pipeline` repository (formerly `AgentWorkforce/96BullSessions`) | No license or notice file was found in the inspected repository. License not established. |
+| Sessions Pipeline worker and AlleyOop | Chart metadata names the private `AgentWorkforce/sessions-pipeline` repository (formerly `AgentWorkforce/96BullSessions`) | No license or notice file was found in the inspected repository. License not established. |
 | Relay History | Private [`AgentWorkforce/relayhistory-cloud`](https://github.com/AgentWorkforce/relayhistory-cloud) repository | No license or notice file was found in the inspected repository. License not established. |
 | Relay Cloud API | Private [`AgentWorkforce/cloud`](https://github.com/AgentWorkforce/cloud) repository | No license or notice file was found in the inspected repository. License not established. |
 

@@ -1,0 +1,98 @@
+%% Agent Relay self-hosted on GCP: what charts/agent-relay deploys today.
+%% Source of truth for agent-relay-architecture.svg / .png. Render with
+%% @mermaid-js/mermaid-cli 11.4.2: mmdc -i agent-relay-architecture.mmd -o agent-relay-architecture.svg -b white
+%% and the same with -o agent-relay-architecture.png -s 2.
+%% Dashed borders and dashed edges are preview or optional components.
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "15px", "clusterBkg": "#f8fafc", "clusterBorder": "#94a3b8", "lineColor": "#475569", "primaryTextColor": "#0f172a", "edgeLabelBackground": "#ffffff"}, "flowchart": {"curve": "basis", "nodeSpacing": 40, "rankSpacing": 60, "padding": 12, "wrappingWidth": 280}}}%%
+flowchart LR
+  subgraph Clients["Clients"]
+    desktop["Agent Relay Desktop<br/>custom deployment origin<br/>(device sign-in, session upload)"]
+    agents["CLI / SDK agents<br/>REST + /v1/node/ws"]
+    browser["Browser"]
+  end
+
+  subgraph Edge["GKE Ingress · managed TLS"]
+    lb["Global HTTPS load balancer<br/>one static IP<br/>hosts: dashboard · api · cast · history<br/>preview hosts: actors · files"]
+    deny["edge deny (no endpoints)<br/>api: /internal<br/>cast: /internal, /v1/workspaces"]
+    lb -.- deny
+  end
+
+  subgraph NS["Namespace agent-relay (NetworkPolicy)"]
+    dash["relay-dashboard<br/>static SPA"]
+    api["relay-cloud-api<br/>control plane: orgs, workspaces,<br/>device auth, flows + workers,<br/>admin env vars, provider connections,<br/>sessions API, telemetry"]
+    cast["relaycast<br/>messaging (SQLite, single node)"]
+    hist["relayhistory<br/>session delivery, search, replay"]
+    flows["relayflows (opt-in)<br/>standalone Job or cloudWorker"]
+
+    subgraph AUTH["relayauth"]
+      ra["relayauth<br/>scoped tokens + JWKS"]
+    end
+
+    subgraph SP["Sessions Pipeline"]
+      ingest["alleyoop ingest<br/>ClusterIP only"]
+      workers["sessions-pipeline workers<br/>indexer · referee · summaries"]
+    end
+  end
+
+  subgraph PREVIEW["Preview · off by default"]
+    gw["relaycast actor gateway (x2)"]
+    da["durable-actors control plane"]
+    pool["actor sandboxes<br/>GKE Sandbox (gVisor) node pool<br/>namespace &lt;release&gt;-&lt;namespace&gt;"]
+    rf["relayfile (actor mode)"]
+  end
+
+  subgraph GCP["Customer GCP project"]
+    sql[("Cloud SQL Postgres<br/>per-service databases")]
+    gcs[("GCS buckets<br/>sessions · actors · files")]
+    wi["Workload Identity<br/>no service-account keys"]
+  end
+
+  subgraph OUT["Optional egress"]
+    ext(["Agent Relay telemetry ingest<br/>(telemetry.level, off allowed)"])
+  end
+
+  browser --> lb
+  desktop --> lb
+  agents --> lb
+  lb --> dash
+  lb --> api
+  lb --> cast
+  lb --> hist
+  lb -.-> gw
+  lb -.-> da
+  lb -.-> rf
+  api --> ra
+  api --> cast
+  api --> hist
+  hist --> ra
+  cast --> ra
+  flows --> api
+  ingest --> gcs
+  ingest --> workers
+  api --> sql
+  hist --> sql
+  workers --> sql
+  workers --> gcs
+  gw -.-> da
+  da -.-> pool
+  pool -.-> gcs
+  rf -.-> da
+  wi -.- gcs
+  wi -.- sql
+  api -.-> ext
+
+  classDef client fill:#eef2ff,stroke:#4338ca,color:#1e1b4b,stroke-width:1.5px
+  classDef edge fill:#fff7ed,stroke:#c2410c,color:#431407,stroke-width:1.5px
+  classDef core fill:#ecfdf5,stroke:#047857,color:#022c22,stroke-width:1.5px
+  classDef data fill:#f0f9ff,stroke:#0369a1,color:#082f49,stroke-width:1.5px
+  classDef preview fill:#f8fafc,stroke:#64748b,color:#0f172a,stroke-width:1.5px,stroke-dasharray:6 4
+  classDef external fill:#fdf2f8,stroke:#be185d,color:#500724,stroke-width:1.5px,stroke-dasharray:6 4
+  class desktop,agents,browser client
+  class lb,deny edge
+  class dash,api,cast,hist,flows,ra,ingest,workers core
+  class sql,gcs,wi data
+  class gw,da,pool,rf preview
+  class ext external
+  style PREVIEW stroke-dasharray:6 4,fill:#ffffff
+  style OUT stroke-dasharray:6 4,fill:#ffffff
+  style NS fill:#f8fafc

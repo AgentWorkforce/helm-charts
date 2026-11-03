@@ -1,4 +1,4 @@
-// Sessions pipeline probe for e2e-gcp-proof.sh.
+// Sessions Pipeline probe for e2e-gcp-proof.sh.
 //
 // Runs inside the existing bulls96-alleyoop-ingest pod (default-deny
 // namespace; this pod already reaches HoopDb, the Locker bucket and its own

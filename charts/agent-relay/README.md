@@ -3,7 +3,7 @@
 Umbrella chart for the self-hosted messaging and Sessions proof:
 
 - Relaycast and RelayAuth
-- Sessions pipeline
+- Sessions Pipeline
 - Relay History
 - self-host control-plane API
 - static dashboard
@@ -94,7 +94,7 @@ no enrollment Secret; model and provider credentials reach the flow through
 The template assumes external Cloud SQL and GCS rather than in-cluster
 Postgres and MinIO. Before installation, provision separate Sessions, Relay
 History, and control API databases; install the Sessions database extensions
-and migrations required by the Sessions pipeline; and make each runtime URL use the
+and migrations required by the Sessions Pipeline; and make each runtime URL use the
 least-privilege role named in the values (`sessions_runtime` or
 `control_api_runtime`). Migration URLs must use the corresponding
 migration-owner roles. Relay History must have its own database and migration
@@ -133,7 +133,7 @@ helm template agent-relay . -n agent-relay -f values-gcp.yaml >/dev/null
 `values-gcp-proof.yaml` is the portable, all-components customer shape.
 `values-gcp-proof-live.yaml` is a separate overlay for the existing proof
 cluster; it reuses RelayAuth in the `relayauth` namespace, disables the
-already-running Sessions pipeline, and inherits the portable profile's
+already-running Sessions Pipeline, and inherits the portable profile's
 restricted GKE NetworkPolicies.
 
 One umbrella GKE Ingress reserves a global static address
@@ -234,6 +234,6 @@ helm install agent-relay charts/agent-relay -n agent-relay \
 The proof uses single-writer/single-replica components and makes no HA claim.
 Cloud SQL networking and database/user provisioning remain operator work.
 RelayHistory must use its own database and migration ledger; do not point it at
-the Sessions pipeline `hoopdb` database. The headless API supports both `/api/v1` and
+the Sessions Pipeline `hoopdb` database. The headless API supports both `/api/v1` and
 Desktop/Dashboard `/cloud/api/v1` routes, including secure browser login,
 workspace-scoped session search, and replay.

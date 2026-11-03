@@ -1,0 +1,16 @@
+# restore-overlay.yaml: no migration, init or backup Jobs during a restore.
+relayhistory:
+  migrations:
+    enabled: false
+relay-cloud-api:
+  migrations:
+    enabled: false
+sessions-pipeline:
+  worker:
+    migrations:
+      enabled: false
+    lockerInit:
+      enabled: false
+relaycast:
+  backup:
+    enabled: false

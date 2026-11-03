@@ -2,7 +2,7 @@
 
 This chart runs the portable Relaycast core on Kubernetes. In the default
 (legacy credentials) and `credentials.authority=self` modes it has no
-dependency on Relayflows, RelayAuth, Relayfile, the Sessions pipeline, or a cloud provider.
+dependency on Relayflows, RelayAuth, Relayfile, the Sessions Pipeline, or a cloud provider.
 `credentials.authority=relayauth` (model B, below) adds a runtime dependency on
 a reachable RelayAuth deployment.
 
@@ -243,5 +243,5 @@ before every upgrade.
 
 Install add-ons separately and point them at the core through their documented
 URLs and credentials. Relayflows is needed only for durable workflow execution,
-and the Sessions pipeline only for session capture and evaluation. Neither is on Relaycast's
+and the Sessions Pipeline only for session capture and evaluation. Neither is on Relaycast's
 availability path.

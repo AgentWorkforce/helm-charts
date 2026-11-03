@@ -1,4 +1,4 @@
-## Default values for alleyoop (Sessions pipeline ingest).
+## Default values for alleyoop (Sessions Pipeline ingest).
 ## Secrets are NEVER set here: point existingSecret at a Secret you create.
 
 global:

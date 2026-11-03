@@ -13,9 +13,9 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 | [relaycast](charts/relaycast) | Portable self-hosted Relaycast core — realtime agent communication with single-writer SQLite persistence |
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |
-| [sessions-pipeline-worker](charts/sessions-pipeline-worker) | Sessions pipeline workers: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
-| [sessions-pipeline](charts/sessions-pipeline) | The whole Sessions pipeline in one release: sessions-pipeline-worker + alleyoop, with optional HoopDb (CloudNativePG), Locker (MinIO) and an OTel collector |
-| [alleyoop](charts/alleyoop) | Sessions pipeline ingest: receives session manifests and chunks and lands them in the Locker (S3) |
+| [sessions-pipeline-worker](charts/sessions-pipeline-worker) | Sessions Pipeline workers: HoopDb migrations, Locker bucket init, and the indexer/referee/bob-costas stage workers |
+| [sessions-pipeline](charts/sessions-pipeline) | The whole Sessions Pipeline in one release: sessions-pipeline-worker + alleyoop, with optional HoopDb (CloudNativePG), Locker (MinIO) and an OTel collector |
+| [alleyoop](charts/alleyoop) | Sessions Pipeline ingest: receives session manifests and chunks and lands them in the Locker (S3) |
 | [relayauth](charts/relayauth) | Self-hosted RelayAuth issuer: immutable image, externally managed keys, single-writer SQLite, and optional JWKS ingress |
 
 ## Self-hosted requirements registry
@@ -58,7 +58,7 @@ helm repo update
 
 ### Install the Relaycast core
 
-Relaycast is the minimal self-hosted core. Relayflows and the Sessions pipeline are optional
+Relaycast is the minimal self-hosted core. Relayflows and the Sessions Pipeline are optional
 add-ons and are not installed with it:
 
 ```bash
@@ -111,7 +111,7 @@ helm install relayflows agentworkforce/relayflows \
 See [charts/relayflows/README.md](charts/relayflows/README.md) for ConfigMap
 flows, model credentials, resuming runs, and optional Cloud worker mode.
 
-### Install the Sessions pipeline (umbrella)
+### Install the Sessions Pipeline (umbrella)
 
 One release runs everything. Prerequisite: the CloudNativePG operator (see
 [`deps/PINS.md`](deps/PINS.md)). Then create one Secret and install:
@@ -323,7 +323,7 @@ the planned Secret boundary are in
 [Transcript search profiles](docs/self-hosted-reference-architecture.md#transcript-search-profiles). The registry tracks it as the planned option
 [`opt.sessions-pipeline.search-backend`](docs/self-hosted-requirements.md#opt-sessions-pipeline-search-backend).
 
-### Install the Sessions pipeline app charts individually
+### Install the Sessions Pipeline app charts individually
 
 Both charts are hook-free, so `helm install` and Alchemy's
 `helm template --no-hooks` + server-side apply behave the same. Create a

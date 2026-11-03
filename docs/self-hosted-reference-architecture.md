@@ -8,15 +8,31 @@ chart/image/migration compatibility matrix, are in the
 [self-hosted requirements registry](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md),
 generated from [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml).
 
-Links into `docs/self-hosted-requirements.md`, `docs/diagrams/`, and the
-repository `README.md` point at the public source repository because those
-files are not part of the customer handoff archive. For the version matching
-an archive, open the same path at the revision recorded in its
-`RELEASE-MANIFEST.json`.
+Links into the repository `README.md` point at the public source repository
+because it is not part of the customer handoff archive. For the version
+matching an archive, open the same path at the revision recorded in its
+`RELEASE-MANIFEST.json`. The diagrams below ship in the archive under
+`docs/diagrams/`.
 
-For the deployed GKE shape — load balancer and ingress routing, in-namespace
-pods, and the Cloud SQL / GCS / PVC data plane — see the
-[self-hosted architecture diagram](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/diagrams/self-hosted-architecture.md).
+## Diagrams
+
+- [Architecture overview](diagrams/agent-relay-architecture.png)
+  ([SVG](diagrams/agent-relay-architecture.svg),
+  [mermaid source](diagrams/agent-relay-architecture.mmd)): what
+  `charts/agent-relay` deploys on GKE. It shows the ingress hosts and edge
+  denies, the components in the release namespace, the Cloud SQL, GCS and
+  Workload Identity data plane, the clients, and the optional telemetry
+  egress. Preview and optional components (durable-actors, Relayfile,
+  telemetry) have dashed borders.
+- [Request flow](diagrams/agent-relay-request-flow.png)
+  ([SVG](diagrams/agent-relay-request-flow.svg),
+  [mermaid source](diagrams/agent-relay-request-flow.mmd)): Desktop sign-in
+  with device approval, session upload to RelayHistory, the Dashboard read
+  path, and agent messaging through Relaycast.
+- [Detailed GKE shape](diagrams/self-hosted-architecture.md): ports, routes,
+  Secrets and the Relayflows run modes.
+
+![Agent Relay self-hosted architecture](diagrams/agent-relay-architecture.png)
 
 ## Product shape
 
@@ -28,7 +44,7 @@ The self-hosted product is composed rather than monolithic.
 | Identity/control plane | Required for the complete product; naming and package boundary unresolved | Sign-in and tokens, organizations, workspaces, device enrollment, discovery, deployment bindings, and dashboard |
 | Relayflows | Off | Durable, resumable, or scheduled multi-step workflow execution |
 | Relayfile/providers | Off; inclusion in the self-host product is unresolved | GitHub, Slack, and other provider write-backs |
-| Sessions pipeline | Off | Session capture, durable storage, indexing, summaries, and evaluation |
+| Sessions Pipeline | Off | Session capture, durable storage, indexing, summaries, and evaluation |
 | Observer/UI | Off | Human inspection and operations surfaces |
 
 An add-on may consume core APIs, but the core availability path must never
@@ -142,7 +158,7 @@ the shipped requirement
 [`req.db.postgres-17-extensions`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#req-db-postgres-17-extensions)
 (`pg_trgm`, `btree_gin`) that the standard profile relies on.
 
-The Sessions pipeline chart notes in the [README](https://github.com/AgentWorkforce/helm-charts/blob/main/README.md#transcript-search-profiles)
+The Sessions Pipeline chart notes in the [README](https://github.com/AgentWorkforce/helm-charts/blob/main/README.md#transcript-search-profiles)
 point back to this section.
 
 ## Proof and commit gates
@@ -167,7 +183,7 @@ AWS proof is complete only when evidence covers:
 - database, Redis, pod, and availability-zone failure/recovery exercises;
 - backup and restore with an explicit recovery point and recovery time;
 - metrics, logs, traces, alerts, and operator runbooks;
-- a session flowing through the Sessions pipeline: ingest, Locker, HoopDB, summaries, and
+- a session flowing through the Sessions Pipeline: ingest, Locker, HoopDB, summaries, and
   verdicts when that add-on is enabled;
 - add-ons independently disabled without breaking the Relaycast core;
 - no AWS-specific branches in provider-neutral engine behavior.

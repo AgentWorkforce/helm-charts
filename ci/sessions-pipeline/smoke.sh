@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kind smoke test for the Sessions pipeline charts, installed the way Alchemy's
+# kind smoke test for the Sessions Pipeline charts, installed the way Alchemy's
 # Kubernetes.HelmChart does it: `helm template --no-hooks` + server-side apply.
 # No Helm release, no hooks. Usage: ci/sessions-pipeline/smoke.sh [image]
 # Dependencies come from deps/ (CloudNativePG, MinIO, OpenTelemetry).

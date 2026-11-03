@@ -2,11 +2,11 @@
 
 This runbook covers the `agent-relay` `portable-single` suite:
 
-- PostgreSQL databases for the Sessions pipeline (`hoopdb`), RelayHistory, and the control
+- PostgreSQL databases for the Sessions Pipeline (`hoopdb`), RelayHistory, and the control
   API;
 - Relaycast SQLite and uploaded files on its retained RWO PVC;
 - RelayAuth SQLite on its retained RWO PVC;
-- Sessions pipeline Locker objects in GCS.
+- Sessions Pipeline Locker objects in GCS.
 
 A recovery set is valid only when all artifacts use one recovery ID, carry a
 `COMPLETE` marker naming that ID, and are captured while application writes

@@ -314,7 +314,7 @@ checks.planned = () => {
   const c = 'planned';
   for (const e of entries.filter((x) => x.status === 'planned')) {
     // A planned env name may already be shipped by an unrelated chart (for
-    // example Relay History can use OPENAI_API_KEY while the Sessions pipeline model
+    // example Relay History can use OPENAI_API_KEY while the Sessions Pipeline model
     // worker remains planned). Enforce absence only in the entry's chart
     // family; normalized value paths still catch umbrella/subchart reads.
     const plannedCharts = [...new Set(entryCharts(e).flatMap(chartFamily))];

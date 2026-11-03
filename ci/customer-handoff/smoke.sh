@@ -47,6 +47,22 @@ test -s "$work/rendered.yaml"
   test "$AGENT_RELAY_BASE_VALUES_FILE" -ef "$root/charts/agent-relay/values-gcp.yaml"
 )
 
+# The hidden .agents skill directory ships complete (every tracked file, same
+# bytes and mode), the Cursor-only location is gone, and the architecture
+# diagrams ship with their renders.
+skill=.agents/skills/setting-up-self-hosted-agent-relay-gcp
+test -f "$root/$skill/SKILL.md" || { echo "error: $skill/SKILL.md is not in the handoff" >&2; exit 1; }
+while IFS= read -r f; do
+  cmp -s "$repo/$f" "$root/$f" || { echo "error: $f is missing from or differs in the handoff" >&2; exit 1; }
+  if test -x "$repo/$f" && ! test -x "$root/$f"; then echo "error: $f lost its executable bit" >&2; exit 1; fi
+done < <(git -C "$repo" ls-files -- "$skill")
+test ! -e "$root/.cursor" || { echo "error: the handoff still ships .cursor/" >&2; exit 1; }
+for d in agent-relay-architecture agent-relay-request-flow; do
+  for ext in mmd svg png; do
+    test -s "$root/docs/diagrams/$d.$ext" || { echo "error: docs/diagrams/$d.$ext is not in the handoff" >&2; exit 1; }
+  done
+done
+
 # Relative links in shipped Markdown that do not resolve inside the archive.
 python3 -I - "$root" <<'PY'
 import re

@@ -1,6 +1,12 @@
 ---
 name: setting-up-self-hosted-agent-relay-gcp
-description: Guides and verifies a customer-owned self-hosted Agent Relay installation on GCP using the agent-relay Helm umbrella chart, GKE, Cloud SQL, GCS, Relaycast, RelayAuth, RelayHistory, Sessions pipeline, the control-plane API, Dashboard, and Agent Relay Desktop. Use whenever planning, installing, upgrading, recovering, or validating this GCP self-hosted suite.
+description: Guides and verifies a customer-owned self-hosted Agent Relay installation on GCP using the agent-relay Helm umbrella chart, GKE, Cloud SQL, GCS, Relaycast, RelayAuth, RelayHistory, Sessions Pipeline, the control-plane API, Dashboard, and Agent Relay Desktop. Use whenever planning, installing, upgrading, recovering, or validating this GCP self-hosted suite.
+license: Apache-2.0
+compatibility: Requires gcloud, kubectl, Helm 3.10+, python3, network access to the target GKE cluster and the image registry, and operator credentials for the customer GCP project.
+metadata:
+  chart: agent-relay
+  version: "0.3.0"
+  standard: "agentskills.io"
 ---
 
 # Set Up Self-Hosted Agent Relay on GCP
@@ -34,7 +40,10 @@ Neither layout provisions GCP infrastructure.
 - Never promise or initiate automatic rollback. Preserve the failed state,
   determine which migrations ran, and follow the approved database-aware
   recovery plan.
-- Relayflows, Relayfile, provider integrations, hosted agents/fleet, billing,
+- Relayflows (`components.relayflows`) is an opt-in add-on. The
+  durable-actors control plane (`components.durableActors`) and Relayfile
+  (`components.relayfile`) are preview components, off by default; enable
+  them only when the operator asks for them. Hosted agents/fleet, billing,
   and hosted MCP are outside this installation.
 
 ## Required inputs
@@ -60,6 +69,11 @@ The default public origins are:
 - Control plane: `https://api.$BASE_DOMAIN`
 - Relaycast: `https://cast.$BASE_DOMAIN`
 - RelayHistory: `https://history.$BASE_DOMAIN`
+
+With the preview components enabled, the same load balancer also serves
+`https://actors.$BASE_DOMAIN` (durable-actors) and `https://files.$BASE_DOMAIN`
+(Relayfile). See `docs/diagrams/agent-relay-architecture.png` in the handoff
+for the deployed topology.
 
 ## 1. Resolve the layout and run preflight
 
@@ -121,7 +135,7 @@ reviewed infrastructure workflow:
 - PostgreSQL 17 with `vector` and `pg_trgm`, private connectivity, backups,
   deletion protection, and separate runtime/migration-owner roles. Give
   RelayHistory its own database and migration ledger; never point it at the
-  Sessions pipeline `hoopdb` database;
+  Sessions Pipeline `hoopdb` database;
 - GCS with retention and workload-identity access;
 - Artifact Registry access from GKE;
 - global static address and authoritative DNS control;
@@ -258,7 +272,7 @@ Before rendering or mutation:
 5. require the evidence to match the currently deployed Helm revision.
 
 Create the three non-secret evidence files described in
-`references/pre-upgrade-evidence.md`, then run the skill-bundled gate:
+[`references/pre-upgrade-evidence.md`](references/pre-upgrade-evidence.md), then run the skill-bundled gate:
 
 ```bash
 bash "$SKILL_DIR/scripts/pre-upgrade-check.sh" \
@@ -300,44 +314,11 @@ results, recovery ID, and non-secret resource IDs.
 
 ### Restore into a target
 
-`--no-hooks` does not stop migrations: the RelayHistory, control-plane API and
-Sessions pipeline migration Jobs, and the Sessions pipeline locker init Job, are plain Jobs, not
-Helm hooks. Installing the chart over restored data would run them against
-it. For a restore (isolated drill or recovery), first create a non-secret
-restore overlay in the operator's configuration location, and pass it last:
-
-```yaml
-# restore-overlay.yaml: no migration, init or backup Jobs during a restore.
-relayhistory:
-  migrations:
-    enabled: false
-relay-cloud-api:
-  migrations:
-    enabled: false
-sessions-pipeline:
-  worker:
-    migrations:
-      enabled: false
-    lockerInit:
-      enabled: false
-relaycast:
-  backup:
-    enabled: false
-```
-
-```bash
-helm install "$RELEASE" "$CHART" \
-  --kube-context "$KUBE_CONTEXT" \
-  --namespace "$NAMESPACE" --create-namespace --no-hooks \
-  -f "$BASE_VALUES" \
-  -f "$CUSTOMER_VALUES_FILE" \
-  -f "$RESTORE_OVERLAY_FILE" \
-  --wait --timeout 20m
-```
-
-Render first and confirm the output contains no `Job` objects. Re-enable
-migrations only through a reviewed upgrade after the restored data and image
-versions are proven compatible.
+`--no-hooks` does not stop migrations: the migration and locker init Jobs are
+plain Jobs. Never install over restored data without the restore overlay in
+[`assets/restore-overlay.yaml`](assets/restore-overlay.yaml), passed last.
+Follow [`references/restore-into-target.md`](references/restore-into-target.md)
+and confirm the render contains no `Job` objects before installing.
 
 ## 6. Publish DNS and verify public endpoints
 
@@ -354,28 +335,10 @@ does not authorize parent-zone changes.
 bash "$SKILL_DIR/scripts/verify-public.sh"
 ```
 
-`verify-public.sh` derives all origins from `BASE_DOMAIN`. To use explicit
-origins, set all of `DASHBOARD_URL`, `CONTROL_PLANE_URL` (or `API_URL`),
-`RELAYCAST_URL`, and `RELAYHISTORY_URL`. Each must be a credential-free HTTPS
-origin with no path, query, or fragment.
-
-Optional non-secret controls are:
-
-- `DASHBOARD_HEALTH_PATH` (default `/healthz`)
-- `CONTROL_PLANE_HEALTH_PATH` (default `/healthz`)
-- `RELAYCAST_HEALTH_PATH` (default `/health`)
-- `RELAYHISTORY_HEALTH_PATH` (default `/healthz`)
-- `VERIFY_DNS_RESOLVER` (requires `dig` when set)
-- `VERIFY_DNS_TIMEOUT`, `VERIFY_CONNECT_TIMEOUT`, `VERIFY_TLS_TIMEOUT`, and
-  `VERIFY_MAX_TIME`, in seconds
-- `VERIFY_CA_BUNDLE`, for an operator-approved CA file
-
-The verifier checks public A/AAAA results, rejects non-global addresses,
-validates each certificate chain and hostname with SNI, and requires a 2xx
-health response without following redirects. It sends no credentials and
-prints no response bodies or headers. Do not continue on a certificate
-mismatch, redirect, plaintext endpoint, non-public address, or failed health
-check.
+Read [`references/public-verification.md`](references/public-verification.md)
+for explicit origins, health paths, timeouts and what the verifier checks. Do
+not continue on a certificate mismatch, redirect, plaintext endpoint,
+non-public address, or failed health check.
 
 ## 7. Bootstrap and connect Desktop
 

@@ -17,7 +17,7 @@ flowchart TB
       Cast["Relaycast\nmessaging · roster · delivery"]
       History["RelayHistory\nsession ingest · search · replay"]
       Auth["RelayAuth\nsigned scoped assertions"]
-      Pipeline["Sessions pipeline\nworkers · AlleyOop"]
+      Pipeline["Sessions Pipeline\nworkers · AlleyOop"]
       Secrets["Kubernetes Secrets\nor external secret delivery"]
       CastPVC[("Relaycast RWO PVC")]
     end
@@ -25,7 +25,7 @@ flowchart TB
     subgraph Data["Managed data services"]
       ControlDB[("PostgreSQL\ncontrol-plane tables")]
       HistoryDB[("Dedicated PostgreSQL\nRelayHistory ledger")]
-      SessionsDB[("PostgreSQL hoopdb\nSessions pipeline")]
+      SessionsDB[("PostgreSQL hoopdb\nSessions Pipeline")]
       GCS[("GCS session objects")]
       Registry["Artifact Registry\nimmutable image digests"]
     end
@@ -65,7 +65,7 @@ flowchart TB
 - The control API binds users to an organization and workspace, then returns
   scoped Relaycast and RelayHistory credentials.
 - RelayHistory uses a dedicated database and migration ledger. It must not
-  share the Sessions pipeline `hoopdb` database.
+  share the Sessions Pipeline `hoopdb` database.
 - Public traffic enters through one GKE Ingress. Services remain `ClusterIP`;
   sensitive Relaycast administration paths are denied at the edge.
 - Runtime and migration-owner database credentials are separate.
