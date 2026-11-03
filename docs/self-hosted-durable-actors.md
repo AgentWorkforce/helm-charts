@@ -245,13 +245,22 @@ runtime:
     controlPlaneUrl: ""         # default http://<release>-terse.<ns>.svc:7100
     existingSecret: ""          # REQUIRED; keys below
     secretKeys:
-      apiKey: terse-api-key                  # == terse credentialsSecret api-key
+      invokeKey: terse-gateway-invoke-key    # least-privilege; NOT the terse admin api-key
       fileSigningSecret: relaycast-file-signing-secret
       credentialKeyring: relaycast-credential-keyring   # JSON keyring
     files:
       persistence: { existingClaim: "", storageClass: "", size: 10Gi }
       # future: files.objectStore: { bucket: "", prefix: "" }
 ```
+
+The gateway is internet-facing, so it must not hold the terse control-plane
+admin `api-key` (which can register deployments, `PUT
+/v1/projects/{project}/deployment`). `secretKeys.invokeKey` names a separate
+credential scoped to invoking `Workspace` actors in this project only, and
+validation should refuse a value equal to the terse `credentialsSecret`
+`api-key`. If the terse control plane cannot issue an invocation-only
+credential, that is a release blocker for `runtime.backend: terse-actors` (see
+"Implementable now vs blocked").
 
 Validation additions: `runtime.backend ∈ {sqlite, terse-actors}`;
 `terse-actors` requires HTTPS `baseUrl` reachable from sandbox egress (forbid
@@ -269,14 +278,15 @@ mounted secret; `RELAYCAST_PUBLIC_URL = baseUrl`.
 | --- | --- | --- | --- |
 | `credentialsSecret` (e.g. `terse-credentials`) | release ns | `postgres-url`, `jwt-signing-key` (base64 Ed25519 PKCS#8, stable), `api-key` | control-plane env |
 | customer env secret (e.g. `relaycast-actor-env`) | `sandboxNamespace` | `RELAYCAST_PUBLIC_URL`, `RELAYCAST_FILE_SIGNING_SECRET` | injected into actor pods as `DURABLE_ACTORS_CUSTOMER_ENV`; **must carry label `terse.ai/customer-secret: "true"`** and be listed in the deployment's `secretRefs` |
-| relaycast gateway `existingSecret` | release ns | `terse-api-key`, `relaycast-file-signing-secret`, `relaycast-credential-keyring` | gateway env |
+| relaycast gateway `existingSecret` | release ns | `terse-gateway-invoke-key` (invocation-only; never the admin `api-key`), `relaycast-file-signing-secret`, `relaycast-credential-keyring` | gateway env |
 
 Notes: the actor env secret lives in the *sandbox* namespace (control plane
 reads it via its Role) while the file-signing value must equal the gateway's
 — two copies by design; keep them in one ExternalSecret source. `api-key` is
-the shared admin/invocation secret (`DURABLE_ACTORS_SECRET`) — the gateway
-authenticates to the control plane with it, so it is deployment-admin
-equivalent; egress to it should stay inside the cluster.
+the terse admin secret and stays with the control plane and the deployer; it
+must not be copied into the gateway Secret. The gateway authenticates with the
+separate invocation-only credential, and egress to the control plane should
+still stay inside the cluster.
 
 ## NetworkPolicy
 
@@ -352,7 +362,7 @@ backend** initially:
 
    | Process | Variables |
    | --- | --- |
-   | gateway | `TERSE_ACTOR_URL` (control-plane origin; `DURABLE_ACTORS_CONTROL_PLANE_URL` equivalent), `TERSE_API_KEY` (`DURABLE_ACTORS_SECRET`), `RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_CREDENTIAL_KEYRING` (JSON), `RELAYCAST_FILE_DIR` or object-store config, `PORT` (8787) |
+   | gateway | `TERSE_ACTOR_URL` (control-plane origin; `DURABLE_ACTORS_CONTROL_PLANE_URL` equivalent), `TERSE_API_KEY` (`DURABLE_ACTORS_SECRET`; the least-privilege invocation credential, never the admin api-key), `RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_CREDENTIAL_KEYRING` (JSON), `RELAYCAST_FILE_DIR` or object-store config, `PORT` (8787) |
    | `Workspace` actor (via customer-env secret/`secretRefs`) | `RELAYCAST_PUBLIC_URL` (gateway public origin, embeds in signed file URLs), `RELAYCAST_FILE_SIGNING_SECRET` |
    | deployer | control-plane URL + api-key, artifact-bucket write creds |
 
@@ -380,16 +390,21 @@ Blocked on relaycast-repo work:
   self-host deployer, file object store (for >1 replica), realtime
   WebSockets, workspace-provisioning auth story, env contract freeze.
 - Therefore `runtime.backend: terse-actors` in `charts/relaycast` should land
-  only once at least items 1, 3 and 5 exist; the umbrella can ship the terse
-  subchart first so infra is exercised independently.
+  only once at least items 1, 3, 4 and 5 exist, and the gateway can run with a
+  least-privilege invocation credential separate from the terse admin
+  `api-key`. Item 4 is part of the gate because agents use the node WebSocket
+  transport by default; without it actor mode cannot serve default agents.
+  The umbrella can ship the terse subchart first so infra is exercised
+  independently.
 
 Open questions:
 
 - Do we want actor pods' outbound webhook/A2A traffic egress-controlled
   further than "public HTTPS only" (the actor adapter already enforces public
   HTTPS URLs; sandbox netpol allows all public egress)?
-- Single vs shared `api-key` between terse admin access and relaycast
-  gateway auth — recommend one key now, revisit if we hand customer projects
-  to anyone else.
+- Resolved: the gateway never shares the terse admin `api-key`. It uses a
+  separate invocation-only credential (see the values sketch); a missing
+  terse capability for scoped credentials blocks release rather than
+  justifying a shared key.
 - CapacityBuffer: keep off for the proof (requires GKE 1.35.2+ preview API);
   revisit for burst headroom.
