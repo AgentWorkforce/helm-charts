@@ -155,8 +155,17 @@ Run `./verify-agent-relay.sh --help` for all options.
    The response body is discarded.
 7. **Certificate:** each selected TLS ingress host completes a trusted TLS
    handshake, matches its hostname, and remains valid for the configured
-   minimum period. cert-manager `Certificate` readiness is also checked when
+   minimum period. TLS hosts come from Ingress `spec.tls`, or, for a GKE
+   Ingress without `spec.tls`, from the rule hosts of an Ingress that names a
+   ManagedCertificate in its `networking.gke.io/managed-certificates`
+   annotation. cert-manager `Certificate` readiness is also checked when
    available.
+8. **Managed certificate:** every GKE ManagedCertificate named by a selected
+   Ingress reports `certificateStatus: Active` and its domains cover the
+   hosts it serves.
+
+`--ingress-host HOST` limits derived health URLs, TLS hosts, and certificate
+references to that one host, even when it shares an Ingress with other hosts.
 
 Migration Job completion proves only that the selected Job completed. It does
 not prove application-version compatibility, downgrade compatibility, or
@@ -176,6 +185,25 @@ For charts with another health route, set `--health-path`:
   --release agent-relay \
   --health-path /healthz
 ```
+
+The services behind the agent-relay GKE Ingress do not share a health path
+(relay-dashboard, relay-cloud-api, and relayhistory serve `/healthz`;
+relaycast serves `/health`), so no single `--health-path` passes for every
+host. For the GKE umbrella, supply one URL per host instead:
+
+```bash
+./verify-agent-relay.sh \
+  --namespace agent-relay \
+  --release agent-relay \
+  --health-url https://relay.example.com/healthz \
+  --health-url https://api.example.com/healthz \
+  --health-url https://cast.example.com/health \
+  --health-url https://history.example.com/healthz
+```
+
+Here `relay.example.com` is `gkeIngress.hosts.root` (served by
+relay-dashboard), and `api`, `cast`, and `history` are the other
+`gkeIngress.hosts` values.
 
 Or supply one or more exact endpoints:
 
