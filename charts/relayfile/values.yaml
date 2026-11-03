@@ -2,6 +2,112 @@
 ## This is a YAML-formatted file. Declare variables to be passed into your templates.
 
 # ---------------------------------------------------------------------------
+# Runtime backend
+# ---------------------------------------------------------------------------
+# go:           the Go server (image.*, server.*, secrets.*); state in Postgres.
+# durable-actors: Relayfile on TerseAI durable-actors. A stateless gateway
+#               Deployment (named and selected like the Go server, so the
+#               Service, Ingress, HPA, PDB and NetworkPolicy are shared) routes
+#               each workspace to its own `Workspace` actor; file bytes go to
+#               object storage. See docs/self-hosted-durable-actors.md.
+runtime:
+  backend: go
+  durableActors:
+    # One image, three commands: gateway | session-broker | deploy.
+    image:
+      repository: ghcr.io/agentworkforce/relayfile-actors
+      # Pin a digest (sha256:<64 hex>) or, for local proofs only, a tag.
+      digest: ""
+      tag: ""
+      pullPolicy: IfNotPresent
+    # durable-actors project that holds the Workspace actors.
+    projectId: relayfile
+    # durable-actors organization the deployment is registered under.
+    organizationId: relayfile
+    # Control-plane origin. Empty: the umbrella's durable-actors release,
+    # http://<release>-durable-actors.<namespace>.svc.cluster.local:7100.
+    controlPlaneUrl: ""
+    # REQUIRED: an existing Secret in the release namespace (keys below).
+    existingSecret: ""
+    secretKeys:
+      # HS256 workspace-token secret. Optional when auth.jwksUrl is set.
+      jwtSecret: RELAYFILE_JWT_SECRET
+      # Shared secret between the gateway and the session broker.
+      brokerToken: RELAYFILE_ACTORS_BROKER_TOKEN
+      # Optional: enables /v1/internal/webhook-envelopes. Empty disables it.
+      internalHmacSecret: ""
+    # The durable-actors administrative api-key (the durable-actors chart's
+    # credentialsSecret, key api-key). Only the session broker and the deploy
+    # Job read it; the internet-facing gateway never does.
+    adminKeySecret:
+      name: actors-credentials
+      key: api-key
+    gateway:
+      # Stateless: any count >= 1 (autoscaling.* also applies).
+      replicaCount: 2
+      resources:
+        requests: { cpu: 100m, memory: 128Mi }
+        limits: { memory: 512Mi }
+    broker:
+      replicaCount: 1
+      port: 8090
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 256Mi }
+    # Registers the compiled Workspace actor bundle with the control plane.
+    # A plain Job (no Helm hook) whose name changes with its pod template, so
+    # a new image or setting runs it once more.
+    deployer:
+      enabled: true
+      # The durable-actors storage.bucket: compiled code is uploaded under
+      # durable-actors/v3/artifacts/<uuid>/. Required when enabled.
+      artifactBucket: ""
+      backoffLimit: 3
+      serviceAccount:
+        # Workload Identity: a GSA with roles/storage.objectUser on the bucket.
+        annotations: {}
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits: { memory: 1Gi }
+    # Where the gateway keeps file bytes. Actors only hold metadata and refs.
+    blobStore:
+      # gcs (Workload Identity via serviceAccount.annotations) | s3 (MinIO,
+      # AWS, R2, GCS-HMAC) | inline (bytes in actor SQLite; devRuntime only).
+      driver: gcs
+      bucket: ""
+      prefix: relayfile/
+      # Content at or below this many bytes stays inline in the actor.
+      inlineMaxBytes: 65536
+      s3:
+        endpoint: ""
+        region: us-east-1
+        forcePathStyle: false
+        # Secret with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY. Empty: the
+        # pod's ambient identity (IRSA, Pod Identity).
+        existingSecret: ""
+    # kind/CI only: run `durable-actors dev` as a sidecar in the gateway pod
+    # (single process, local storage, no GKE Sandbox, no GCS). Forces one
+    # replica, no broker and no deploy Job; the gateway then holds the dev
+    # runtime's key. Never for production.
+    devRuntime:
+      enabled: false
+      acknowledgeNonProduction: false
+      image:
+        repository: ghcr.io/agentworkforce/relayfile-actors-dev
+        digest: ""
+        tag: ""
+        pullPolicy: IfNotPresent
+      port: 7100
+      # Key in runtime.durableActors.existingSecret holding the dev runtime's
+      # DURABLE_ACTORS_SECRET (shared by the sidecar and the gateway).
+      secretKey: DURABLE_ACTORS_SECRET
+      # Empty: emptyDir (actor state is lost with the pod).
+      existingClaim: ""
+      resources:
+        requests: { cpu: 200m, memory: 512Mi }
+        limits: { memory: 2Gi }
+
+# ---------------------------------------------------------------------------
 # Image
 # ---------------------------------------------------------------------------
 image:

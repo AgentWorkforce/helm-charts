@@ -1,0 +1,91 @@
+{{- $ta := .Values.runtime.durableActors -}}
+{{- if and (include "relayfile.actors.enabled" .) (not (include "relayfile.actors.dev" .)) $ta.deployer.enabled -}}
+{{- $sa := include "relayfile.actors.deployerName" . -}}
+{{- $podTemplate := include "relayfile.actors.deployPodTemplate" . -}}
+{{- $identity := $podTemplate | sha256sum | trunc 8 -}}
+# Registers the compiled Workspace actor bundle (upload to the artifact bucket,
+# then PUT /v1/projects/<project>/deployment with the admin api-key). A plain
+# Job, not a Helm hook (installs run `helm template --no-hooks`): its name
+# carries a hash of its pod template, so a new image or setting runs it once
+# more and an unchanged re-apply is a no-op. The deploy command is idempotent.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.labels" . | nindent 4 }}
+    app.kubernetes.io/component: actors-deploy
+  {{- with $ta.deployer.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%s" $sa $identity }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.labels" . | nindent 4 }}
+    app.kubernetes.io/component: actors-deploy
+spec:
+  backoffLimit: {{ $ta.deployer.backoffLimit }}
+  template:
+    {{- $podTemplate | nindent 4 }}
+{{- end }}
+
+{{- define "relayfile.actors.deployPodTemplate" -}}
+{{- $ta := .Values.runtime.durableActors -}}
+metadata:
+  labels:
+    app.kubernetes.io/name: {{ include "relayfile.name" . }}-actors-deploy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: actors-deploy
+spec:
+  restartPolicy: Never
+  serviceAccountName: {{ include "relayfile.actors.deployerName" . }}
+  {{- with .Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+    - name: deploy
+      image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.image "path" "runtime.durableActors.image") | quote }}
+      imagePullPolicy: {{ $ta.image.pullPolicy }}
+      args: [deploy]
+      {{- with .Values.containerSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      env:
+        {{- include "relayfile.actors.adminEnv" . | nindent 8 }}
+        - name: DURABLE_ACTORS_ORGANIZATION_ID
+          value: {{ $ta.organizationId | quote }}
+        - name: DURABLE_ACTORS_ARTIFACT_BUCKET
+          value: {{ $ta.deployer.artifactBucket | quote }}
+        - name: HOME
+          value: /tmp
+      {{- with $ta.deployer.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumeMounts:
+        - { name: tmp, mountPath: /tmp }
+  volumes:
+    - name: tmp
+      emptyDir: {}
+  {{- with .Values.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

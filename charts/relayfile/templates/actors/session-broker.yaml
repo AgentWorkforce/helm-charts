@@ -1,0 +1,124 @@
+{{- if and (include "relayfile.actors.enabled" .) (not (include "relayfile.actors.dev" .)) -}}
+{{- $ta := .Values.runtime.durableActors -}}
+{{- $name := include "relayfile.actors.brokerName" . -}}
+# The session broker is the only long-running Relayfile workload that reads the
+# durable-actors admin api-key. It issues <=60s project sessions (invoke only:
+# no deployments, no admin APIs) and Workspace socket grants to the gateway,
+# authenticated by the shared broker token. It is never exposed outside the
+# release: its NetworkPolicy admits only the gateway pods.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.labels" . | nindent 4 }}
+    app.kubernetes.io/component: session-broker
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.labels" . | nindent 4 }}
+    app.kubernetes.io/component: session-broker
+spec:
+  replicas: {{ $ta.broker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "relayfile.actors.brokerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "relayfile.actors.brokerSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: session-broker
+          image: {{ include "relayfile.actors.imageRef" (dict "image" $ta.image "path" "runtime.durableActors.image") | quote }}
+          imagePullPolicy: {{ $ta.image.pullPolicy }}
+          args: [session-broker]
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $ta.broker.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ $ta.broker.port | quote }}
+            {{- include "relayfile.actors.adminEnv" . | nindent 12 }}
+            {{- include "relayfile.actors.secretEnv" (dict "name" "RELAYFILE_ACTORS_BROKER_TOKEN" "secret" $ta.existingSecret "key" $ta.secretKeys.brokerToken) | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+          {{- with $ta.broker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.labels" . | nindent 4 }}
+    app.kubernetes.io/component: session-broker
+spec:
+  type: ClusterIP
+  ports:
+    - { name: http, port: {{ $ta.broker.port }}, targetPort: http, protocol: TCP }
+  selector:
+    {{- include "relayfile.actors.brokerSelectorLabels" . | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "relayfile.labels" . | nindent 4 }}
+    app.kubernetes.io/component: session-broker
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "relayfile.actors.brokerSelectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "relayfile.server.selectorLabels" . | nindent 14 }}
+      ports:
+        - { port: http, protocol: TCP }
+{{- end }}
