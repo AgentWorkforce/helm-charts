@@ -29,21 +29,45 @@ command_log="${tmp_root}/commands.log"
 mkdir -p "${mock_bin}" "${fixtures}" "${gcs}"
 : >"${command_log}"
 
-# kubectl prints ${MOCK_FIXTURES}/<resource>.json for "get <resource>".
+# kubectl prints ${MOCK_FIXTURES}/<resource>-<name>.json or
+# ${MOCK_FIXTURES}/<resource>.json for "get <resource> [name]". "create -f"
+# records the created object's name and rejects duplicates.
 cat >"${mock_bin}/kubectl" <<'MOCK'
 #!/usr/bin/env bash
 printf 'kubectl' >>"${MOCK_COMMAND_LOG}"
 printf ' %s' "$@" >>"${MOCK_COMMAND_LOG}"
 printf '\n' >>"${MOCK_COMMAND_LOG}"
 resource=""
+name=""
+create_file=""
 previous=""
 for arg in "$@"; do
-  [[ "${previous}" == "get" ]] && resource="${arg}"
+  if [[ "${previous}" == "get" ]]; then
+    resource="${arg}"
+  elif [[ -n "${resource}" && -z "${name}" && "${arg}" != -* &&
+    "${previous}" != -* ]]; then
+    name="${arg}"
+  fi
+  [[ "${previous}" == "create" && "${arg}" == "-f" ]] && create_file="next"
+  [[ "${create_file}" == "next" && "${arg}" != "-f" ]] && create_file="${arg}"
   previous="${arg}"
 done
-if [[ -n "${resource}" && -f "${MOCK_FIXTURES}/${resource}.json" ]]; then
-  cat "${MOCK_FIXTURES}/${resource}.json"
+if [[ -n "${create_file}" && "${create_file}" != "next" ]]; then
+  created="$(jq -r '.metadata.name' "${create_file}")"
+  if grep -qx "created ${created}" "${MOCK_COMMAND_LOG}"; then
+    echo "AlreadyExists" >&2
+    exit 1
+  fi
+  printf 'created %s\n' "${created}" >>"${MOCK_COMMAND_LOG}"
   exit 0
+fi
+if [[ -n "${resource}" ]]; then
+  for fixture in "${MOCK_FIXTURES}/${resource}-${name}.json" "${MOCK_FIXTURES}/${resource}.json"; do
+    if [[ -f "${fixture}" ]]; then
+      cat "${fixture}"
+      exit 0
+    fi
+  done
 fi
 case " $* " in
   *" api-resources "*)
@@ -108,6 +132,18 @@ printf 'gcloud' >>"${MOCK_COMMAND_LOG}"
 printf ' %s' "$@" >>"${MOCK_COMMAND_LOG}"
 printf '\n' >>"${MOCK_COMMAND_LOG}"
 to_path() { printf '%s/%s' "${MOCK_GCS}" "${1#gs://}"; }
+case "$1 $2 $3" in
+  "storage buckets describe") cat "${MOCK_FIXTURES}/gcloud-bucket.json"; exit 0 ;;
+  "sql instances describe") cat "${MOCK_FIXTURES}/gcloud-sql-instance.json"; exit 0 ;;
+  "sql backups list")
+    # Report one successful backup whose description is the filtered ID.
+    for arg in "$@"; do
+      case "${arg}" in --filter=description=*) id="${arg#--filter=description=}" ;; esac
+    done
+    printf '[{"id":"1700000000","status":"SUCCESSFUL","description":"%s"}]\n' "${id}"
+    exit 0
+    ;;
+esac
 [[ "$1" == "storage" ]] || exit 0
 shift
 case "$1" in
@@ -345,5 +381,60 @@ for status in '{"active":0,"failed":0}' \
   fi
 done
 pass "pre-upgrade requires Complete=True on every migration Job"
+
+# ---------------------------------------------------------------------------
+# charts/agent-relay/scripts/gcp-recovery-backup.sh
+# ---------------------------------------------------------------------------
+write_backup_fixtures() {
+  cat >"${fixtures}/gcloud-bucket.json" <<'JSON'
+{"retentionPolicy":{"isLocked":true,"retentionPeriod":"3110400s"},
+ "uniformBucketLevelAccess":{"enabled":true},"publicAccessPrevention":"enforced"}
+JSON
+  cat >"${fixtures}/gcloud-sql-instance.json" <<'JSON'
+{"state":"RUNNABLE","settings":{"backupConfiguration":{"enabled":true,"pointInTimeRecoveryEnabled":true}}}
+JSON
+  cat >"${fixtures}/volumesnapshotclass.snapshot.storage.k8s.io.json" <<'JSON'
+{"deletionPolicy":"Retain","driver":"pd.csi.storage.gke.io"}
+JSON
+  local pvc
+  for pvc in relaycast-data relayauth-data; do
+    jq -n --arg name "${pvc}" '{metadata: {name: $name}, status: {phase: "Bound"}}' \
+      >"${fixtures}/pvc-${pvc}.json"
+  done
+  cat >"${fixtures}/volumesnapshot.json" <<'JSON'
+{"metadata":{"name":"vs-test"},"spec":{"source":{"persistentVolumeClaimName":"relaycast-data"}},
+ "status":{"readyToUse":true,"boundVolumeSnapshotContentName":"snapcontent-1"}}
+JSON
+  cat >"${fixtures}/volumesnapshotcontent.snapshot.storage.k8s.io.json" <<'JSON'
+{"spec":{"deletionPolicy":"Retain","volumeSnapshotClassName":"retain","driver":"pd.csi.storage.gke.io"},
+ "status":{"snapshotHandle":"projects/p/global/snapshots/s"}}
+JSON
+}
+
+run_backup() {
+  local pod_uid="$1"
+  shift
+  env "$@" POD_UID="${pod_uid}" PROJECT_ID=relay-project CLOUDSQL_INSTANCE=relay-db \
+    CLOUDSQL_DATABASES=cloud,history GCS_SOURCE_BUCKET=relay-source \
+    GCS_ARCHIVE_BUCKET=relay-archive SNAPSHOT_CLASS=retain \
+    RELAYCAST_PVC=relaycast-data RELAYAUTH_PVC=relayauth-data \
+    KUBERNETES_NAMESPACE=relay HELM_RELEASE=relay RETENTION_DAYS=36 \
+    RPO_MINUTES=15 RTO_HOURS=4 \
+    "${TEST_BASH}" "${RECOVERY_DIR}/gcp-recovery-backup.sh" >"${tmp_root}/backup.out" 2>&1
+}
+
+latest_backup_evidence() {
+  find "${gcs}/relay-archive/recovery" -path '*/evidence/backup.json' | LC_ALL=C sort | tail -n 1
+}
+
+reset_fixtures
+write_backup_fixtures
+run_backup 1111aaaa || { cat "${tmp_root}/backup.out" >&2; fail "mocked backup failed"; }
+run_backup 2222bbbb || { cat "${tmp_root}/backup.out" >&2; fail "second backup in the same second collided"; }
+grep -Eq '^created vs-ar-[0-9]{8}t[0-9]{6}z-1111aaaa-relaycast$' "${command_log}" ||
+  fail "snapshot name does not carry the recovery ID suffix"
+grep -Eq '^created vs-ar-[0-9]{8}t[0-9]{6}z-2222bbbb-relayauth$' "${command_log}" ||
+  fail "second capture did not get its own snapshot names"
+pass "backup snapshot names carry the full recovery ID"
 
 printf 'All self-hosted script tests passed.\n'

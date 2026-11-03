@@ -61,8 +61,11 @@ uid_suffix="$(tr '[:upper:]' '[:lower:]' <<<"$uid_suffix" | tr -cd 'a-z0-9' | cu
 recovery_ts="$(date -u +%Y%m%dT%H%M%SZ)"
 RECOVERY_ID="ar-${recovery_ts}-${uid_suffix}"
 # VolumeSnapshot metadata.name must be DNS-1123; RECOVERY_ID keeps its
-# uppercase T/Z for GCS paths and label values.
-SNAPSHOT_PREFIX="vs-$(tr '[:upper:]' '[:lower:]' <<<"${recovery_ts}")"
+# uppercase T/Z for GCS paths and label values. The prefix carries the full
+# recovery ID, including the pod UID suffix, so two captures in the same
+# second do not collide; "kubectl create" (not apply) fails closed if a
+# snapshot of that name already exists.
+SNAPSHOT_PREFIX="vs-$(tr '[:upper:]' '[:lower:]' <<<"${RECOVERY_ID}")"
 ARCHIVE_PREFIX="${ARCHIVE_PREFIX:-recovery}"
 ARCHIVE_PREFIX="${ARCHIVE_PREFIX#/}"
 ARCHIVE_PREFIX="${ARCHIVE_PREFIX%/}"
