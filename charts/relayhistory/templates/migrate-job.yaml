@@ -10,7 +10,7 @@ metadata:
   name: {{ printf "%s-migrate-%s" (include "relayhistory.fullname" . | trunc 45 | trimSuffix "-") $identity }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    {{- include "relayhistory.labels" . | nindent 4 }}
+    {{- include "relayhistory.migrationLabels" . | nindent 4 }}
 spec:
   backoffLimit: {{ .Values.migrations.backoffLimit }}
   activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}

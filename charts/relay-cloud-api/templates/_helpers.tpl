@@ -7,6 +7,18 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: agent-relay
 {{- end -}}
+{{- /* Job metadata labels: the runtime component label is replaced by
+migration so `kubectl wait job -l app.kubernetes.io/component=migration`
+(NOTES.txt) finds the Job. */ -}}
+{{- define "relay-cloud-api.migrationLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
+app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: migration
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: agent-relay
+{{- end -}}
 {{- define "relay-cloud-api.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "relay-cloud-api.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}

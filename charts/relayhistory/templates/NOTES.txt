@@ -11,5 +11,5 @@ relayhistory {{ include "relayhistory.fullname" . }} is configured as one replic
 The schema migration is a plain Job, not a Helm hook. Wait for it to finish
 before treating the rollout as healthy:
 
-  kubectl -n {{ .Release.Namespace }} wait --for=condition=complete job -l app.kubernetes.io/component=migration --timeout={{ .Values.migrations.activeDeadlineSeconds }}s
+  kubectl -n {{ .Release.Namespace }} wait --for=condition=complete job -l app.kubernetes.io/name={{ include "relayhistory.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=migration --timeout={{ .Values.migrations.activeDeadlineSeconds }}s
 {{- end }}

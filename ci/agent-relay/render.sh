@@ -126,4 +126,12 @@ for child in relayhistory relay-cloud-api; do
   fi
 done
 
+# NOTES.txt waits on Jobs by component=migration; the Job object itself
+# (not only its pods) must carry that label.
+for child in relayhistory relay-cloud-api; do
+  test "$(yq "select(.kind == \"Job\" and .metadata.name == \"${child}-migrate-*\") |
+    .metadata.labels[\"app.kubernetes.io/component\"]" <<<"$out")" = migration \
+    || { echo "$child: migration Job metadata lacks app.kubernetes.io/component=migration" >&2; exit 1; }
+done
+
 echo "agent-relay GCP proof render contract: ok"
