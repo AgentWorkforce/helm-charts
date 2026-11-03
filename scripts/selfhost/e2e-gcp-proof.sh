@@ -263,7 +263,7 @@ install_driver() {
 
 # phase_input: the state plus the secrets the driver may need, on stdout.
 phase_input() {
-  python3 - "$STATE" "$RCS" "$WORK/enrollment-token" "$RELAYCAST_MODE" "$RELAYCAST_CREATE_TIMEOUT" <<'PY'
+  python3 - "$STATE" "$RCS" "$WORK/enrollment-token" "$RELAYCAST_MODE" "$RELAYCAST_CREATE_TIMEOUT" "$CLEANUP" <<'PY'
 import json, sys
 text = open(sys.argv[1]).read().strip()
 state = json.loads(text) if text else {}
@@ -274,6 +274,7 @@ def read(path):
         return ""
 state["secrets"] = {"relaycastInternalSecret": read(sys.argv[2]), "enrollmentToken": read(sys.argv[3])}
 state["relaycast"] = {"mode": sys.argv[4], "createTimeoutMs": int(sys.argv[5]) * 1000}
+state["cleanup"] = sys.argv[6] == "true"
 sys.stdout.write(json.dumps(state))
 PY
 }

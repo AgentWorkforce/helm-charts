@@ -167,7 +167,9 @@ async function checkRelaycastInternal() {
   must(!admin || admin.create !== false, "relaycast reports workspace_admin.create=false");
   // Cleanup deletes what bootstrap creates, so a Relaycast that cannot
   // delete workspaces is refused before anything is created.
-  must(!admin || admin.delete !== false, "relaycast reports workspace_admin.delete=false; the run could not clean up its workspaces");
+  // (Only when cleanup is on: --no-cleanup keeps the workspaces anyway.)
+  must(!admin || admin.delete !== false || state.cleanup === false,
+    "relaycast reports workspace_admin.delete=false; the run could not clean up its workspaces (use --no-cleanup to keep them)");
   return admin ? `create=${admin.create} delete=${admin.delete}` : "workspace_admin=unreported";
 }
 
