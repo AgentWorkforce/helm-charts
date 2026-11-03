@@ -419,4 +419,95 @@ fi
 grep -q 'relaycast.url is required' <<<"$rauth_fail" \
   || { echo "relayauth model B failed without the relaycast.url error" >&2; exit 1; }
 
+# --- durable-actors: the GKE proof overlay (control plane + Relaycast and
+# Relayfile in runtime.backend=durable-actors) and the kind proof shape.
+da_digest() { printf 'sha256:%s' "$(printf "$1%.0s" $(seq 64))"; }
+da_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/values-gcp-proof-live.yaml
+  -f charts/agent-relay/values-gcp-proof-durable-actors.yaml
+  --set "relaycast.runtime.durableActors.gateway.image.digest=$(da_digest a)"
+  --set "relaycast.runtime.durableActors.deployer.image.digest=$(da_digest b)"
+  --set "relayfile.runtime.durableActors.image.digest=$(da_digest c)")
+da_out=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}")
+da_fail() { echo "durable-actors overlay: $*" >&2; exit 1; }
+# Capture yq output before grep -q: with pipefail an early grep exit is a SIGPIPE failure.
+da_kind() { local got; got=$(yq "select(.kind == \"$1\" and .metadata.name == \"$2\") | .metadata.name" <<<"$da_out"); grep -qx "$2" <<<"$got"; }
+for obj in Deployment/agent-relay-durable-actors Deployment/agent-relay-durable-actors-pool-manager \
+  Service/agent-relay-durable-actors Namespace/agent-relay-agent-relay \
+  NetworkPolicy/agent-relay-durable-actors NetworkPolicy/agent-relay-durable-actors-control-plane \
+  Deployment/relaycast Deployment/relayfile-server Deployment/relayfile-session-broker \
+  NetworkPolicy/relayfile-session-broker Service/agent-relay-gcp-proof-actors-edge \
+  BackendConfig/agent-relay-gcp-proof-actors-edge; do
+  da_kind "${obj%%/*}" "${obj#*/}" || da_fail "missing ${obj}"
+done
+test "$(yq 'select(.kind == "Job") | .metadata.name' <<<"$da_out" | grep -Ec '^(relaycast|relayfile)-actors-deploy-[0-9a-f]{8}$')" = 2 \
+  || da_fail "expected the relaycast and relayfile deploy Jobs"
+da_secrets=$(yq 'select(.kind == "Secret") | .metadata.name' <<<"$da_out")
+if grep -q . <<<"$da_secrets"; then da_fail "renders a Secret"; fi
+if grep -Eq 'helm\.sh/hook:' <<<"$da_out"; then da_fail "renders a Helm hook"; fi
+# Custody: only the deploy Jobs and the relayfile session broker read the
+# durable-actors admin api-key; internet-facing gateways never do.
+admin_readers=$(yq 'select(.kind == "Deployment" or .kind == "Job") | select(.. | select(has("secretKeyRef")) | .secretKeyRef.name == "actors-credentials") | .kind + "/" + .metadata.name' <<<"$da_out" | grep -v '^---$' | sort -u)
+for reader in $admin_readers; do
+  case $reader in
+    Deployment/agent-relay-durable-actors|Deployment/agent-relay-durable-actors-pool-manager) ;;
+    Deployment/relayfile-session-broker|Job/relaycast-actors-deploy-*|Job/relayfile-actors-deploy-*) ;;
+    *) da_fail "$reader can read the durable-actors admin api-key" ;;
+  esac
+done
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relaycast") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_SECRET") | .valueFrom.secretKeyRef.name' <<<"$da_out")" = relaycast-durable-actors-invoke \
+  || da_fail "the relaycast gateway must use its own invocation Secret"
+for consumer in relaycast relayfile-server; do
+  test "$(yq "select(.kind == \"Deployment\" and .metadata.name == \"$consumer\") | .spec.template.spec.containers[0].env[] | select(.name == \"DURABLE_ACTORS_CONTROL_PLANE_URL\") | .value" <<<"$da_out")" = http://agent-relay-durable-actors.agent-relay.svc.cluster.local:7100 \
+    || da_fail "$consumer does not target the umbrella control plane"
+done
+test "$(yq 'select(.kind == "Deployment" and .metadata.name == "agent-relay-durable-actors") | .spec.template.spec.containers[0].env[] | select(.name == "DURABLE_ACTORS_PUBLIC_URL") | .value' <<<"$da_out")" = https://actors.gcp-proof.agentrelay.com \
+  || da_fail "durable-actors publicUrl is not the actors host"
+for host in actors.gcp-proof.agentrelay.com files.gcp-proof.agentrelay.com; do
+  domains=$(yq 'select(.kind == "ManagedCertificate") | .spec.domains[]' <<<"$da_out")
+  grep -qx "$host" <<<"$domains" || da_fail "ManagedCertificate lacks $host"
+done
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | select(.host == "actors.gcp-proof.agentrelay.com") | .http.paths[0].backend.service.name' <<<"$da_out")" = agent-relay-gcp-proof-actors-edge \
+  || da_fail "actors host is not routed to the actors edge Service"
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | select(.host == "files.gcp-proof.agentrelay.com") | .http.paths[0].backend.service.name' <<<"$da_out")" = relayfile-server \
+  || da_fail "files host is not routed to the relayfile gateway"
+test "$(yq 'select(.kind == "Service" and .metadata.name == "agent-relay-gcp-proof-actors-edge") | .spec.selector["app.kubernetes.io/name"]' <<<"$da_out")" = agent-relay-durable-actors \
+  || da_fail "the actors edge Service does not select the control plane"
+# The cast edge-deny rules are unchanged in actor mode.
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | select(.host == "cast.gcp-proof.agentrelay.com") | .http.paths[] | select(.path == "/internal") | .backend.service.name' <<<"$da_out")" = agent-relay-gcp-proof-cast-edge-deny \
+  || da_fail "cast /internal is not edge-denied in actor mode"
+if command -v kubeconform >/dev/null; then
+  kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version "${KUBE_VERSION:-1.33.0}" <<<"$da_out" >/dev/null \
+    || da_fail "kubeconform failed"
+fi
+
+# Fail closed on miswiring between the umbrella, the control plane and its consumers.
+expect_umbrella_failure() { # expected-error helm-args...
+  local expected=$1 output; shift
+  if output=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks "${da_args[@]}" "$@" 2>&1); then
+    da_fail "rendered despite expected failure: $expected"
+  fi
+  grep -Fq "$expected" <<<"$output" || { echo "$output" >&2; da_fail "failed without expected error: $expected"; }
+}
+expect_umbrella_failure "requires components.durableActors=true" --set components.durableActors=false --set gkeIngress.hosts.actors=
+expect_umbrella_failure "components.durableActors=true has no consumer" \
+  --set relaycast.runtime.backend=sqlite --set relayfile.runtime.backend=go --set gkeIngress.hosts.files= \
+  --set relaycast.credentials.format=legacy --set relaycast.credentials.authority= --set relayfile.secrets.existingSecret=relayfile
+expect_umbrella_failure "durable-actors.publicUrl must be https://actors.gcp-proof.agentrelay.com" --set durable-actors.publicUrl=https://other.example.com
+expect_umbrella_failure "must be durable-actors.credentialsSecret" --set relayfile.runtime.durableActors.adminKeySecret.name=other-admin
+expect_umbrella_failure "must be durable-actors.storage.bucket" --set relaycast.runtime.durableActors.deployer.artifactBucket=other-bucket
+expect_umbrella_failure "gkeIngress.hosts.files requires relayfile.service.annotations" --set 'relayfile.service.annotations=null'
+expect_umbrella_failure "gkeIngress.hosts must all be distinct" --set gkeIngress.hosts.files=actors.gcp-proof.agentrelay.com
+expect_umbrella_failure "/images/controlPlane/digest" --set durable-actors.images.controlPlane.digest=
+
+# The kind proof shape (durable-actors dev sidecars, MinIO) renders without
+# the GKE-only control plane.
+kind_out=$(helm template agent-relay charts/agent-relay -n agent-relay --no-hooks -f ci/agent-relay/kind-durable-actors-values.yaml)
+if grep -q 'agent-relay-durable-actors' <<<"$kind_out"; then
+  echo "kind proof shape renders the GKE durable-actors control plane" >&2; exit 1
+fi
+for d in relaycast relayfile-server; do
+  test "$(yq "select(.kind == \"Deployment\" and .metadata.name == \"$d\") | .spec.template.spec.containers[1].name" <<<"$kind_out")" = durable-actors-dev \
+    || { echo "kind proof shape: $d lacks the durable-actors dev sidecar" >&2; exit 1; }
+done
+
 echo "agent-relay GCP proof render contract: ok"

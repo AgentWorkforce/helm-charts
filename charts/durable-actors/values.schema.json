@@ -2,6 +2,9 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "global": {
+      "type": "object"
+    },
     "publicUrl": {
       "type": "string",
       "pattern": "^https://[^/?#@]+/?$"

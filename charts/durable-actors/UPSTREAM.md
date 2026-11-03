@@ -29,7 +29,14 @@ Image digests pinned by the release chart (`images.*` in `values.yaml`), all in
 - `ci/*-values.yaml`: placeholder fixtures so `scripts/ci/charts.sh static`
   can lint and render the chart; they are not shipped values.
 
-Patches to upstream files: **none**.
+Patches to upstream files (report upstream; drop when fixed there):
+
+1. `values.schema.json`: allow a root `global` object. The upstream schema sets
+   `additionalProperties: false` at the root, and Helm injects `global` into
+   every subchart's values, so the chart cannot be used as a dependency of an
+   umbrella that defines globals (agent-relay sets `global.tenant`). Error
+   without it: `durable-actors: at '': additional properties 'global' not
+   allowed`. One added property; nothing else changes.
 
 ## Re-vendoring
 
@@ -39,6 +46,7 @@ gh release download "v${VERSION}" -R TerseAI/durable-actors -p "durable-actors-$
 shasum -a 256 "durable-actors-${VERSION}.tgz"   # record it above
 rm -rf charts/durable-actors/{Chart.yaml,values.yaml,values.schema.json,README.md,.helmignore,templates}
 tar xzf "durable-actors-${VERSION}.tgz" -C charts/
+# Re-apply the patches listed above unless upstream fixed them.
 ```
 
 Then bump the umbrella's `durable-actors` dependency version, run

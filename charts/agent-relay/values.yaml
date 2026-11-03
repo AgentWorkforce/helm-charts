@@ -9,6 +9,13 @@ components:
   cloudApi: true
   dashboard: true
   relayflows: false
+  # TerseAI durable-actors control plane (vendored charts/durable-actors).
+  # Only useful with an actor-mode consumer: relaycast.runtime.backend or
+  # relayfile.runtime.backend set to durable-actors. GKE Sandbox + GCS only.
+  durableActors: false
+  # Relayfile (charts/relayfile). Off in the suite until its inclusion is
+  # decided; runtime.backend durable-actors needs components.durableActors.
+  relayfile: false
 
 gkeIngress:
   enabled: false
@@ -21,6 +28,12 @@ gkeIngress:
     api: ""
     cast: ""
     history: ""
+    # Optional. The durable-actors publicUrl host (https://<actors>): SDK
+    # follow-up invocations and actor WebSocket URLs use it. Requires
+    # components.durableActors and durable-actors.publicUrl=https://<actors>.
+    actors: ""
+    # Optional. Relayfile's public host; requires components.relayfile.
+    files: ""
   # serviceName is derived from each child chart's fullname (fullnameOverride,
   # else <release>-<chart>); an explicit value must match it. servicePort must
   # match the child's service.port.
@@ -33,6 +46,10 @@ gkeIngress:
     api: { serviceName: "", servicePort: 80, timeoutSec: 3600 }
     cast: { serviceName: "", servicePort: 8787 }
     history: { serviceName: "", servicePort: 8080 }
+    files: { serviceName: "", servicePort: 8080 }
+  # Seconds the GCE backend keeps a request (and an upgraded WebSocket) open
+  # for the actors host; durable-actors sockets are long-lived.
+  actorsBackendTimeoutSec: 3600
 
 # Child values are intentionally not populated with credentials or image
 # placeholders here. Every leaf chart fails closed until its existingSecret,
@@ -57,3 +74,15 @@ relay-dashboard: {}
 # (standalone.flow.*) or worker credentials (credentials.existingSecret,
 # worker.cloudUrl), and an immutable image for production.
 relayflows: {}
+# Passed through to the vendored durable-actors chart when
+# components.durableActors=true; see charts/durable-actors/values.yaml and
+# docs/self-hosted-durable-actors.md. Its schema requires publicUrl,
+# placement.zone, storage.bucket and serviceAccount.googleServiceAccount.
+durable-actors: {}
+relayfile: {}
+# Umbrella NetworkPolicy for the durable-actors control plane (port 7100):
+# release-namespace pods, the actor sandbox namespace and, with
+# gkeIngress.hosts.actors, the GKE load balancer ranges.
+durableActorsNetworkPolicy:
+  enabled: true
+  extraIngressFrom: []

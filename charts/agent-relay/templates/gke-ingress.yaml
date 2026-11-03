@@ -40,6 +40,39 @@
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
 {{- end }}
 {{- if ne (len (list $hostRoot $hostApi $hostCast $hostHistory | uniq)) 4 }}{{ fail "gkeIngress.hosts.root/api/cast/history must all be distinct" }}{{ end -}}
+{{- /* Optional hosts: the durable-actors public origin and Relayfile. */ -}}
+{{- $hostActors := dig "hosts" "actors" "" $gke -}}
+{{- $hostFiles := dig "hosts" "files" "" $gke -}}
+{{- $durableActors := index .Values "durable-actors" | default dict -}}
+{{- $relayfile := .Values.relayfile | default dict -}}
+{{- $optionalHosts := list -}}
+{{- if $hostActors }}
+{{- if not $components.durableActors }}{{ fail "gkeIngress.hosts.actors requires components.durableActors=true" }}{{ end -}}
+{{- if dig "ingress" "enabled" false $durableActors }}{{ fail "gkeIngress.hosts.actors routes the durable-actors control plane; set durable-actors.ingress.enabled=false (one edge only)" }}{{ end -}}
+{{- if ne (trimSuffix "/" (dig "publicUrl" "" $durableActors)) (printf "https://%s" $hostActors) }}{{ fail (printf "durable-actors.publicUrl must be https://%s (gkeIngress.hosts.actors): SDK follow-up calls and actor WebSocket URLs use it" $hostActors) }}{{ end -}}
+{{- $optionalHosts = append $optionalHosts $hostActors -}}
+{{- end }}
+{{- if $hostFiles }}
+{{- if not $components.relayfile }}{{ fail "gkeIngress.hosts.files requires components.relayfile=true" }}{{ end -}}
+{{- if dig "ingress" "enabled" false $relayfile }}{{ fail "gkeIngress.hosts.files requires relayfile.ingress.enabled=false" }}{{ end -}}
+{{- if ne (dig "service" "annotations" "cloud.google.com/neg" "" $relayfile) "{\"ingress\": true}" }}{{ fail "gkeIngress.hosts.files requires relayfile.service.annotations[cloud.google.com/neg]={\"ingress\": true}" }}{{ end -}}
+{{- $optionalHosts = append $optionalHosts $hostFiles -}}
+{{- end }}
+{{- range $name, $host := dict "actors" $hostActors "files" $hostFiles }}
+{{- if and $host (not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host)) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
+{{- end }}
+{{- $allHosts := concat (list $hostRoot $hostApi $hostCast $hostHistory) $optionalHosts -}}
+{{- if ne (len ($allHosts | uniq)) (len $allHosts) }}{{ fail "gkeIngress.hosts must all be distinct" }}{{ end -}}
+{{- $actorsName := printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- $actorsEdge := printf "%s-actors-edge" $gkeName | trunc 63 | trimSuffix "-" -}}
+{{- $filesService := "" -}}
+{{- if $hostFiles }}
+{{- $filesBase := dig "fullnameOverride" "" $relayfile | default (ternary .Release.Name (printf "%s-%s" .Release.Name (dig "nameOverride" "" $relayfile | default "relayfile")) (contains (dig "nameOverride" "" $relayfile | default "relayfile") .Release.Name)) | trunc 63 | trimSuffix "-" -}}
+{{- $filesService = printf "%s-server" $filesBase | trunc 63 | trimSuffix "-" -}}
+{{- $configured := dig "backends" "files" "serviceName" "" $gke -}}
+{{- if and $configured (ne $configured $filesService) }}{{ fail (printf "gkeIngress.backends.files.serviceName=%s does not match the relayfile Service %s; leave it empty to derive it" $configured $filesService) }}{{ end -}}
+{{- if ne (int (dig "backends" "files" "servicePort" 0 $gke)) (int (dig "service" "port" 8080 $relayfile)) }}{{ fail "gkeIngress.backends.files.servicePort must equal relayfile.service.port" }}{{ end -}}
+{{- end }}
 {{- /* Backend Service names are derived from each child's fullname rules, so
 the Ingress always targets the Services the children actually render. An
 explicit backends.<name>.serviceName must equal that derived name. */ -}}
@@ -110,6 +143,9 @@ spec:
     - {{ $hostApi | quote }}
     - {{ $hostCast | quote }}
     - {{ $hostHistory | quote }}
+    {{- range $optionalHosts }}
+    - {{ . | quote }}
+    {{- end }}
 ---
 apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
@@ -144,6 +180,51 @@ spec:
     - name: http
       port: {{ $gke.backends.cast.servicePort }}
       protocol: TCP
+{{- if $hostActors }}
+---
+# The durable-actors control plane behind the suite's load balancer. The
+# vendored chart's Service is not annotated for NEGs, so this edge Service
+# (same pods, port 7100) carries the NEG and a BackendConfig whose timeout
+# keeps actor WebSockets open. GCE health checks use the pods' /healthz
+# readiness probe.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ $actorsEdge }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: actors-edge
+spec:
+  timeoutSec: {{ dig "actorsBackendTimeoutSec" 3600 $gke | int }}
+  healthCheck:
+    type: HTTP
+    requestPath: /healthz
+    port: 7100
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $actorsEdge }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: agent-relay
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: actors-edge
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: {{ printf "{\"default\": \"%s\"}" $actorsEdge | squote }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ $actorsName }}
+  ports:
+    - name: http
+      port: 7100
+      targetPort: 7100
+      protocol: TCP
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -235,4 +316,26 @@ spec:
               service:
                 name: {{ index $backendNames "history" }}
                 port: { number: {{ $gke.backends.history.servicePort }} }
+    {{- if $hostActors }}
+    - host: {{ $hostActors | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $actorsEdge }}
+                port: { number: 7100 }
+    {{- end }}
+    {{- if $hostFiles }}
+    - host: {{ $hostFiles | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $filesService }}
+                port: { number: {{ $gke.backends.files.servicePort }} }
+    {{- end }}
 {{- end }}
