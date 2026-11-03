@@ -118,20 +118,26 @@ spec:
             const ns = fs.readFileSync(d + 'namespace', 'utf8').trim();
             const deadline = Date.now() + Number(process.env.DRAIN_WAIT_SECONDS) * 1000;
             const path = '/api/v1/namespaces/' + ns + '/pods?labelSelector=' + encodeURIComponent(process.env.HISTORY_SELECTOR);
+            // Each request is bounded by the remaining budget (at most 10 s), so
+            // an API server that stops answering cannot outlast DRAIN_WAIT_SECONDS.
             const count = () => new Promise((resolve, reject) => {
-              https.get({ host: process.env.KUBERNETES_SERVICE_HOST, port: process.env.KUBERNETES_SERVICE_PORT, path, ca: fs.readFileSync(d + 'ca.crt'),
+              const timeout = Math.max(1000, Math.min(10000, deadline - Date.now()));
+              const req = https.get({ host: process.env.KUBERNETES_SERVICE_HOST, port: process.env.KUBERNETES_SERVICE_PORT, path, ca: fs.readFileSync(d + 'ca.crt'), timeout,
                 headers: { Authorization: 'Bearer ' + fs.readFileSync(d + 'token', 'utf8').trim() } }, (res) => {
                 let body = '';
                 res.on('data', (c) => { body += c; });
                 res.on('end', () => res.statusCode === 200 ? resolve(JSON.parse(body).items.length) : reject(new Error('HTTP ' + res.statusCode)));
-              }).on('error', reject);
+                res.on('error', reject);
+              });
+              req.on('timeout', () => req.destroy(new Error('request timed out after ' + timeout + 'ms')));
+              req.on('error', reject);
             });
             (async () => {
               for (;;) {
                 let n = -1;
                 try { n = await count(); } catch (e) { console.error('listing History pods failed: ' + e.message); }
                 if (n === 0) { console.log('no History pods remain; starting the write-hold migration'); return; }
-                if (Date.now() > deadline) { console.error('History pods still exist after ' + process.env.DRAIN_WAIT_SECONDS + 's; not migrating'); process.exit(1); }
+                if (Date.now() >= deadline) { console.error('History pods still exist after ' + process.env.DRAIN_WAIT_SECONDS + 's; not migrating'); process.exit(1); }
                 if (n > 0) console.log(n + ' History pod(s) still exist (including terminating); waiting');
                 await new Promise((r) => setTimeout(r, 2000));
               }
