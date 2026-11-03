@@ -171,4 +171,9 @@ expect_leaf_failure relay-dashboard "runtime.loginPath must not be /" --set runt
 expect_leaf_failure relay-dashboard "runtime.apiBasePath and runtime.loginPath must differ" --set runtime.loginPath=/cloud/api/
 expect_leaf_failure relay-dashboard "runtime.loginPath must differ from runtime.appPath" --set runtime.appPath=/app --set runtime.loginPath=/app/
 
+for child in relay-dashboard relay-cloud-api relayhistory; do
+  expect_leaf_failure "$child" "podLabels must not set selector label app.kubernetes.io/name" \
+    --set 'podLabels.app\.kubernetes\.io/name=custom'
+done
+
 echo "agent-relay GCP proof render contract: ok"

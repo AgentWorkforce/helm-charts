@@ -26,6 +26,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "relay-dashboard.validate" -}}
 {{- $image := include "relay-dashboard.image" . -}}
 {{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the dashboard image serves one static replica and the chart makes no HA claim" }}{{ end -}}
+{{- range $key, $_ := include "relay-dashboard.selectorLabels" . | fromYaml }}{{ if hasKey ($.Values.podLabels | default dict) $key }}{{ fail (printf "podLabels must not set selector label %s: the Deployment selector would no longer match its pods" $key) }}{{ end }}{{ end -}}
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP; expose the dashboard only through ingress" }}{{ end -}}
 {{- if not (regexMatch "^https://[^/?#]+$" .Values.runtime.publicUrl) }}{{ fail "runtime.publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $path := dict "appPath" .Values.runtime.appPath "apiBasePath" .Values.runtime.apiBasePath "loginPath" .Values.runtime.loginPath }}{{ if not (regexMatch "^/[^?#]*$" $path) }}{{ fail (printf "runtime.%s must be an absolute path without query or fragment" $name) }}{{ end }}{{ end -}}
