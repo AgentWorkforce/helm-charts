@@ -28,6 +28,10 @@ sessions-pipeline:
 relaycast:
   backup:
     enabled: false
+# Relayflows in standalone mode is a Job; keep it off until the restore is
+# verified, then re-enable it in a reviewed upgrade.
+components:
+  relayflows: false
 ```
 
 ```bash

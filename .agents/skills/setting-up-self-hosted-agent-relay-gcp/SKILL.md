@@ -2,7 +2,7 @@
 name: setting-up-self-hosted-agent-relay-gcp
 description: Guides and verifies a customer-owned self-hosted Agent Relay installation on GCP using the agent-relay Helm umbrella chart, GKE, Cloud SQL, GCS, Relaycast, RelayAuth, RelayHistory, Sessions Pipeline, the control-plane API, Dashboard, and Agent Relay Desktop. Use whenever planning, installing, upgrading, recovering, or validating this GCP self-hosted suite.
 license: Apache-2.0
-compatibility: Requires gcloud, kubectl, Helm 3.10+, python3, network access to the target GKE cluster and the image registry, and operator credentials for the customer GCP project.
+compatibility: Requires gcloud, kubectl, Helm 3.10+, python3, kubeconform, jq, yq, node, openssl, curl and timeout (dig when VERIFY_DNS_RESOLVER is set), network access to the target GKE cluster and the image registry, and operator credentials for the customer GCP project.
 metadata:
   chart: agent-relay
   version: "0.3.0"
@@ -70,9 +70,10 @@ The default public origins are:
 - Relaycast: `https://cast.$BASE_DOMAIN`
 - RelayHistory: `https://history.$BASE_DOMAIN`
 
-With the preview components enabled, the same load balancer also serves
-`https://actors.$BASE_DOMAIN` (durable-actors) and `https://files.$BASE_DOMAIN`
-(Relayfile). See `docs/diagrams/agent-relay-architecture.png` in the handoff
+The preview hosts exist only when the customer overlay sets them:
+`gkeIngress.hosts.actors` (durable-actors, `https://actors.$BASE_DOMAIN`) and
+`gkeIngress.hosts.files` (Relayfile, `https://files.$BASE_DOMAIN`), each with
+its component enabled. See `docs/diagrams/agent-relay-architecture.png` in the handoff
 for the deployed topology.
 
 ## 1. Resolve the layout and run preflight

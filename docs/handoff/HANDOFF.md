@@ -5,7 +5,8 @@
 - [Architecture overview](../diagrams/agent-relay-architecture.png)
   ([SVG](../diagrams/agent-relay-architecture.svg), [source](../diagrams/agent-relay-architecture.mmd)):
   what the `agent-relay` umbrella deploys on GKE. Dashed borders mark preview
-  and optional components.
+  components and the optional telemetry egress; Relayflows is opt-in and
+  labelled so.
 - [Request flow](../diagrams/agent-relay-request-flow.png)
   ([SVG](../diagrams/agent-relay-request-flow.svg), [source](../diagrams/agent-relay-request-flow.mmd)):
   Desktop sign-in and device approval, session upload, Dashboard read, and

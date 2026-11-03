@@ -1,7 +1,8 @@
 %% Agent Relay self-hosted: the main request flows through the deployed suite.
 %% Source of truth for agent-relay-request-flow.svg / .png (mermaid-cli 11.4.2,
-%% -b white, PNG at -s 2). Every arrow crosses the GKE HTTPS load balancer
-%% except the in-cluster calls (relay-cloud-api to relayhistory/relayauth).
+%% -b white, PNG at -s 2). Client calls cross the GKE HTTPS load balancer.
+%% Service-to-service calls stay in-cluster: relay-cloud-api to relayhistory and
+%% relayauth, and relayhistory to relayauth for JWKS (the JWKS ingress is off).
 sequenceDiagram
   autonumber
   actor User as Team member (browser)

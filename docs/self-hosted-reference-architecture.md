@@ -5,7 +5,7 @@ from planned adapter work; it is not evidence that the HA profiles exist.
 
 The per-profile list of what an operator must provide and can choose, and the
 chart/image/migration compatibility matrix, are in the
-[self-hosted requirements registry](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md),
+[self-hosted requirements registry](self-hosted-requirements.md),
 generated from [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml).
 
 Links into the repository `README.md` point at the public source repository
@@ -23,7 +23,7 @@ matching an archive, open the same path at the revision recorded in its
   denies, the components in the release namespace, the Cloud SQL, GCS and
   Workload Identity data plane, the clients, and the optional telemetry
   egress. Preview and optional components (durable-actors, Relayfile,
-  telemetry) have dashed borders.
+  telemetry egress) have dashed borders; Relayflows is opt-in and labelled so.
 - [Request flow](diagrams/agent-relay-request-flow.png)
   ([SVG](diagrams/agent-relay-request-flow.svg),
   [mermaid source](diagrams/agent-relay-request-flow.mmd)): Desktop sign-in
@@ -54,7 +54,7 @@ depend on an add-on. In particular, Relaycast does not require Relayflows.
 
 Relaycast's options for these, including the planned `aws-ha` and `gcp-ha`
 backends, are registry entry
-[`opt.relaycast.runtime-backend`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#opt-relaycast-runtime-backend).
+[`opt.relaycast.runtime-backend`](self-hosted-requirements.md#opt-relaycast-runtime-backend).
 
 ### `portable-single` — implemented
 
@@ -152,10 +152,10 @@ Selecting `clickhouse` keeps the Postgres path configured, so setting
 `search.backend` back to `postgres` is the single-switch rollback.
 
 Registry entries: the planned option
-[`opt.sessions-pipeline.search-backend`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#opt-sessions-pipeline-search-backend)
+[`opt.sessions-pipeline.search-backend`](self-hosted-requirements.md#opt-sessions-pipeline-search-backend)
 (CI fails if any template reads a `search.*` value while it is planned), and
 the shipped requirement
-[`req.db.postgres-17-extensions`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#req-db-postgres-17-extensions)
+[`req.db.postgres-17-extensions`](self-hosted-requirements.md#req-db-postgres-17-extensions)
 (`pg_trgm`, `btree_gin`) that the standard profile relies on.
 
 The Sessions Pipeline chart notes in the [README](https://github.com/AgentWorkforce/helm-charts/blob/main/README.md#transcript-search-profiles)

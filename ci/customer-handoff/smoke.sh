@@ -52,10 +52,11 @@ test -s "$work/rendered.yaml"
 # diagrams ship with their renders.
 skill=.agents/skills/setting-up-self-hosted-agent-relay-gcp
 test -f "$root/$skill/SKILL.md" || { echo "error: $skill/SKILL.md is not in the handoff" >&2; exit 1; }
-while IFS= read -r f; do
-  cmp -s "$repo/$f" "$root/$f" || { echo "error: $f is missing from or differs in the handoff" >&2; exit 1; }
-  if test -x "$repo/$f" && ! test -x "$root/$f"; then echo "error: $f lost its executable bit" >&2; exit 1; fi
-done < <(git -C "$repo" ls-files -- "$skill")
+# Compare against the committed blobs: the handoff is built from HEAD.
+while read -r mode _ _ f; do
+  git -C "$repo" show "HEAD:$f" | cmp -s - "$root/$f" || { echo "error: $f is missing from or differs in the handoff" >&2; exit 1; }
+  if test "$mode" = 100755 && ! test -x "$root/$f"; then echo "error: $f lost its executable bit" >&2; exit 1; fi
+done < <(git -C "$repo" ls-tree -r HEAD -- "$skill")
 test ! -e "$root/.cursor" || { echo "error: the handoff still ships .cursor/" >&2; exit 1; }
 for d in agent-relay-architecture agent-relay-request-flow; do
   for ext in mmd svg png; do
