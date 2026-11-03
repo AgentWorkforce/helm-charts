@@ -16,6 +16,18 @@ Hard blockers as of 2026-11-02:
 - Repository branch protection/provenance gates are not fully available or
   configured.
 
-Do not run the installation prompts until `self-hosted/customer-images.yaml`
-reports no hard blockers and every image is replaced with an approved,
-customer-accessible immutable digest.
+Do not run the installation prompts until all of the following hold:
+
+1. `python3 scripts/release/validate-customer-release.py --require-clean`
+   passes for the exact source revision of this archive. It checks the image
+   manifest (`self-hosted/customer-images.yaml`), branch-protection and
+   provenance controls, and RelayHistory migration evidence.
+2. Every hard blocker listed above is explicitly closed, with evidence,
+   including those the validator does not check. In particular, the validator
+   does not check the 96Bulls Sessions to RelayHistory runtime bridge; that
+   blocker stays open until the bridge is implemented and verified end to end.
+3. Every image is replaced with an approved, customer-accessible immutable
+   digest.
+
+A clean `self-hosted/customer-images.yaml` alone is not sufficient: its
+blockers cover images only.
