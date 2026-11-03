@@ -81,6 +81,18 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}
 {{- end }}
 {{- end }}
+{{- if and .Values.secretKeys.relaycastCredentialKeyring (not .Values.secretKeys.relaycastInternalSecret) }}
+{{- fail "secretKeys.relaycastInternalSecret is required when secretKeys.relaycastCredentialKeyring is set: RelayAuth authenticates to Relaycast's internal API to push ar_ws_ keys" }}
+{{- end }}
+{{- if and .Values.secretKeys.relaycastInternalSecret (not .Values.secretKeys.relaycastCredentialKeyring) }}
+{{- fail "secretKeys.relaycastInternalSecret requires secretKeys.relaycastCredentialKeyring: the ar_ keyring is what RelayAuth pushes" }}
+{{- end }}
+{{- if and .Values.secretKeys.relaycastServiceApiKey (not .Values.secretKeys.relaycastCredentialKeyring) }}
+{{- fail "secretKeys.relaycastServiceApiKey requires secretKeys.relaycastCredentialKeyring" }}
+{{- end }}
+{{- if and .Values.secretKeys.relaycastCredentialKeyring (not (dig "url" "" (.Values.relaycast | default dict))) }}
+{{- fail "relaycast.url is required when secretKeys.relaycastCredentialKeyring is set" }}
+{{- end }}
 {{- if ne (int .Values.service.port) (int .Values.server.port) }}
 {{- fail "service.port must equal server.port: RelayAuth discovery derives its reachable Service URL from server.port" }}
 {{- end }}

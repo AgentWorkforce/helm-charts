@@ -1,3 +1,4 @@
+{{- include "agent-relay.validate" . -}}
 {{- if dig "enabled" false (.Values.gkeIngress | default dict) }}
 {{- $gke := .Values.gkeIngress | default dict -}}
 {{- $components := .Values.components | default dict -}}

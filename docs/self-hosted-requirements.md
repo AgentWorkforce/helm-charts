@@ -14,7 +14,7 @@ registered, every shipped entry must exist in the charts, planned entries must
 not be referenced by any template, and the compatibility matrix must equal
 the pinned digests.
 
-Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 75 entries: 32 requirements (31 shipped, 1 planned), 43 options (41 shipped, 2 planned).
+Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 77 entries: 32 requirements (31 shipped, 1 planned), 45 options (43 shipped, 2 planned).
 
 ## Contents
 
@@ -444,7 +444,7 @@ chart `relaycast` · install: `helm install relaycast agentworkforce/relaycast -
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [Relaycast secret (internal admin + workspace bootstrap)](#req-relaycast-secret) | operator | values `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys`; env `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`; Secret `<existingSecret, e.g. relaycast-secrets>` keys `internal-secret`, `workspace-bootstrap-secret` | kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has both keys; helm template fails with "existingSecret is required" otherwise |
+| shipped | [Relaycast secret (internal admin + workspace bootstrap)](#req-relaycast-secret) | operator | values `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys.credentialKeyring`, `secretKeys.relayauthToken`, `secretKeys`; env `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`, `RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYCAST_RELAYAUTH_TOKEN_FILE`; Secret `<existingSecret, e.g. relaycast-secrets>` keys `internal-secret`, `workspace-bootstrap-secret` | kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has both keys; helm template fails with "existingSecret is required" otherwise |
 | shipped | [Relaycast public origin (baseUrl)](#req-relaycast-base-url) | operator | values `baseUrl` | helm template fails with "baseUrl is required" otherwise; curl <baseUrl>/health |
 | shipped | [DNS and a TLS certificate for the public Relaycast host (with ingress)](#req-relaycast-dns-tls) | operator | values `ingress.enabled`, `ingress.hosts`, `ingress.tls`, `ingress.externalTls`, `ingress.className`, `ingress.annotations`, `networkPolicy.ingressFrom`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls; created by cert-manager when annotated) | dig +short <host>; curl -fsS https://<host>/health; curl -s -o /dev/null -w '%{http_code}' https://<host>/internal is 503 |
 | shipped | [A ReadWriteOnce volume for the SQLite database and files](#req-relaycast-storage) | operator | values `persistence.existingClaim`, `persistence.storageClass`, `persistence.accessMode`, `persistence.size`, `replicaCount` | kubectl get pvc -n relaycast Bound; helm template refuses replicaCount != 1 |
@@ -459,6 +459,7 @@ chart `relaycast` · install: `helm install relaycast agentworkforce/relaycast -
 | shipped | [Message retention and mailbox limits](#opt-relaycast-retention) | `<positive integer>`, `""` | (no default) | values `retention.messageTtlDays`, `mailbox.ttlMs`, `mailbox.depthCap`; env `RELAYCAST_MESSAGE_TTL_DAYS`, `RELAYCAST_MAILBOX_TTL_MS`, `RELAYCAST_MAILBOX_DEPTH_CAP` |
 | shipped | [Scheduled SQLite and file backups](#opt-relaycast-backup) | `false`, `true` | `false` | values `backup.*` |
 | shipped | [Relaycast runtime backend](#opt-relaycast-runtime-backend) | `sqlite`, `aws-ha` (**planned**), `gcp-ha` (**planned**) | `sqlite` | values `runtime.backend` |
+| shipped | [Workspace credential format and authority (ar_ / model B)](#opt-relaycast-credential-authority) | `legacy`, `ar` | `legacy` | values `credentials.*`; env `RELAYCAST_CREDENTIAL_FORMAT`, `RELAYCAST_RELAYAUTH_URL` |
 | shipped | [Relaycast NetworkPolicy](#opt-relaycast-network-policy) | `true`, `false` | `true` | values `networkPolicy.enabled`, `networkPolicy.ingressFrom` |
 | shipped | [Image pull Secrets for the Relay charts](#opt-charts-image-pull-secrets) | `[]`, `[{name: <secret>}]` | `[]` | values `relaycast:imagePullSecrets`, `relayauth:imagePullSecrets`, `relayfile:imagePullSecrets`, `relayflows:imagePullSecrets` |
 
@@ -472,7 +473,7 @@ chart `relayauth` · install: `helm install relayauth agentworkforce/relayauth -
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [RelayAuth secret and signing keys](#req-relayauth-secret) | operator | values `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`; env `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`; Secret `<existingSecret, e.g. relayauth-secrets>` keys `internal-secret`, `signing-key.pem`, `bootstrap-api-key` | kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three keys; helm template fails with "existingSecret is required" otherwise |
+| shipped | [RelayAuth secret and signing keys](#req-relayauth-secret) | operator | values `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`, `secretKeys.relaycastCredentialKeyring`, `secretKeys.relaycastInternalSecret`, `secretKeys.relaycastServiceApiKey`; env `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`, `RELAYAUTH_RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYAUTH_RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYAUTH_RELAYCAST_SERVICE_API_KEY_FILE`; Secret `<existingSecret, e.g. relayauth-secrets>` keys `internal-secret`, `signing-key.pem`, `bootstrap-api-key` | kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three keys; helm template fails with "existingSecret is required" otherwise |
 | shipped | [A ReadWriteOnce volume for the RelayAuth SQLite database](#req-relayauth-storage) | operator | values `persistence.existingClaim`, `persistence.storageClass`, `persistence.size`, `replicaCount` | kubectl get pvc Bound; helm template refuses replicaCount != 1 |
 
 **Options (choose)**
@@ -485,6 +486,7 @@ chart `relayauth` · install: `helm install relayauth agentworkforce/relayauth -
 | shipped | [RelayAuth base URL and issuer](#opt-relayauth-issuer) | `""`, `https://<public host>` | `""` | values `baseUrl`, `issuer`; env `BASE_URL`, `RELAYAUTH_ISSUER` |
 | shipped | [Public JWKS ingress](#opt-relayauth-jwks-ingress) | `false`, `true` | `false` | values `jwksIngress.*`, `networkPolicy.enabled`, `networkPolicy.ingressFrom`; Secret `<jwksIngress.tls[].secretName>` (kubernetes.io/tls for the JWKS host) |
 | shipped | [CORS allowlist and RelayHistory assertion options](#opt-relayauth-cors-history) | `<any>` | `allowedOrigins=`, `allowPrivateHttpOrigin=false`, `bootstrapApiKeyOrg=org_selfhost` | values `cors.allowedOrigins`, `relayhistory.allowPrivateHttpOrigin`, `relayhistory.bootstrapApiKeyOrg`; env `ALLOWED_ORIGINS`, `RELAYAUTH_ALLOW_PRIVATE_HTTP_HISTORY_ORIGIN`, `RELAYAUTH_BOOTSTRAP_API_KEY_ORG` |
+| shipped | [Push RelayAuth-issued ar_ workspace credentials into Relaycast (model B)](#opt-relayauth-relaycast-credentials) | `""`, `configured` | `""` | values `relaycast.url`; env `RELAYAUTH_RELAYCAST_URL` |
 
 ### Profile: relayhistory
 
@@ -973,15 +975,16 @@ also reference existing Secrets; no Secret is created by the chart.
 
 **Relaycast secret (internal admin + workspace bootstrap)** · shipped · chart `relaycast` · profiles relaycast
 
-An existing Secret in the release namespace; both keys are mounted read-only
+An existing Secret in the release namespace; the keys are mounted read-only
 under /run/secrets/relaycast and passed as *_FILE paths. internal-secret is the
 bearer (>= 32 characters) for the in-cluster /internal admin API;
 workspace-bootstrap-secret derives keyed workspace-create retries and must stay
-stable across upgrades.
+stable across upgrades. The optional credentialKeyring and relayauthToken keys
+wire ar_ credentials (see opt.relaycast.credential-authority).
 
 - Provided by: operator
-- Values: `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys`
-- Env: `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`
+- Values: `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys.credentialKeyring`, `secretKeys.relayauthToken`, `secretKeys`
+- Env: `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`, `RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYCAST_RELAYAUTH_TOKEN_FILE`
 - Secret: `<existingSecret, e.g. relaycast-secrets>` from `existingSecret`; keys `internal-secret` from `secretKeys.internalSecret`; `workspace-bootstrap-secret` from `secretKeys.bootstrapSecret`
 - Verify: kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has both keys; helm template fails with "existingSecret is required" otherwise
 - Sources: [`charts/relaycast/values.yaml:47`](../charts/relaycast/values.yaml#L47), [`charts/relaycast/templates/deployment.yaml:61`](../charts/relaycast/templates/deployment.yaml#L61), [`charts/relaycast/templates/_helpers.tpl:103`](../charts/relaycast/templates/_helpers.tpl#L103), [`README.md:62`](../README.md#L62)
@@ -1017,7 +1020,7 @@ and with networkPolicy networkPolicy.ingressFrom must allow it.
 - Values: `ingress.enabled`, `ingress.hosts`, `ingress.tls`, `ingress.externalTls`, `ingress.className`, `ingress.annotations`, `networkPolicy.ingressFrom`
 - Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls; created by cert-manager when annotated
 - Verify: dig +short <host>; curl -fsS https://<host>/health; curl -s -o /dev/null -w '%{http_code}' https://<host>/internal is 503
-- Sources: [`charts/relaycast/values.yaml:82`](../charts/relaycast/values.yaml#L82), [`charts/relaycast/templates/_helpers.tpl:140`](../charts/relaycast/templates/_helpers.tpl#L140), [`charts/relaycast/templates/_helpers.tpl:143`](../charts/relaycast/templates/_helpers.tpl#L143)
+- Sources: [`charts/relaycast/values.yaml:107`](../charts/relaycast/values.yaml#L107), [`charts/relaycast/templates/_helpers.tpl:170`](../charts/relaycast/templates/_helpers.tpl#L170), [`charts/relaycast/templates/_helpers.tpl:173`](../charts/relaycast/templates/_helpers.tpl#L173)
 
 #### req.relaycast.storage
 
@@ -1030,7 +1033,7 @@ One replica, Recreate upgrades; the data PVC (10Gi, helm.sh/resource-policy keep
 - Provided by: operator
 - Values: `persistence.existingClaim`, `persistence.storageClass`, `persistence.accessMode`, `persistence.size`, `replicaCount`
 - Verify: kubectl get pvc -n relaycast Bound; helm template refuses replicaCount != 1
-- Sources: [`charts/relaycast/values.yaml:105`](../charts/relaycast/values.yaml#L105), [`charts/relaycast/templates/_helpers.tpl:74`](../charts/relaycast/templates/_helpers.tpl#L74)
+- Sources: [`charts/relaycast/values.yaml:130`](../charts/relaycast/values.yaml#L130), [`charts/relaycast/templates/_helpers.tpl:74`](../charts/relaycast/templates/_helpers.tpl#L74)
 
 #### req.relayauth.secret
 
@@ -1042,14 +1045,15 @@ A pre-created Secret; the chart never renders key material. Keys are mounted
 under /run/secrets/relayauth and passed as *_FILE paths: the internal secret,
 the signing key PEM, and the bootstrap API key (bound to
 relayhistory.bootstrapApiKeyOrg). Each secretKeys entry must be a valid Secret
-data key.
+data key. The optional relaycast* keys wire RelayAuth-issued relaycast
+credentials (see opt.relayauth.relaycast-credentials).
 
 - Provided by: operator
-- Values: `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`
-- Env: `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`
+- Values: `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`, `secretKeys.relaycastCredentialKeyring`, `secretKeys.relaycastInternalSecret`, `secretKeys.relaycastServiceApiKey`
+- Env: `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`, `RELAYAUTH_RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYAUTH_RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYAUTH_RELAYCAST_SERVICE_API_KEY_FILE`
 - Secret: `<existingSecret, e.g. relayauth-secrets>` from `existingSecret`; keys `internal-secret` from `secretKeys.internalSecret`; `signing-key.pem` from `secretKeys.signingKey`; `bootstrap-api-key` from `secretKeys.bootstrapApiKey`
 - Verify: kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three keys; helm template fails with "existingSecret is required" otherwise
-- Sources: [`charts/relayauth/values.yaml:42`](../charts/relayauth/values.yaml#L42), [`charts/relayauth/templates/deployment.yaml:65`](../charts/relayauth/templates/deployment.yaml#L65), [`charts/relayauth/templates/_helpers.tpl:71`](../charts/relayauth/templates/_helpers.tpl#L71)
+- Sources: [`charts/relayauth/values.yaml:53`](../charts/relayauth/values.yaml#L53), [`charts/relayauth/templates/deployment.yaml:65`](../charts/relayauth/templates/deployment.yaml#L65), [`charts/relayauth/templates/_helpers.tpl:71`](../charts/relayauth/templates/_helpers.tpl#L71)
 
 #### req.relayauth.storage
 
@@ -1062,7 +1066,7 @@ One replica (single-writer SQLite), Recreate; the data PVC is kept on uninstall.
 - Provided by: operator
 - Values: `persistence.existingClaim`, `persistence.storageClass`, `persistence.size`, `replicaCount`
 - Verify: kubectl get pvc Bound; helm template refuses replicaCount != 1
-- Sources: [`charts/relayauth/values.yaml:72`](../charts/relayauth/values.yaml#L72), [`charts/relayauth/templates/_helpers.tpl:68`](../charts/relayauth/templates/_helpers.tpl#L68)
+- Sources: [`charts/relayauth/values.yaml:87`](../charts/relayauth/values.yaml#L87), [`charts/relayauth/templates/_helpers.tpl:68`](../charts/relayauth/templates/_helpers.tpl#L68)
 
 #### req.relayfile.secret
 
@@ -1574,7 +1578,7 @@ balancer in front of the controller terminates TLS. Every ingress blocks
 - Values: `allowInsecureBaseUrl`, `privateDnsSuffixes`, `insecureBaseUrlHosts`, `ingress.enabled`, `ingress.externalTls`, `service.type`
 - Env: `RELAYCAST_ALLOW_INSECURE_BASE_URL`, `RELAYCAST_PRIVATE_DNS_SUFFIXES`, `RELAYCAST_INSECURE_BASE_URL_HOSTS`
 - Verify: helm template refuses ingress with allowInsecureBaseUrl or an http baseUrl
-- Sources: [`charts/relaycast/values.yaml:36`](../charts/relaycast/values.yaml#L36), [`charts/relaycast/templates/_helpers.tpl:133`](../charts/relaycast/templates/_helpers.tpl#L133), [`charts/relaycast/templates/deployment.yaml:72`](../charts/relaycast/templates/deployment.yaml#L72)
+- Sources: [`charts/relaycast/values.yaml:36`](../charts/relaycast/values.yaml#L36), [`charts/relaycast/templates/_helpers.tpl:158`](../charts/relaycast/templates/_helpers.tpl#L158), [`charts/relaycast/templates/deployment.yaml:72`](../charts/relaycast/templates/deployment.yaml#L72)
 
 #### opt.relaycast.workspace-create
 
@@ -1590,7 +1594,7 @@ Off by default; workspaces are created through the internal admin API. Refused w
 - Values: `publicWorkspaceCreate`, `bootstrapProofRequired`
 - Env: `RELAYCAST_PUBLIC_WORKSPACE_CREATE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED`
 - Verify: POST /v1/workspaces without a key is refused
-- Sources: [`charts/relaycast/values.yaml:60`](../charts/relaycast/values.yaml#L60), [`charts/relaycast/templates/_helpers.tpl:130`](../charts/relaycast/templates/_helpers.tpl#L130)
+- Sources: [`charts/relaycast/values.yaml:85`](../charts/relaycast/values.yaml#L85), [`charts/relaycast/templates/_helpers.tpl:159`](../charts/relaycast/templates/_helpers.tpl#L159)
 
 #### opt.relaycast.retention
 
@@ -1606,7 +1610,7 @@ Empty keeps messages forever and uses the engine's mailbox defaults; positive in
 - Values: `retention.messageTtlDays`, `mailbox.ttlMs`, `mailbox.depthCap`
 - Env: `RELAYCAST_MESSAGE_TTL_DAYS`, `RELAYCAST_MAILBOX_TTL_MS`, `RELAYCAST_MAILBOX_DEPTH_CAP`
 - Verify: env of the relaycast pod
-- Sources: [`charts/relaycast/values.yaml:65`](../charts/relaycast/values.yaml#L65), [`charts/relaycast/templates/deployment.yaml:84`](../charts/relaycast/templates/deployment.yaml#L84)
+- Sources: [`charts/relaycast/values.yaml:90`](../charts/relaycast/values.yaml#L90), [`charts/relaycast/templates/deployment.yaml:84`](../charts/relaycast/templates/deployment.yaml#L84)
 
 #### opt.relaycast.backup
 
@@ -1621,7 +1625,7 @@ Online SQLite-backup-API copies of the database and the file directory to a seco
 - Provided by: operator
 - Values: `backup.*`
 - Verify: kubectl get cronjob -n relaycast; a completed backup Job
-- Sources: [`charts/relaycast/values.yaml:118`](../charts/relaycast/values.yaml#L118), [`charts/relaycast/templates/backup.yaml:156`](../charts/relaycast/templates/backup.yaml#L156)
+- Sources: [`charts/relaycast/values.yaml:143`](../charts/relaycast/values.yaml#L143), [`charts/relaycast/templates/backup.yaml:156`](../charts/relaycast/templates/backup.yaml#L156)
 
 #### opt.relaycast.runtime-backend
 
@@ -1640,6 +1644,30 @@ the chart refuses anything but sqlite until they are released and proven.
 - Verify: helm template refuses runtime.backend != sqlite
 - Sources: [`charts/relaycast/values.yaml:21`](../charts/relaycast/values.yaml#L21), [`charts/relaycast/templates/_helpers.tpl:77`](../charts/relaycast/templates/_helpers.tpl#L77), [`docs/self-hosted-reference-architecture.md:40`](../docs/self-hosted-reference-architecture.md#L40)
 
+#### opt.relaycast.credential-authority
+
+<a id="opt-relaycast-credential-authority"></a>
+
+**Workspace credential format and authority (ar_ / model B)** · shipped · chart `relaycast` · profiles relaycast
+
+credentials.format selects the workspace credential format (legacy is the
+default). format=ar requires an authority: relayauth makes RelayAuth the
+ar_ credential authority (model B — RelayAuth owns the ar_ tag keyring and
+pushes ar_ws_ keys into Relaycast, which verifies tags through RelayAuth's
+remote CredentialTagger via credentials.relayauth.url and
+secretKeys.relayauthToken); self verifies ar_ tags against the local
+keyring mounted by secretKeys.credentialKeyring. A mounted keyring always
+takes precedence over the remote tagger. ar_ custody requires a >=12.3.x
+engine image (image.digest override; the pinned default predates it).
+
+- Default: `legacy`
+- Choices: `legacy`: issue and verify legacy credentials locally; `ar`: ar_ credentials; requires credentials.authority (self or relayauth)
+- Provided by: operator
+- Values: `credentials.*`
+- Env: `RELAYCAST_CREDENTIAL_FORMAT`, `RELAYCAST_RELAYAUTH_URL`
+- Verify: helm template refuses format=ar without an authority, authority=relayauth without url+token, and authority=self without secretKeys.credentialKeyring
+- Sources: [`charts/relaycast/values.yaml:75`](../charts/relaycast/values.yaml#L75), [`charts/relaycast/templates/_helpers.tpl:128`](../charts/relaycast/templates/_helpers.tpl#L128), [`charts/relaycast/templates/deployment.yaml:95`](../charts/relaycast/templates/deployment.yaml#L95)
+
 #### opt.relaycast.network-policy
 
 <a id="opt-relaycast-network-policy"></a>
@@ -1653,7 +1681,7 @@ On by default; allows callers only from the release namespace unless ingressFrom
 - Provided by: operator
 - Values: `networkPolicy.enabled`, `networkPolicy.ingressFrom`
 - Verify: kubectl get networkpolicy -n relaycast
-- Sources: [`charts/relaycast/values.yaml:191`](../charts/relaycast/values.yaml#L191)
+- Sources: [`charts/relaycast/values.yaml:216`](../charts/relaycast/values.yaml#L216)
 
 #### opt.charts.image-pull-secrets
 
@@ -1684,7 +1712,7 @@ Optional Secret keys for the public, next and previous signing keys; each set ke
 - Values: `secretKeys.signingKeyPublic`, `secretKeys.signingKeyNext`, `secretKeys.signingKeyPrevious`
 - Env: `RELAYAUTH_SIGNING_KEY_PEM_PUBLIC_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_NEXT_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_PREVIOUS_FILE`
 - Verify: the JWKS lists the next/previous kids during a rotation
-- Sources: [`charts/relayauth/values.yaml:48`](../charts/relayauth/values.yaml#L48), [`charts/relayauth/templates/deployment.yaml:74`](../charts/relayauth/templates/deployment.yaml#L74)
+- Sources: [`charts/relayauth/values.yaml:57`](../charts/relayauth/values.yaml#L57), [`charts/relayauth/templates/deployment.yaml:74`](../charts/relayauth/templates/deployment.yaml#L74)
 
 #### opt.relayauth.issuer
 
@@ -1719,7 +1747,7 @@ ingressFrom.
 - Values: `jwksIngress.*`, `networkPolicy.enabled`, `networkPolicy.ingressFrom`
 - Secret: `<jwksIngress.tls[].secretName>`; keys . kubernetes.io/tls for the JWKS host
 - Verify: curl -fsS https://<host>/.well-known/jwks.json; other paths are not routed
-- Sources: [`charts/relayauth/values.yaml:62`](../charts/relayauth/values.yaml#L62), [`charts/relayauth/templates/_helpers.tpl:91`](../charts/relayauth/templates/_helpers.tpl#L91)
+- Sources: [`charts/relayauth/values.yaml:77`](../charts/relayauth/values.yaml#L77), [`charts/relayauth/templates/_helpers.tpl:103`](../charts/relayauth/templates/_helpers.tpl#L103)
 
 #### opt.relayauth.cors-history
 
@@ -1736,6 +1764,28 @@ ALLOWED_ORIGINS (CORS only, not an audience allowlist); allowPrivateHttpOrigin p
 - Env: `ALLOWED_ORIGINS`, `RELAYAUTH_ALLOW_PRIVATE_HTTP_HISTORY_ORIGIN`, `RELAYAUTH_BOOTSTRAP_API_KEY_ORG`
 - Verify: env of the relayauth pod
 - Sources: [`charts/relayauth/values.yaml:30`](../charts/relayauth/values.yaml#L30), [`charts/relayauth/templates/deployment.yaml:84`](../charts/relayauth/templates/deployment.yaml#L84)
+
+#### opt.relayauth.relaycast-credentials
+
+<a id="opt-relayauth-relaycast-credentials"></a>
+
+**Push RelayAuth-issued ar_ workspace credentials into Relaycast (model B)** · shipped · chart `relayauth` · profiles relayauth
+
+When secretKeys.relaycastCredentialKeyring and
+secretKeys.relaycastInternalSecret are set together, RelayAuth owns the
+ar_ credential tag keyring and pushes ar_ws_ workspace keys into
+Relaycast's internal admin API at relaycast.url (RELAYAUTH_RELAYCAST_URL).
+secretKeys.relaycastServiceApiKey adds an optional service API key. The
+chart refuses partial wiring. The relaycast side is
+credentials.authority=relayauth (opt.relaycast.credential-authority).
+
+- Default: `""`
+- Choices: `""`: off; no relaycast credential push; `configured`: keyring + internal secret keys set (see req.relayauth.secret)
+- Provided by: operator
+- Values: `relaycast.url`
+- Env: `RELAYAUTH_RELAYCAST_URL`
+- Verify: helm template fails with "secretKeys.relaycastInternalSecret is required" when only the keyring key is set, and renders RELAYAUTH_RELAYCAST_* envs when both are set
+- Sources: [`charts/relayauth/values.yaml:48`](../charts/relayauth/values.yaml#L48), [`charts/relayauth/templates/deployment.yaml:87`](../charts/relayauth/templates/deployment.yaml#L87), [`charts/relayauth/templates/_helpers.tpl:84`](../charts/relayauth/templates/_helpers.tpl#L84)
 
 #### opt.relayfile.backend-profile
 
@@ -1891,6 +1941,8 @@ Rendered by the charts but not a requirement or an option: fixed by the chart or
 | `RELAYCAST_ENV` | relaycast | reserved name in the extraEnv guard; the environment is passed as --env (server.environment) |
 | `RELAYCAST_INTERNAL_SECRET` | relaycast | reserved prefix in the extraEnv guard; the Secret is mounted as a file |
 | `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET` | relaycast | reserved prefix in the extraEnv guard; the Secret is mounted as a file |
+| `RELAYCAST_RELAYAUTH` | relaycast | reserved prefix in the extraEnv guard; the RelayAuth remote tagger is wired through credentials.relayauth.url and secretKeys.relayauthToken |
+| `RELAYCAST_CREDENTIAL` | relaycast | reserved prefix in the extraEnv guard; the credential format and local keyring are wired through credentials.* and secretKeys.credentialKeyring |
 | `BACKUP_KEEP` | relaycast | backup CronJob; from backup.keep |
 | `LOCK_STALE_MS` | relaycast | backup CronJob lock timeout (fixed) |
 | `RELAYAUTH_DB_PATH` | relayauth | fixed path on the data PVC |

@@ -95,4 +95,20 @@ test "$(yq 'select(.kind == "ConfigMap" and .metadata.name == "relayhistory") |
 test "$(yq 'select(.kind == "ConfigMap" and .metadata.name == "relayhistory") |
   .data.RELAYAUTH_JWKS_URL' <<<"$live_out")" = http://relayauth.relayauth.svc:8787/.well-known/jwks.json
 
+# ar_ credential custody: authority=relayauth without the relayauth component
+# must fail closed at the umbrella level.
+if ar_fail=$(helm template proof charts/agent-relay -n agent-relay --no-hooks \
+  -f charts/agent-relay/values-gcp-proof.yaml \
+  -f charts/agent-relay/ci/gcp-proof-values.yaml \
+  --set components.relayauth=false \
+  --set relaycast.credentials.format=ar \
+  --set relaycast.credentials.authority=relayauth \
+  --set relaycast.credentials.relayauth.url=http://relayauth:8787 \
+  --set relaycast.secretKeys.relayauthToken=relaycast-relayauth-token 2>&1); then
+  echo "authority=relayauth without components.relayauth rendered successfully" >&2
+  exit 1
+fi
+grep -q 'requires components.relayauth=true' <<<"$ar_fail" \
+  || { echo "render failed without the expected components.relayauth error" >&2; exit 1; }
+
 echo "agent-relay GCP proof render contract: ok"

@@ -57,11 +57,22 @@ The referenced Secret must provide these keys:
 - control API: `database-url`, `database-migrations-url`,
   `relayauth-api-key`, `selfhost-bootstrap-token`, and
   `selfhost-encryption-key`
+- RelayAuth-issued relaycast credentials (optional, model B):
+  `relaycast-credential-keyring` and `relaycast-relayauth-token`
 
 `relayauth-api-key` and `relayauth-bootstrap-api-key` must contain the same
 value. `selfhost-bootstrap-token` must be at least 32 bytes.
 `selfhost-encryption-key` must encode exactly 32 bytes as either 64 hexadecimal
 characters or base64.
+
+With `relaycast.credentials.authority=relayauth` (model B, see the commented
+`credentials` block in `values-gcp.yaml`), RelayAuth owns the `ar_` credential
+tag keyring and pushes `ar_ws_` workspace keys into Relaycast, which verifies
+tags through RelayAuth's remote CredentialTagger. The shared Secret then needs
+`relaycast-credential-keyring` (mounted by relayauth) and
+`relaycast-relayauth-token` (mounted by relaycast); relayauth also mounts
+`relaycast-internal-secret` to call Relaycast's internal admin API. It
+requires `components.relayauth=true` and a >=12.3.x relaycast engine image.
 
 When `components.relayflows=true` with `mode=cloudWorker`, the Secret named by
 `relayflows.credentials.existingSecret` must contain the worker enrollment

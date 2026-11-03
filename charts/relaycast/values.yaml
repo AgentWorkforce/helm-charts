@@ -42,7 +42,7 @@ privateDnsSuffixes: []
 insecureBaseUrlHosts: []
 
 # REQUIRED. Name of an existing Secret in the release namespace. The chart
-# never renders a secret value; both keys below are mounted read-only as files
+# never renders a secret value; the keys below are mounted read-only as files
 # under /run/secrets/relaycast and passed to the engine as *_FILE paths.
 existingSecret: ""
 secretKeys:
@@ -52,6 +52,31 @@ secretKeys:
   # RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE: stable derivation secret for
   # keyed workspace-create retries. Keep it stable across upgrades.
   bootstrapSecret: workspace-bootstrap-secret
+  # RELAYCAST_CREDENTIAL_KEYRING_FILE (optional): local ar_ credential tag
+  # keyring. Whenever it is mounted it takes precedence over the remote
+  # tagger below; required with credentials.authority=self.
+  credentialKeyring: ""
+  # RELAYCAST_RELAYAUTH_TOKEN_FILE (optional): bearer token Relaycast
+  # presents to RelayAuth's remote CredentialTagger. Required with
+  # credentials.authority=relayauth and refused without
+  # credentials.relayauth.url.
+  relayauthToken: ""
+
+# Workspace credential format and authority. The default issues and verifies
+# legacy credentials locally. format=ar requires an authority:
+#   authority=relayauth (model B): RelayAuth owns the ar_ tag keyring and
+#     pushes ar_ws_ workspace keys into Relaycast; Relaycast verifies ar_ tags
+#     through RelayAuth's remote CredentialTagger (RELAYCAST_RELAYAUTH_URL +
+#     RELAYCAST_RELAYAUTH_TOKEN_FILE).
+#   authority=self: Relaycast verifies ar_ tags against the local keyring
+#     mounted via secretKeys.credentialKeyring.
+# ar_ custody requires a >=12.3.x engine image — newer than this chart's
+# pinned default, so override image.digest with a >=12.3.x self-host build.
+credentials:
+  format: legacy
+  authority: ""
+  relayauth:
+    url: ""
 
 # Anonymous POST /v1/workspaces. Off by default: workspaces are created through
 # the internal admin API (see the README's first-run section). Turning it on

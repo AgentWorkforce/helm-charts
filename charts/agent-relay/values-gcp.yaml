@@ -47,6 +47,22 @@ relaycast:
   secretKeys:
     internalSecret: relaycast-internal-secret
     bootstrapSecret: relaycast-workspace-bootstrap-secret
+    # REQUIRED OVERRIDE (only with credentials.authority=relayauth): token
+    # Relaycast presents to RelayAuth's remote CredentialTagger.
+    # relayauthToken: relaycast-relayauth-token
+    # REQUIRED OVERRIDE (only with credentials.authority=self): local ar_
+    # keyring; a mounted keyring always wins over the remote tagger.
+    # credentialKeyring: relaycast-credential-keyring
+  # Optional: RelayAuth-issued ar_ credentials (model B). RelayAuth owns the
+  # ar_ tag keyring and pushes ar_ws_ workspace keys into Relaycast; Relaycast
+  # verifies tags through RelayAuth's remote CredentialTagger. Requires a
+  # >=12.3.x relaycast engine image (newer than the chart default, so
+  # image.digest must name a >=12.3.x build) and components.relayauth=true.
+  # credentials:
+  #   format: ar
+  #   authority: relayauth
+  #   relayauth:
+  #     url: http://relayauth:8787
   service:
     annotations:
       cloud.google.com/neg: '{"ingress": true}'
@@ -75,6 +91,14 @@ relayauth:
     internalSecret: relayauth-internal-secret
     signingKey: relayauth-signing-key.pem
     bootstrapApiKey: relayauth-bootstrap-api-key
+    # REQUIRED OVERRIDE (only when RelayAuth issues relaycast ar_ keys, i.e.
+    # relaycast.credentials.authority=relayauth): the ar_ tag keyring RelayAuth
+    # owns, and relaycast's internal-secret so RelayAuth can push ar_ws_
+    # workspace keys into the internal admin API. Set both or neither.
+    # relaycastCredentialKeyring: relaycast-credential-keyring
+    # relaycastInternalSecret: relaycast-internal-secret
+  # relaycast:
+  #   url: http://relaycast:8787
   jwksIngress:
     enabled: false
   networkPolicy:

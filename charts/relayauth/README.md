@@ -52,6 +52,17 @@ rejected during rendering.
 For in-cluster History over private HTTP, set
 `relayhistory.allowPrivateHttpOrigin=true`. Public origins still require HTTPS.
 
+## RelayAuth-issued relaycast credentials (model B)
+
+RelayAuth can own the `ar_` credential tag keyring and push `ar_ws_` workspace
+keys into a Relaycast deployment, which then verifies tags through RelayAuth's
+remote CredentialTagger. Set both `secretKeys.relaycastCredentialKeyring` (the
+`ar_` keyring) and `secretKeys.relaycastInternalSecret` (Relaycast's internal
+admin secret) — the chart refuses partial wiring — and point `relaycast.url`
+at the Relaycast Service (default `http://relaycast:8787`).
+`secretKeys.relaycastServiceApiKey` adds an optional service API key. The
+relaycast chart side is `credentials.authority=relayauth`.
+
 ## Rotation
 
 Set `secretKeys.signingKeyNext` to pre-publish the next public key, promote it
