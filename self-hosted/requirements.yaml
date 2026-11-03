@@ -29,7 +29,7 @@
 #   profile_values  {profile: {path: value}}: values the profile must resolve to (checked)
 #   verify       how to check it (string, or a map by profile)
 #   sources      file:line refs in this repo; upstream refs are
-#                sessions-pipeline@<sha>:<path>:<line> (sessions-pipeline was sessions-pipeline)
+#                sessions-pipeline@<sha>:<path>:<line> (sessions-pipeline was 96BullSessions)
 schema: 1
 
 overview: |
@@ -63,7 +63,7 @@ profiles:
     values_file: profiles/migration.yaml
     services_image: ghcr
     db: { hoopdb: cnpg, db_mode: selfhosted, boundary: global-default-revoke }
-    install: helm upgrade sessions-pipeline agentworkforce/sessions-pipeline -f profiles/migration.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
+    install: helm upgrade <existing release> agentworkforce/sessions-pipeline -f profiles/migration.yaml --set global.tenant.orgId=<org> --set alleyoop.auth.jwksUrl=<jwks url>
     summary: selfhost-postgres plus searchWorkerRole.bootstrapJob, because initdb never runs again on an existing cluster.
   - id: external-selfhosted
     title: External operator-controlled plain Postgres (RDS, your own Postgres 17) dedicated to HoopDb
@@ -208,7 +208,7 @@ compatibility:
       services:
         source_commit: 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad
         migration_generation: eff8b3be46565b57ad8fa5e4a066dbb6d1fe608313d9c1680bfbcd484add259b
-      notes: 'Rename: the umbrella and worker charts were published as 96bulls (last 0.5.4) and 96bulls-worker (last 0.5.3); they continue here as sessions-pipeline 0.6.0 and sessions-pipeline-worker 0.6.0 (96bulls 0.5.5 was never released). alleyoop 0.3.8 only relabels part-of. Includes alleyoop 0.3.7 auth.allowInterimRelayAuthBearer (ALLOW_INTERIM_RELAYAUTH_BEARER, default false, environment=local only). Same services image and db combos as 0.5.4. New chart names: install fresh; there is no in-place helm upgrade from 96bulls.'
+      notes: 'Rename: the umbrella and worker charts were published as 96bulls (last 0.5.4) and 96bulls-worker (last 0.5.3); they continue here as sessions-pipeline 0.6.0 and sessions-pipeline-worker 0.6.0 (96bulls 0.5.5 was never released). alleyoop 0.3.8 only relabels part-of. Includes alleyoop 0.3.7 auth.allowInterimRelayAuthBearer (ALLOW_INTERIM_RELAYAUTH_BEARER, default false, environment=local only). Same services image and db combos as 0.5.4. Upgrade path: helm upgrade <existing 96bulls release> agentworkforce/sessions-pipeline keeps the release, resource names and selectors (the worker alias is unchanged; only chart and part-of labels change). A standalone 96bulls-worker release keeps its selectors only with nameOverride: 96bulls-worker.'
       db_combos:
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: cnpg, status: shipped, profiles: [selfhost-postgres, migration, aws-cnpg], notes: chart Jobs install the runtime role and the function default }
         - { db_mode: selfhosted, boundary: global-default-revoke, hoopdb: external, status: shipped, profiles: [external-selfhosted], notes: operator runs the bootstrap files as a superuser }
@@ -592,7 +592,7 @@ entries:
     status: shipped
     provided_by: { default: operator, aws-cnpg: stack, aws-supabase: stack, gcp-cloudsql: stack }
     secrets:
-      - name: { default: sessions-pipeline-locker, aws-cnpg: sessions-pipeline-runtime, aws-supabase: sessions-pipeline-summary, gcp-cloudsql: sessions-pipeline-gcp }
+      - name: { default: sessions-pipeline-locker, aws-cnpg: 96bulls-runtime, aws-supabase: sessions-pipeline-summary, gcp-cloudsql: 96bulls-gcp }
         name_paths: [worker.summaryEncryption.existingSecret, worker.existingSecret]
         keys:
           - { key: SUMMARY_MASTER_KEYS, key_path: worker.summaryEncryption.key }
@@ -620,11 +620,11 @@ entries:
     status: shipped
     provided_by: { default: chart, external-selfhosted: operator, external-supabase: operator, aws-supabase: stack, gcp-cloudsql: stack }
     secrets:
-      - name: { default: hoopdb-app, external-selfhosted: sessions-pipeline-hoopdb, external-supabase: sessions-pipeline-hoopdb, gcp-cloudsql: sessions-pipeline-gcp }
+      - name: { default: hoopdb-app, external-selfhosted: sessions-pipeline-hoopdb, external-supabase: sessions-pipeline-hoopdb, gcp-cloudsql: 96bulls-gcp }
         name_paths: [worker.hoopdb.existingSecret, worker.existingSecret]
         keys:
           - { key: { default: uri, external-selfhosted: HOOPDB_URL, external-supabase: HOOPDB_URL, gcp-cloudsql: HOOPDB_URL }, key_path: [worker.hoopdb.key, worker.secretKeys.hoopdbUrl] }
-      - name: { default: hoopdb-app, external-selfhosted: sessions-pipeline-hoopdb, external-supabase: sessions-pipeline-hoopdb, gcp-cloudsql: sessions-pipeline-gcp }
+      - name: { default: hoopdb-app, external-selfhosted: sessions-pipeline-hoopdb, external-supabase: sessions-pipeline-hoopdb, gcp-cloudsql: 96bulls-gcp }
         name_paths: [alleyoop.hoopdb.existingSecret, alleyoop.existingSecret]
         keys:
           - { key: { default: uri, external-selfhosted: HOOPDB_URL, external-supabase: HOOPDB_URL, gcp-cloudsql: HOOPDB_URL }, key_path: [alleyoop.hoopdb.key, alleyoop.secretKeys.hoopdbUrl] }
@@ -652,11 +652,11 @@ entries:
     status: shipped
     provided_by: stack
     secrets:
-      - name: sessions-pipeline-gcp
+      - name: 96bulls-gcp
         name_paths: [worker.migrations.hoopdb.existingSecret]
         keys:
           - { key: HOOPDB_MIGRATION_URL, key_path: worker.migrations.hoopdb.key }
-    verify: kubectl get secret sessions-pipeline-gcp -o jsonpath='{.data.HOOPDB_MIGRATION_URL}' connects as the migration owner (select current_user)
+    verify: kubectl get secret 96bulls-gcp -o jsonpath='{.data.HOOPDB_MIGRATION_URL}' connects as the migration owner (select current_user)
     sources:
       - "charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml:33"
       - "charts/sessions-pipeline-worker/values.yaml:93"

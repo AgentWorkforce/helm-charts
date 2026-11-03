@@ -129,6 +129,23 @@ helm install sessions-pipeline agentworkforce/sessions-pipeline -n sessions-pipe
   --set alleyoop.auth.jwksUrl=https://<relayauth>/.well-known/jwks.json
 ```
 
+#### Upgrading a release of the former `96bulls` chart
+
+The umbrella was renamed from `96bulls` (last released as 0.5.4) to
+`sessions-pipeline` (0.6.0). An existing release upgrades in place:
+`helm upgrade <release> agentworkforce/sessions-pipeline -f <your values>`.
+Resource names and selectors are unchanged, because the worker subchart alias
+is still `worker`. Only the `helm.sh/chart` and `app.kubernetes.io/part-of`
+labels change. Two renamed defaults need a value if you relied on them. Set
+`worker.existingSecret`, `alleyoop.existingSecret` and
+`locker.existingSecret` to your current Secret name (the old default was
+`96bulls-locker`). Set
+`worker.migrations.runtimeRole` to the role your database already has. A
+standalone `96bulls-worker` release keeps its selectors only with
+`nameOverride: 96bulls-worker`; otherwise, install it fresh. Under the
+`agent-relay` umbrella (0.3.0), move your `96bulls:` overrides to
+`sessions-pipeline:`.
+
 The charts default to `ghcr.io/agentworkforce/96bulls-services`, pinned by
 digest. That hosted-service package is private. For direct installs, create a
 docker-registry Secret and add `--set worker.imagePullSecrets[0].name=<secret>
@@ -219,7 +236,10 @@ Where the migrator has no default, neither does the chart:
   has no shim, no wait-for-role and no in-cluster SQL Jobs, and the chart
   refuses each of those in supabase mode. Never run
   `hoopdb_function_default_revoke.sql` on Supabase. The runtime role is
-  `sessions_pipeline_runtime` with LOGIN and no workload role. Do not use the drifted
+  `sessions_pipeline_runtime` with LOGIN and no workload role (a database
+  bootstrapped before the rename keeps its role: set
+  `worker.migrations.runtimeRole` to that name, for example `bulls96_runtime`).
+  Do not use the drifted
   legacy `relayhistory_runtime`. The Worker role is
   `session_directory_search_worker`.
 

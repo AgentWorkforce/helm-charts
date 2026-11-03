@@ -8,24 +8,25 @@
 # bucket is GCS through the services' native adapter (locker.provider=gcs)
 # with Workload Identity (podIdentity mode). gcs arms the services' data-path
 # readiness check, so extraEnv carries the Cloud SQL, Memorystore and Pub/Sub
-# settings the GCP stack passes (render-only values).
+# settings the GCP stack passes (render-only values). The Secret (96bulls-gcp)
+# and bucket (96bulls-ci) are the names the upstream GCP stack provisions.
 global:
   tenant:
     orgId: org_ci
 worker:
   image:
     digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
-  existingSecret: sessions-pipeline-gcp
+  existingSecret: 96bulls-gcp
   summaryEncryption:
-    existingSecret: sessions-pipeline-gcp
+    existingSecret: 96bulls-gcp
     key: SUMMARY_MASTER_KEYS
   hoopdb:
-    existingSecret: sessions-pipeline-gcp
+    existingSecret: 96bulls-gcp
     key: HOOPDB_URL
   locker:
     provider: gcs
     endpoint: ""
-    bucket: sessions-pipeline-ci
+    bucket: 96bulls-ci
     region: us-central1
     credentials:
       mode: podIdentity
@@ -42,7 +43,7 @@ worker:
     - { name: PUBSUB_SUBSCRIPTION, value: "projects/ci-project/subscriptions/ci-sessions" }
   migrations:
     hoopdb:
-      existingSecret: sessions-pipeline-gcp
+      existingSecret: 96bulls-gcp
       key: HOOPDB_MIGRATION_URL
     databaseMode: cloudsql
     supabaseShim: false
@@ -53,14 +54,14 @@ worker:
 alleyoop:
   image:
     digest: "sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2"
-  existingSecret: sessions-pipeline-gcp
+  existingSecret: 96bulls-gcp
   hoopdb:
-    existingSecret: sessions-pipeline-gcp
+    existingSecret: 96bulls-gcp
     key: HOOPDB_URL
   locker:
     provider: gcs
     endpoint: ""
-    bucket: sessions-pipeline-ci
+    bucket: 96bulls-ci
     region: us-central1
     credentials:
       mode: podIdentity

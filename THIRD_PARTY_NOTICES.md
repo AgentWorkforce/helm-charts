@@ -30,7 +30,7 @@ The SHA-256 values are those of the archives fetched on 2026-11-02 and
 re-fetched unchanged on 2026-11-03, recorded so a rebuilt archive can be
 compared; they are not files in this repository. `charts/sessions-pipeline/Chart.lock`
 (digest
-`sha256:ade2941ed0a75a418ea51e873a57e645d16d3a9ea8e5810c71c07430b1f079a2`)
+`sha256:9206b7d2ee78aa5068934641d643fa4397fb14362fb2ac8fe31e46854593787f`)
 pins the versions.
 
 | Component | Dependency archive (produced by `helm dependency build charts/sessions-pipeline`) | Upstream source | Upstream license evidence |

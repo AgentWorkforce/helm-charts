@@ -4,6 +4,8 @@
 # Pinned services image: the immutable ECR digest (sessions-dev) built from
 # sessions-pipeline main 7d7229bb31c121ecb98cd4e35c248fc2cf5669ad (tag
 # sha-7d7229b..., publish-image-ecr run 41375747474), generation eff8b3be...259b.
+# The Secret (96bulls-runtime) and bucket (96bulls-ci) are the names the
+# upstream AWS stack provisions; they stay as is until that stack renames them.
 global:
   imageRegistry: ""
   tenant:
@@ -16,11 +18,11 @@ worker:
     digest: "sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9"
   existingSecret: ""
   summaryEncryption:
-    existingSecret: sessions-pipeline-runtime
+    existingSecret: 96bulls-runtime
     key: SUMMARY_MASTER_KEYS
   locker:
     endpoint: ""
-    bucket: sessions-pipeline-ci
+    bucket: 96bulls-ci
     region: us-west-2
     credentials:
       mode: podIdentity
@@ -45,7 +47,7 @@ alleyoop:
   existingSecret: ""
   locker:
     endpoint: ""
-    bucket: sessions-pipeline-ci
+    bucket: 96bulls-ci
     region: us-west-2
     credentials:
       mode: podIdentity
