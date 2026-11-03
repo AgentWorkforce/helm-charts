@@ -64,6 +64,16 @@ Drain through values instead of scaling by hand:
    --show-labels`.) If the Job fails, stop: inspect its log (`kubectl logs
    job/<name> -c wait-for-history-drain` and `-c migrate`) before retrying, and
    do not run step 2.
+
+   Do not pass `--wait-for-jobs` on step 1 in the agent-relay umbrella when
+   Relayflows runs a standalone flow that probes History (the GCP proof's
+   `values-gcp-proof-flows.yaml` smoke flow does): that Job runs once per Helm
+   revision, History has no pods during step 1, so the smoke Job fails and
+   Helm marks the revision failed even though the migration succeeded. Wait on
+   the migrate Job as above instead; step 2's smoke Job passes. If step 1 did
+   end as a failed revision, step 2 diffs against the last deployed revision,
+   which never had the drain Role, so Helm leaves `relayhistory-drain-wait`
+   (Role and RoleBinding) behind: delete both after step 2.
 2. Upgrade again with both flags back to `false` (the defaults). The Deployment
    returns to `replicaCount`. The migrate Job's pod template changes
    (`ALLOW_WRITE_HOLD=no`), so a new Job runs; it finds nothing to apply.
