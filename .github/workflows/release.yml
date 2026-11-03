@@ -45,6 +45,13 @@ jobs:
           helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
           helm repo update
 
+      # charts/agent-relay is published only by release-agent-relay.yml from an
+      # agent-relay-X.Y.Z tag, with build provenance. chart-releaser has no
+      # exclude option and skips changed chart directories that do not exist,
+      # so drop it from this job's working tree.
+      - name: Exclude the tag-published agent-relay umbrella
+        run: rm -rf charts/agent-relay
+
       - name: Run chart-releaser
         id: cr
         uses: helm/chart-releaser-action@v1.6.0
@@ -77,6 +84,8 @@ jobs:
           mkdir -p .oci-packages
           for dir in charts/*/; do
             chart=$(basename "$dir")
+            # Published (and attested) only by release-agent-relay.yml.
+            [ "$chart" = agent-relay ] && continue
             version=$(sed -n 's/^version: *//p' "$dir/Chart.yaml" | tr -d '"')
             # Only versions chart-releaser has published to the Pages repo.
             git ls-remote --exit-code --tags origin "refs/tags/$chart-$version" >/dev/null || continue

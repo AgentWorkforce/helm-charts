@@ -92,6 +92,20 @@ spec:
             - name: RELAYCAST_MAILBOX_DEPTH_CAP
               value: {{ . | quote }}
             {{- end }}
+            - name: RELAYCAST_CREDENTIAL_FORMAT
+              value: {{ dig "format" "legacy" (.Values.credentials | default dict) | quote }}
+            {{- with .Values.secretKeys.credentialKeyring }}
+            - name: RELAYCAST_CREDENTIAL_KEYRING_FILE
+              value: {{ include "relaycast.secretMountPath" $ }}/credential-keyring
+            {{- end }}
+            {{- with dig "relayauth" "url" "" (.Values.credentials | default dict) }}
+            - name: RELAYCAST_RELAYAUTH_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.secretKeys.relayauthToken }}
+            - name: RELAYCAST_RELAYAUTH_TOKEN_FILE
+              value: {{ include "relaycast.secretMountPath" $ }}/relayauth-token
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -135,6 +149,14 @@ spec:
                 path: internal-secret
               - key: {{ .Values.secretKeys.bootstrapSecret | quote }}
                 path: workspace-bootstrap-secret
+              {{- with .Values.secretKeys.credentialKeyring }}
+              - key: {{ . | quote }}
+                path: credential-keyring
+              {{- end }}
+              {{- with .Values.secretKeys.relayauthToken }}
+              - key: {{ . | quote }}
+                path: relayauth-token
+              {{- end }}
         {{- if .Values.backup.enabled }}
         - name: backup
           persistentVolumeClaim:

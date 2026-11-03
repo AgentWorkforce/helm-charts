@@ -84,6 +84,20 @@ spec:
             - name: RELAYAUTH_BOOTSTRAP_API_KEY_ORG
               value: {{ $.Values.relayhistory.bootstrapApiKeyOrg | quote }}
             {{- end }}
+            {{- with $keys.relaycastCredentialKeyring }}
+            - name: RELAYAUTH_RELAYCAST_CREDENTIAL_KEYRING_FILE
+              value: /run/secrets/relayauth/{{ . }}
+            - name: RELAYAUTH_RELAYCAST_URL
+              value: {{ dig "url" "" ($.Values.relaycast | default dict) | quote }}
+            {{- end }}
+            {{- with $keys.relaycastInternalSecret }}
+            - name: RELAYAUTH_RELAYCAST_INTERNAL_SECRET_FILE
+              value: /run/secrets/relayauth/{{ . }}
+            {{- end }}
+            {{- with $keys.relaycastServiceApiKey }}
+            - name: RELAYAUTH_RELAYCAST_SERVICE_API_KEY_FILE
+              value: /run/secrets/relayauth/{{ . }}
+            {{- end }}
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:

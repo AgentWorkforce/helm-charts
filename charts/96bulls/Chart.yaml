@@ -1,7 +1,7 @@
 apiVersion: v2
 name: 96bulls
 type: application
-version: 0.5.1
+version: 0.5.2
 # The 96Bulls services image version the app subcharts default to.
 appVersion: "0.1.0"
 description: >
@@ -10,6 +10,9 @@ description: >
   (MinIO) and an OpenTelemetry collector. Hook-free, so `helm install` and
   Alchemy's `helm template --no-hooks` + server-side apply behave the same.
   Requires the CloudNativePG operator when hoopdb.enabled (see deps/PINS.md).
+annotations:
+  artifacthub.io/license: Apache-2.0
+  agentworkforce.dev/license-scope: "First-party chart code only; dependencies and images retain their own licenses."
 home: https://github.com/AgentWorkforce/96BullSessions
 keywords: [96bulls, sessions, pipeline, agentworkforce]
 maintainers:
@@ -20,11 +23,11 @@ sources:
 # Third-party versions MUST match deps/pins.txt (scripts/ci/deps.sh checks).
 dependencies:
   - name: 96bulls-worker
-    version: 0.5.1
+    version: 0.5.2
     repository: file://../96bulls-worker
     alias: worker
   - name: alleyoop
-    version: 0.3.3
+    version: 0.3.4
     repository: file://../alleyoop
   - name: cluster
     version: 0.9.0

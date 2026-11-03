@@ -50,6 +50,14 @@ echo '{{- if .Values.search.backend }}{{ end }}' >> "$WORK/r/charts/96bulls/temp
 expect_fail "planned: umbrella reads .Values.search.backend" planned \
   "opt.96bulls.search-backend is planned, but charts/96bulls/templates reads 96bulls:search.backend"
 
+# (c) A planned entry owned by a SUBCHART (chart: 96bulls-worker) whose path is
+# read only by the umbrella templates: every chart's reads are scanned.
+fresh
+yq -i '(.entries[] | select(.id == "opt.96bulls.session-briefs")) |= (.chart = "96bulls-worker" | .values = ["sessionBrief.enabled"])' "$WORK/r/self-hosted/requirements.yaml"
+echo '{{- if .Values.worker.sessionBrief.enabled }}{{ end }}' >> "$WORK/r/charts/96bulls/templates/NOTES.txt"
+expect_fail "planned: subchart entry read only by the umbrella" planned \
+  "opt.96bulls.session-briefs is planned, but charts/96bulls/templates reads 96bulls-worker:sessionBrief.enabled"
+
 # A template comment that names a planned env or value is not a reference.
 fresh
 printf '%s\n' '{{/* SESSION_BRIEF_ENABLED and .Values.worker.sessionBrief.enabled come with the re-pin */}}' \

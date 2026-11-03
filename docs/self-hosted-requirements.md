@@ -14,7 +14,7 @@ registered, every shipped entry must exist in the charts, planned entries must
 not be referenced by any template, and the compatibility matrix must equal
 the pinned digests.
 
-Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 70 entries: 30 requirements (29 shipped, 1 planned), 40 options (38 shipped, 2 planned).
+Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 78 entries: 32 requirements (31 shipped, 1 planned), 46 options (44 shipped, 2 planned).
 
 ## Contents
 
@@ -29,6 +29,10 @@ Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.y
   - [gcp-cloudsql](#profile-gcp-cloudsql)
   - [relaycast](#profile-relaycast)
   - [relayauth](#profile-relayauth)
+  - [relayhistory](#profile-relayhistory)
+  - [relay-cloud-api](#profile-relay-cloud-api)
+  - [relay-dashboard](#profile-relay-dashboard)
+  - [agent-relay](#profile-agent-relay)
   - [relayfile](#profile-relayfile)
   - [relayflows](#profile-relayflows)
 - [All entries](#all-entries)
@@ -44,14 +48,20 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 
 | row | status | charts | image | services source / generation | supported dbMode + boundary | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 96bulls-0.5.1 | shipped | 96bulls 0.5.1<br>96bulls-worker 0.5.1<br>alleyoop 0.3.3<br>(deps: worker 0.5.1, alleyoop 0.3.3, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | sessions-pipeline main 7d7229b (#124 session list RPC, #125 Supabase event-trigger boundary, #139 its manifest sync, #137 exact sessions function ACL). The AWS path pins the ECR digest of the same build. |
+| 96bulls-0.5.2 | unreleased | 96bulls 0.5.2<br>96bulls-worker 0.5.2<br>alleyoop 0.3.4<br>(deps: worker 0.5.2, alleyoop 0.3.4, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | License-annotation patch bump of 0.5.1; same services image and db combos. |
+| 96bulls-0.5.1 | shipped | 96bulls 0.5.1<br>96bulls-worker 0.5.1<br>alleyoop 0.3.3<br>(deps: worker 0.5.1, alleyoop 0.3.3, hoopdb 0.9.0, locker 5.4.0, otel 0.178.0) | 96bulls-worker: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…`<br>alleyoop: `agentworkforce/96bulls-services@sha256:6f22ea17dff3…` | `7d7229bb31c1` / `eff8b3be4656` | selfhosted + global-default-revoke (cnpg)<br>selfhosted + global-default-revoke (external)<br>cloudsql + global-default-revoke (external)<br>supabase + event-trigger (external) (held)<br>supabase + (unset) (external) (fails closed)<br>local + (unset) (any) (dev only) | sessions-pipeline main 7d7229b (#124 session list RPC, #125 Supabase event-trigger boundary, #139 its manifest sync, #137 exact sessions function ACL). The AWS path pins the ECR digest of the same build. Superseded by 0.5.2. |
 | 96bulls-next | **planned** | 96bulls next | not built for the charts yet | `475d503216a2` / `5ed119133e36` |  | Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/96bulls-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped. |
-| relaycast-0.2.0 | shipped | relaycast 0.2.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md. |
+| relaycast-0.2.1 | unreleased | relaycast 0.2.1 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | License-annotation patch bump of 0.2.0. |
+| relaycast-0.2.0 | shipped | relaycast 0.2.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:a05732ad4f36…` |  |  | engine 12.2.1 + the internal admin API (relaycast main bdf1b69c). Upgrade path from 0.1.0 is in charts/relaycast/README.md. Superseded by 0.2.1. |
 | relaycast-0.1.0 | shipped | relaycast 0.1.0 | relaycast: `ghcr.io/agentworkforce/relaycast-self-host@sha256:5c86c095a335…` |  |  | image 8.0.0; superseded by 0.2.0. ci/relaycast/smoke.sh upgrades from it. |
-| relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). |
+| relayauth-0.1.2 | unreleased | relayauth 0.1.2 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | License-annotation patch bump of 0.1.1. |
+| relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2. |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
-| relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. |
-| relayflows-0.2.3 | shipped | relayflows 0.2.3 | relayflows: `node:22.23.3-bookworm-slim` |  |  | the stock image installs the pinned relayflows runtime at start; production uses an immutable flow image. |
+| agent-relay-0.1.0 | unreleased | agent-relay 0.1.0<br>relayhistory 0.1.0<br>relay-cloud-api 0.1.0<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.2.1, relayauth 0.1.2, 96bulls 0.5.2, relayhistory 0.1.0, relay-cloud-api 0.1.0, relay-dashboard 0.1.0, relayflows 0.2.4) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. |
+| relayfile-0.1.2 | unreleased | relayfile 0.1.2 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | License-annotation patch bump of 0.1.1; image by tag (Chart.appVersion), not digest. |
+| relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. Superseded by 0.1.2. |
+| relayflows-0.2.4 | unreleased | relayflows 0.2.4 | relayflows: `node:22.23.3-bookworm-slim` |  |  | License-annotation patch bump of 0.2.3; the stock image installs the pinned relayflows runtime at start. |
+| relayflows-0.2.3 | shipped | relayflows 0.2.3 | relayflows: `node:22.23.3-bookworm-slim` |  |  | the stock image installs the pinned relayflows runtime at start; production uses an immutable flow image. Superseded by 0.2.4. |
 
 ### Supported dbMode and function boundary combinations
 
@@ -118,6 +128,7 @@ chart `96bulls` · values [`profiles/selfhost-postgres.yaml`](../charts/96bulls/
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -170,6 +181,7 @@ chart `96bulls` · values [`profiles/migration.yaml`](../charts/96bulls/profiles
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -219,6 +231,7 @@ chart `96bulls` · values [`profiles/external-selfhosted.yaml`](../charts/96bull
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -268,6 +281,7 @@ chart `96bulls` · values [`profiles/external-supabase.yaml`](../charts/96bulls/
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `minio` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `secret` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -319,6 +333,7 @@ chart `96bulls` · values [`ci/aws-cnpg-values.yaml`](../charts/96bulls/ci/aws-c
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ecr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `http://otel-collector:4318` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -367,6 +382,7 @@ chart `96bulls` · values [`ci/pod-identity-values.yaml`](../charts/96bulls/ci/p
 | shipped | [Separate migration-owner URL for migrate](#opt-hoopdb-migration-owner-url) | `""`, `<secret>/<key>` | `""` | values `worker.migrations.hoopdb.existingSecret`, `worker.migrations.hoopdb.key` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `s3` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -416,6 +432,7 @@ chart `96bulls` · values [`ci/gcp-cloudsql-values.yaml`](../charts/96bulls/ci/g
 | shipped | [migrate's wait-for-role ordering](#opt-96bulls-wait-for-role) | `true`, `false` | `true` | values `worker.migrations.waitForRole.enabled`, `worker.migrations.waitForRole.functionDefault`, `worker.migrations.waitForRole.image`, `worker.migrations.waitForRole.intervalSeconds`, `worker.migrations.waitForRole.role` |
 | shipped | [Locker object store](#opt-96bulls-locker-backend) | `minio`, `external` | `external` | values `locker.enabled`, `worker.locker.endpoint`, `worker.locker.bucket`, `worker.locker.region`, `alleyoop.locker.endpoint`, `alleyoop.locker.bucket`, `alleyoop.locker.region`, `worker.lockerInit.enabled`; env `LOCKER_ENDPOINT`, `LOCKER_BUCKET`, `LOCKER_REGION` |
 | shipped | [Locker credentials mode](#opt-96bulls-locker-credentials-mode) | `secret`, `podIdentity` | `podIdentity` | values `worker.locker.credentials.mode`, `alleyoop.locker.credentials.mode` |
+| shipped | [Locker provider (S3-compatible or native GCS)](#opt-96bulls-locker-provider) | `s3`, `gcs` | `gcs` | values `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`; env `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION` |
 | shipped | [Services image registry](#opt-96bulls-services-image) | `ghcr`, `ecr` | `ghcr` | values `worker.image.repository`, `worker.image.digest`, `worker.image.tag`, `alleyoop.image.repository`, `alleyoop.image.digest`, `alleyoop.image.tag`, `global.imageRegistry` |
 | shipped | [OpenTelemetry export](#opt-96bulls-otel) | `""`, `<your OTLP endpoint>`, `http://otel-collector:4318` | `""` | values `global.otel.endpoint`, `otel.enabled`, `otel.config.*`; env `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | shipped | [Workspace, deployment and environment labels](#opt-96bulls-deployment-identity) | `<any>` | `workspaceId=default`, `deployment=selfhost`, `environment=production` | values `worker.tenant.workspaceId`, `worker.deployment.name`, `worker.deployment.id`, `worker.environment`, `alleyoop.tenant.workspaceId`, `alleyoop.deployment.name`, `alleyoop.deployment.id`, `alleyoop.environment`; env `WORKSPACE_ID`, `DEPLOYMENT`, `DEPLOYMENT_ID`, `ENVIRONMENT` |
@@ -434,7 +451,7 @@ chart `relaycast` · install: `helm install relaycast agentworkforce/relaycast -
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [Relaycast secret (internal admin + workspace bootstrap)](#req-relaycast-secret) | operator | values `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys`; env `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`; Secret `<existingSecret, e.g. relaycast-secrets>` keys `internal-secret`, `workspace-bootstrap-secret` | kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has both keys; helm template fails with "existingSecret is required" otherwise |
+| shipped | [Relaycast secret (internal admin + workspace bootstrap)](#req-relaycast-secret) | operator | values `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys.credentialKeyring`, `secretKeys.relayauthToken`, `secretKeys`; env `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`, `RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYCAST_RELAYAUTH_TOKEN_FILE`; Secret `<existingSecret, e.g. relaycast-secrets>` keys `internal-secret`, `workspace-bootstrap-secret`, `<operator-chosen, no default>`, `<operator-chosen, no default>` | kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has internal-secret and workspace-bootstrap-secret, plus the secretKeys.credentialKeyring key when credentials.authority=self or the secretKeys.relayauthToken key when credentials.authority=relayauth; helm template fails with "existingSecret is required", or the matching credentials error, otherwise |
 | shipped | [Relaycast public origin (baseUrl)](#req-relaycast-base-url) | operator | values `baseUrl` | helm template fails with "baseUrl is required" otherwise; curl <baseUrl>/health |
 | shipped | [DNS and a TLS certificate for the public Relaycast host (with ingress)](#req-relaycast-dns-tls) | operator | values `ingress.enabled`, `ingress.hosts`, `ingress.tls`, `ingress.externalTls`, `ingress.className`, `ingress.annotations`, `networkPolicy.ingressFrom`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls; created by cert-manager when annotated) | dig +short <host>; curl -fsS https://<host>/health; curl -s -o /dev/null -w '%{http_code}' https://<host>/internal is 503 |
 | shipped | [A ReadWriteOnce volume for the SQLite database and files](#req-relaycast-storage) | operator | values `persistence.existingClaim`, `persistence.storageClass`, `persistence.accessMode`, `persistence.size`, `replicaCount` | kubectl get pvc -n relaycast Bound; helm template refuses replicaCount != 1 |
@@ -449,6 +466,7 @@ chart `relaycast` · install: `helm install relaycast agentworkforce/relaycast -
 | shipped | [Message retention and mailbox limits](#opt-relaycast-retention) | `<positive integer>`, `""` | (no default) | values `retention.messageTtlDays`, `mailbox.ttlMs`, `mailbox.depthCap`; env `RELAYCAST_MESSAGE_TTL_DAYS`, `RELAYCAST_MAILBOX_TTL_MS`, `RELAYCAST_MAILBOX_DEPTH_CAP` |
 | shipped | [Scheduled SQLite and file backups](#opt-relaycast-backup) | `false`, `true` | `false` | values `backup.*` |
 | shipped | [Relaycast runtime backend](#opt-relaycast-runtime-backend) | `sqlite`, `aws-ha` (**planned**), `gcp-ha` (**planned**) | `sqlite` | values `runtime.backend` |
+| shipped | [Workspace credential format and authority (ar_ / model B)](#opt-relaycast-credential-authority) | `legacy`, `ar` | `legacy` | values `credentials.*`; env `RELAYCAST_CREDENTIAL_FORMAT`, `RELAYCAST_RELAYAUTH_URL` |
 | shipped | [Relaycast NetworkPolicy](#opt-relaycast-network-policy) | `true`, `false` | `true` | values `networkPolicy.enabled`, `networkPolicy.ingressFrom` |
 | shipped | [Image pull Secrets for the Relay charts](#opt-charts-image-pull-secrets) | `[]`, `[{name: <secret>}]` | `[]` | values `relaycast:imagePullSecrets`, `relayauth:imagePullSecrets`, `relayfile:imagePullSecrets`, `relayflows:imagePullSecrets` |
 
@@ -462,7 +480,7 @@ chart `relayauth` · install: `helm install relayauth agentworkforce/relayauth -
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [RelayAuth secret and signing keys](#req-relayauth-secret) | operator | values `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`; env `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`; Secret `<existingSecret, e.g. relayauth-secrets>` keys `internal-secret`, `signing-key.pem`, `bootstrap-api-key` | kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three keys; helm template fails with "existingSecret is required" otherwise |
+| shipped | [RelayAuth secret and signing keys](#req-relayauth-secret) | operator | values `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`, `secretKeys.relaycastCredentialKeyring`, `secretKeys.relaycastInternalSecret`, `secretKeys.relaycastServiceApiKey`; env `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`, `RELAYAUTH_RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYAUTH_RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYAUTH_RELAYCAST_SERVICE_API_KEY_FILE`; Secret `<existingSecret, e.g. relayauth-secrets>` keys `internal-secret`, `signing-key.pem`, `bootstrap-api-key`, `<operator-chosen, no default>`, `<operator-chosen, no default>`, `<operator-chosen, no default>` | kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three required keys, plus the relaycast* keys when secretKeys.relaycastCredentialKeyring is set; helm template fails with "existingSecret is required" (or the relaycast* pairing errors) otherwise |
 | shipped | [A ReadWriteOnce volume for the RelayAuth SQLite database](#req-relayauth-storage) | operator | values `persistence.existingClaim`, `persistence.storageClass`, `persistence.size`, `replicaCount` | kubectl get pvc Bound; helm template refuses replicaCount != 1 |
 
 **Options (choose)**
@@ -475,6 +493,56 @@ chart `relayauth` · install: `helm install relayauth agentworkforce/relayauth -
 | shipped | [RelayAuth base URL and issuer](#opt-relayauth-issuer) | `""`, `https://<public host>` | `""` | values `baseUrl`, `issuer`; env `BASE_URL`, `RELAYAUTH_ISSUER` |
 | shipped | [Public JWKS ingress](#opt-relayauth-jwks-ingress) | `false`, `true` | `false` | values `jwksIngress.*`, `networkPolicy.enabled`, `networkPolicy.ingressFrom`; Secret `<jwksIngress.tls[].secretName>` (kubernetes.io/tls for the JWKS host) |
 | shipped | [CORS allowlist and RelayHistory assertion options](#opt-relayauth-cors-history) | `<any>` | `allowedOrigins=`, `allowPrivateHttpOrigin=false`, `bootstrapApiKeyOrg=org_selfhost` | values `cors.allowedOrigins`, `relayhistory.allowPrivateHttpOrigin`, `relayhistory.bootstrapApiKeyOrg`; env `ALLOWED_ORIGINS`, `RELAYAUTH_ALLOW_PRIVATE_HTTP_HISTORY_ORIGIN`, `RELAYAUTH_BOOTSTRAP_API_KEY_ORG` |
+| shipped | [Push RelayAuth-issued ar_ workspace credentials into Relaycast (model B)](#opt-relayauth-relaycast-credentials) | `""`, `configured` | `""` | values `relaycast.url`; env `RELAYAUTH_RELAYCAST_URL` |
+
+### Profile: relayhistory
+
+**Relay History data plane.** Single-replica GCP proof shape backed by operator-managed PostgreSQL 17; no HA claim.
+
+chart `relayhistory` · values [`ci/default-values.yaml`](../charts/relayhistory/ci/default-values.yaml) · install: `helm install relayhistory agentworkforce/relayhistory -f values.yaml --set image.digest=sha256:<digest>`
+
+**Requirements (provide these)**
+
+| | requirement | provided by | maps to | verify |
+| --- | --- | --- | --- | --- |
+| shipped | [Relay History database and optional provider Secrets](#req-relayhistory-config) | operator | values `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`; env `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`; Secret `<database.existingSecret>` keys `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`; Secret `<optional provider Secret>` keys `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | the migration Job completes, then /readyz returns 200 through the history host |
+
+### Profile: relay-cloud-api
+
+**Self-host control-plane API.** Single-replica self-host API with normal migration Job and existing Secrets only; no HA claim.
+
+chart `relay-cloud-api` · values [`ci/default-values.yaml`](../charts/relay-cloud-api/ci/default-values.yaml) · install: `helm install relay-cloud-api agentworkforce/relay-cloud-api -f values.yaml --set image.digest=sha256:<digest>`
+
+**Requirements (provide these)**
+
+| | requirement | provided by | maps to | verify |
+| --- | --- | --- | --- | --- |
+| shipped | [Self-host control-plane existing Secret and service configuration](#req-relay-cloud-api-config) | operator | values `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `ingress.tls`, `imagePullSecrets`; env `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`; Secret `<existingSecret>` keys `database-url`, `database-migrations-url`, `relayauth-api-key`, `selfhost-bootstrap-token`, `selfhost-encryption-key`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls, normally managed by the GKE ingress certificate path); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url |
+
+### Profile: relay-dashboard
+
+**Self-host dashboard.** Static dashboard whose ingress sends same-origin /cloud/api to relay-cloud-api.
+
+chart `relay-dashboard` · values [`ci/default-values.yaml`](../charts/relay-dashboard/ci/default-values.yaml) · install: `helm install relay-dashboard agentworkforce/relay-dashboard -f values.yaml --set image.digest=sha256:<digest>`
+
+**Options (choose)**
+
+| | option | choices | default here | maps to |
+| --- | --- | --- | --- | --- |
+| shipped | [Dashboard ingress and same-origin API proxy](#opt-relay-dashboard-ingress) | `enabled`, `disabled` | `enabled` | values `runtime.publicUrl`, `runtime.appPath`, `runtime.apiBasePath`, `runtime.loginPath`, `ingress.tls`, `imagePullSecrets`; env `DASHBOARD_PUBLIC_URL`, `DASHBOARD_APP_PATH`, `DASHBOARD_API_BASE_PATH`, `DASHBOARD_LOGIN_PATH`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) |
+
+### Profile: agent-relay
+
+**GCP messaging and Sessions suite.** Relaycast, RelayAuth, 96Bulls, Relay History, control-plane API and dashboard; Relayflows is opt-in via components.relayflows, Relayfile is excluded.
+
+chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm install agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml --set relay-cloud-api.image.digest=sha256:<digest>`
+
+**Options (choose)**
+
+| | option | choices | default here | maps to |
+| --- | --- | --- | --- | --- |
+| shipped | [Single GKE ingress for the proof hosts](#opt-agent-relay-gke-ingress) | `enabled`, `disabled` | `disabled` | values `gkeIngress.enabled`, `gkeIngress.staticIpName`, `gkeIngress.managedCertificateName`, `gkeIngress.frontendConfigName`, `gkeIngress.hosts.*`, `gkeIngress.backends.*`, `relayauth.jwksIngress.enabled` |
+| shipped | [Optional Relayflows component in the suite](#opt-agent-relay-relayflows) | `enabled`, `disabled` | `disabled` | values `components.relayflows`, `relayflows.*` |
 
 ### Profile: relayfile
 
@@ -867,23 +935,65 @@ from a Secret, never values. Secret and value names are proposed.
 - Verify: not applicable until charted
 - Sources: `sessions-pipeline@475d503:src/session-brief/config.ts:6`
 
+#### req.relay-cloud-api.config
+
+<a id="req-relay-cloud-api-config"></a>
+
+**Self-host control-plane existing Secret and service configuration** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+packages/selfhost-api reads its runtime database, RelayAuth API key,
+bootstrap token and encryption key only from an existing Secret mounted
+as files. The migration owner URL is projected only into the migration
+Job. Internal service origins are explicit chart values; Relaycast and
+RelayHistory public origins must use public multi-label HTTPS DNS.
+
+- Provided by: operator
+- Values: `publicUrl`, `services.*`, `existingSecret`, `secretKeys.*`, `database.runtimeRole`, `ingress.tls`, `imagePullSecrets`
+- Env: `DATABASE_URL_FILE`, `DATABASE_MIGRATIONS_URL_FILE`, `SELFHOST_RUNTIME_DATABASE_ROLE`, `RELAYAUTH_API_KEY_FILE`, `SELFHOST_BOOTSTRAP_TOKEN_FILE`, `SELFHOST_ENCRYPTION_KEY_FILE`, `SELFHOST_PUBLIC_URL`, `RELAYAUTH_URL`, `RELAYCAST_URL`, `RELAYCAST_PUBLIC_URL`, `RELAYHISTORY_URL`, `RELAYHISTORY_PUBLIC_URL`
+- Secret: `<existingSecret>` from `existingSecret`; keys `database-url` from `secretKeys.databaseUrl`; `database-migrations-url` from `secretKeys.databaseMigrationsUrl`; `relayauth-api-key` from `secretKeys.relayauthApiKey`; `selfhost-bootstrap-token` from `secretKeys.bootstrapToken`; `selfhost-encryption-key` from `secretKeys.encryptionKey`
+- Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls, normally managed by the GKE ingress certificate path
+- Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
+- Verify: helm template fails without existingSecret, immutable image digest or valid public service origins; the migration Job invokes migrate-cli.js directly and projects only database-migrations-url
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
+
+#### req.relayhistory.config
+
+<a id="req-relayhistory-config"></a>
+
+**Relay History database and optional provider Secrets** · shipped · chart `relayhistory` · profiles relayhistory
+
+Relay History requires runtime and migration-owner PostgreSQL URLs from an
+existing Secret. Optional embeddings, analysis and telemetry credentials
+also reference existing Secrets; no Secret is created by the chart.
+
+- Provided by: operator
+- Values: `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`
+- Env: `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`
+- Secret: `<database.existingSecret>` from `database.existingSecret`; keys `DATABASE_URL` from `database.keys.url`; `DATABASE_MIGRATIONS_URL` from `database.keys.migrationsUrl`
+- Secret: `<optional provider Secret>`; keys `EMBEDDING_API_KEY` from `embeddings.key`; `OPENAI_API_KEY` from `sessionAnalysis.key`; `POSTHOG_API_KEY` from `telemetry.key`
+- Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls
+- Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
+- Verify: the migration Job completes, then /readyz returns 200 through the history host
+- Sources: [`charts/relayhistory/values.yaml`](../charts/relayhistory/values.yaml), [`charts/relayhistory/templates/migrate-job.yaml`](../charts/relayhistory/templates/migrate-job.yaml)
+
 #### req.relaycast.secret
 
 <a id="req-relaycast-secret"></a>
 
 **Relaycast secret (internal admin + workspace bootstrap)** · shipped · chart `relaycast` · profiles relaycast
 
-An existing Secret in the release namespace; both keys are mounted read-only
+An existing Secret in the release namespace; the keys are mounted read-only
 under /run/secrets/relaycast and passed as *_FILE paths. internal-secret is the
 bearer (>= 32 characters) for the in-cluster /internal admin API;
 workspace-bootstrap-secret derives keyed workspace-create retries and must stay
-stable across upgrades.
+stable across upgrades. The optional credentialKeyring and relayauthToken keys
+wire ar_ credentials (see opt.relaycast.credential-authority).
 
 - Provided by: operator
-- Values: `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys`
-- Env: `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`
-- Secret: `<existingSecret, e.g. relaycast-secrets>` from `existingSecret`; keys `internal-secret` from `secretKeys.internalSecret`; `workspace-bootstrap-secret` from `secretKeys.bootstrapSecret`
-- Verify: kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has both keys; helm template fails with "existingSecret is required" otherwise
+- Values: `existingSecret`, `secretKeys.internalSecret`, `secretKeys.bootstrapSecret`, `secretKeys.credentialKeyring`, `secretKeys.relayauthToken`, `secretKeys`
+- Env: `RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET_FILE`, `RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYCAST_RELAYAUTH_TOKEN_FILE`
+- Secret: `<existingSecret, e.g. relaycast-secrets>` from `existingSecret`; keys `internal-secret` from `secretKeys.internalSecret`; `workspace-bootstrap-secret` from `secretKeys.bootstrapSecret`; `<operator-chosen, no default>` from `secretKeys.credentialKeyring` (optional: required when credentials.authority=self (the ar_ tag keyring)); `<operator-chosen, no default>` from `secretKeys.relayauthToken` (optional: required when credentials.authority=relayauth or credentials.relayauth.url is set (the RelayAuth token))
+- Verify: kubectl -n relaycast get secret relaycast-secrets -o jsonpath='{.data}' has internal-secret and workspace-bootstrap-secret, plus the secretKeys.credentialKeyring key when credentials.authority=self or the secretKeys.relayauthToken key when credentials.authority=relayauth; helm template fails with "existingSecret is required", or the matching credentials error, otherwise
 - Sources: [`charts/relaycast/values.yaml:47`](../charts/relaycast/values.yaml#L47), [`charts/relaycast/templates/deployment.yaml:61`](../charts/relaycast/templates/deployment.yaml#L61), [`charts/relaycast/templates/_helpers.tpl:103`](../charts/relaycast/templates/_helpers.tpl#L103), [`README.md:62`](../README.md#L62)
 
 #### req.relaycast.base-url
@@ -917,7 +1027,7 @@ and with networkPolicy networkPolicy.ingressFrom must allow it.
 - Values: `ingress.enabled`, `ingress.hosts`, `ingress.tls`, `ingress.externalTls`, `ingress.className`, `ingress.annotations`, `networkPolicy.ingressFrom`
 - Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls; created by cert-manager when annotated
 - Verify: dig +short <host>; curl -fsS https://<host>/health; curl -s -o /dev/null -w '%{http_code}' https://<host>/internal is 503
-- Sources: [`charts/relaycast/values.yaml:82`](../charts/relaycast/values.yaml#L82), [`charts/relaycast/templates/_helpers.tpl:140`](../charts/relaycast/templates/_helpers.tpl#L140), [`charts/relaycast/templates/_helpers.tpl:143`](../charts/relaycast/templates/_helpers.tpl#L143)
+- Sources: [`charts/relaycast/values.yaml:107`](../charts/relaycast/values.yaml#L107), [`charts/relaycast/templates/_helpers.tpl:170`](../charts/relaycast/templates/_helpers.tpl#L170), [`charts/relaycast/templates/_helpers.tpl:173`](../charts/relaycast/templates/_helpers.tpl#L173)
 
 #### req.relaycast.storage
 
@@ -930,7 +1040,7 @@ One replica, Recreate upgrades; the data PVC (10Gi, helm.sh/resource-policy keep
 - Provided by: operator
 - Values: `persistence.existingClaim`, `persistence.storageClass`, `persistence.accessMode`, `persistence.size`, `replicaCount`
 - Verify: kubectl get pvc -n relaycast Bound; helm template refuses replicaCount != 1
-- Sources: [`charts/relaycast/values.yaml:105`](../charts/relaycast/values.yaml#L105), [`charts/relaycast/templates/_helpers.tpl:74`](../charts/relaycast/templates/_helpers.tpl#L74)
+- Sources: [`charts/relaycast/values.yaml:130`](../charts/relaycast/values.yaml#L130), [`charts/relaycast/templates/_helpers.tpl:74`](../charts/relaycast/templates/_helpers.tpl#L74)
 
 #### req.relayauth.secret
 
@@ -942,14 +1052,15 @@ A pre-created Secret; the chart never renders key material. Keys are mounted
 under /run/secrets/relayauth and passed as *_FILE paths: the internal secret,
 the signing key PEM, and the bootstrap API key (bound to
 relayhistory.bootstrapApiKeyOrg). Each secretKeys entry must be a valid Secret
-data key.
+data key. The optional relaycast* keys wire RelayAuth-issued relaycast
+credentials (see opt.relayauth.relaycast-credentials).
 
 - Provided by: operator
-- Values: `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`
-- Env: `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`
-- Secret: `<existingSecret, e.g. relayauth-secrets>` from `existingSecret`; keys `internal-secret` from `secretKeys.internalSecret`; `signing-key.pem` from `secretKeys.signingKey`; `bootstrap-api-key` from `secretKeys.bootstrapApiKey`
-- Verify: kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three keys; helm template fails with "existingSecret is required" otherwise
-- Sources: [`charts/relayauth/values.yaml:42`](../charts/relayauth/values.yaml#L42), [`charts/relayauth/templates/deployment.yaml:65`](../charts/relayauth/templates/deployment.yaml#L65), [`charts/relayauth/templates/_helpers.tpl:71`](../charts/relayauth/templates/_helpers.tpl#L71)
+- Values: `existingSecret`, `secretKeys`, `secretKeys.internalSecret`, `secretKeys.signingKey`, `secretKeys.bootstrapApiKey`, `secretKeys.relaycastCredentialKeyring`, `secretKeys.relaycastInternalSecret`, `secretKeys.relaycastServiceApiKey`
+- Env: `INTERNAL_SECRET_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_FILE`, `RELAYAUTH_BOOTSTRAP_API_KEY_FILE`, `RELAYAUTH_RELAYCAST_CREDENTIAL_KEYRING_FILE`, `RELAYAUTH_RELAYCAST_INTERNAL_SECRET_FILE`, `RELAYAUTH_RELAYCAST_SERVICE_API_KEY_FILE`
+- Secret: `<existingSecret, e.g. relayauth-secrets>` from `existingSecret`; keys `internal-secret` from `secretKeys.internalSecret`; `signing-key.pem` from `secretKeys.signingKey`; `bootstrap-api-key` from `secretKeys.bootstrapApiKey`; `<operator-chosen, no default>` from `secretKeys.relaycastCredentialKeyring` (optional: set to issue relaycast ar_ credentials (requires relaycast.url and secretKeys.relaycastInternalSecret)); `<operator-chosen, no default>` from `secretKeys.relaycastInternalSecret` (optional: required with secretKeys.relaycastCredentialKeyring (Relaycast internal API bearer)); `<operator-chosen, no default>` from `secretKeys.relaycastServiceApiKey` (optional: only with secretKeys.relaycastCredentialKeyring)
+- Verify: kubectl get secret relayauth-secrets -o jsonpath='{.data}' has the three required keys, plus the relaycast* keys when secretKeys.relaycastCredentialKeyring is set; helm template fails with "existingSecret is required" (or the relaycast* pairing errors) otherwise
+- Sources: [`charts/relayauth/values.yaml:53`](../charts/relayauth/values.yaml#L53), [`charts/relayauth/templates/deployment.yaml:65`](../charts/relayauth/templates/deployment.yaml#L65), [`charts/relayauth/templates/_helpers.tpl:71`](../charts/relayauth/templates/_helpers.tpl#L71)
 
 #### req.relayauth.storage
 
@@ -962,7 +1073,7 @@ One replica (single-writer SQLite), Recreate; the data PVC is kept on uninstall.
 - Provided by: operator
 - Values: `persistence.existingClaim`, `persistence.storageClass`, `persistence.size`, `replicaCount`
 - Verify: kubectl get pvc Bound; helm template refuses replicaCount != 1
-- Sources: [`charts/relayauth/values.yaml:72`](../charts/relayauth/values.yaml#L72), [`charts/relayauth/templates/_helpers.tpl:68`](../charts/relayauth/templates/_helpers.tpl#L68)
+- Sources: [`charts/relayauth/values.yaml:87`](../charts/relayauth/values.yaml#L87), [`charts/relayauth/templates/_helpers.tpl:68`](../charts/relayauth/templates/_helpers.tpl#L68)
 
 #### req.relayfile.secret
 
@@ -1243,6 +1354,33 @@ secret reads the LOCKER_* keys from existingSecret; podIdentity omits both stati
 - Verify: no LOCKER_ACCESS_KEY_ID in the rendered pods with podIdentity
 - Sources: [`charts/96bulls-worker/values.yaml:63`](../charts/96bulls-worker/values.yaml#L63), [`charts/96bulls-worker/templates/_env.tpl:15`](../charts/96bulls-worker/templates/_env.tpl#L15)
 
+#### opt.96bulls.locker-provider
+
+<a id="opt-96bulls-locker-provider"></a>
+
+**Locker provider (S3-compatible or native GCS)** · shipped · chart `96bulls` · profiles selfhost-postgres, migration, external-selfhosted, external-supabase, aws-cnpg, aws-supabase, gcp-cloudsql
+
+s3 (default) leaves LOCKER_PROVIDER unset: MinIO, AWS S3 or another
+S3-compatible store. gcs renders LOCKER_PROVIDER=gcs and
+PIPELINE_RAW_PROVIDER=gcs so the services use their native GCS adapter with a
+GKE Workload Identity token. It requires locker.credentials.mode=podIdentity,
+an empty (or https://storage.googleapis.com) endpoint and
+worker.lockerInit.enabled=false. The services refuse HMAC keys on GCS and the S3
+client against storage.googleapis.com, so the charts refuse both. gcs also arms
+the services' GCS data-path readiness check: worker.extraEnv and
+alleyoop.extraEnv must carry CLOUD_SQL_CONNECTION_NAME, REDIS_HOST, REDIS_PORT,
+REDIS_AUTH_ENABLED=false, REDIS_TRANSIT_ENCRYPTION=SERVER_AUTHENTICATION,
+REDIS_TLS_CA_PEM (public CA bundle), PUBSUB_TOPIC and PUBSUB_SUBSCRIPTION, or the
+render fails.
+
+- Default: `s3` (by profile: default `s3`, gcp-cloudsql `gcs`)
+- Choices: `s3`; `gcs`: GKE Workload Identity; Cloud SQL
+- Provided by: operator
+- Values: `worker.locker.provider`, `alleyoop.locker.provider`, `worker.extraEnv`, `alleyoop.extraEnv`
+- Env: `LOCKER_PROVIDER`, `PIPELINE_RAW_PROVIDER`, `CLOUD_SQL_CONNECTION_NAME`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_AUTH_ENABLED`, `REDIS_TRANSIT_ENCRYPTION`, `REDIS_TLS_CA_PEM`, `PUBSUB_TOPIC`, `PUBSUB_SUBSCRIPTION`
+- Verify: with gcs, the worker and Alleyoop /readyz return 200 and /datapathz reports ok
+- Sources: [`charts/96bulls-worker/values.yaml:64`](../charts/96bulls-worker/values.yaml#L64), [`charts/96bulls-worker/templates/_env.tpl:63`](../charts/96bulls-worker/templates/_env.tpl#L63), [`charts/96bulls-worker/templates/_env.tpl:108`](../charts/96bulls-worker/templates/_env.tpl#L108), [`charts/alleyoop/templates/_env.tpl:95`](../charts/alleyoop/templates/_env.tpl#L95)
+
 #### opt.96bulls.services-image
 
 <a id="opt-96bulls-services-image"></a>
@@ -1368,6 +1506,63 @@ key Secret (req.secret.model-api-key). Values names are proposed.
 - Verify: not applicable until charted
 - Sources: `sessions-pipeline@475d503:src/session-brief/config.ts:4`, `sessions-pipeline@475d503:src/session-brief/main.ts:2`
 
+#### opt.relay-dashboard.ingress
+
+<a id="opt-relay-dashboard-ingress"></a>
+
+**Dashboard ingress and same-origin API proxy** · shipped · chart `relay-dashboard` · profiles relay-dashboard
+
+The dashboard ingress routes /cloud/api to relay-cloud-api and / to the
+dashboard. The GKE proof disables this leaf ingress and supplies the same
+routes through its single umbrella Ingress.
+
+- Default: `enabled`
+- Choices: `enabled`; `disabled`
+- Provided by: operator
+- Values: `runtime.publicUrl`, `runtime.appPath`, `runtime.apiBasePath`, `runtime.loginPath`, `ingress.tls`, `imagePullSecrets`
+- Env: `DASHBOARD_PUBLIC_URL`, `DASHBOARD_APP_PATH`, `DASHBOARD_API_BASE_PATH`, `DASHBOARD_LOGIN_PATH`
+- Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls
+- Secret: `<imagePullSecrets[].name>`; keys . optional registry pull Secret
+- Verify: render contains the configured dashboard runtime environment and routes /cloud/api to relay-cloud-api
+- Sources: [`charts/relay-dashboard/templates/ingress.yaml`](../charts/relay-dashboard/templates/ingress.yaml), [`ci/agent-relay/render.sh`](../ci/agent-relay/render.sh)
+
+#### opt.agent-relay.gke-ingress
+
+<a id="opt-agent-relay-gke-ingress"></a>
+
+**Single GKE ingress for the proof hosts** · shipped · chart `agent-relay` · profiles agent-relay
+
+One GCE Ingress uses the reserved global address, one ManagedCertificate
+for all four hosts and a FrontendConfig HTTPS redirect. Leaf ingresses
+are disabled and all ClusterIP backends use standalone NEGs.
+
+- Default: `disabled`
+- Choices: `enabled`; `disabled`
+- Provided by: chart
+- Values: `gkeIngress.enabled`, `gkeIngress.staticIpName`, `gkeIngress.managedCertificateName`, `gkeIngress.frontendConfigName`, `gkeIngress.hosts.*`, `gkeIngress.backends.*`, `relayauth.jwksIngress.enabled`
+- Verify: render contains exactly one Ingress, the four expected hosts, ManagedCertificate, FrontendConfig and NEG annotations
+- Sources: [`charts/agent-relay/templates/gke-ingress.yaml`](../charts/agent-relay/templates/gke-ingress.yaml), [`charts/agent-relay/values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`ci/agent-relay/render.sh`](../ci/agent-relay/render.sh)
+
+#### opt.agent-relay.relayflows
+
+<a id="opt-agent-relay-relayflows"></a>
+
+**Optional Relayflows component in the suite** · shipped · chart `agent-relay` · profiles agent-relay
+
+components.relayflows adds the relayflows subchart to the agent-relay
+suite; relayflows.* values pass through to it unchanged. Off by default.
+standalone mode runs a flow Job/CronJob entirely in-cluster today.
+cloudWorker mode enrolls against worker.cloudUrl and is blocked until
+the self-host API implements the /api/v1/workers/* enroll, queue and
+assignment endpoints. See docs/self-hosted-relayflows.md.
+
+- Default: `disabled`
+- Choices: `enabled`; `disabled`
+- Provided by: operator
+- Values: `components.relayflows`, `relayflows.*`
+- Verify: the proof render emits no relayflows manifest while disabled; enabling renders only relayflows resources
+- Sources: [`charts/agent-relay/Chart.yaml:41`](../charts/agent-relay/Chart.yaml#L41), [`charts/agent-relay/values.yaml:11`](../charts/agent-relay/values.yaml#L11), [`ci/agent-relay/render.sh:12`](../ci/agent-relay/render.sh#L12), [`docs/self-hosted-relayflows.md`](../docs/self-hosted-relayflows.md)
+
 #### opt.stack.relaycast
 
 <a id="opt-stack-relaycast"></a>
@@ -1417,7 +1612,7 @@ balancer in front of the controller terminates TLS. Every ingress blocks
 - Values: `allowInsecureBaseUrl`, `privateDnsSuffixes`, `insecureBaseUrlHosts`, `ingress.enabled`, `ingress.externalTls`, `service.type`
 - Env: `RELAYCAST_ALLOW_INSECURE_BASE_URL`, `RELAYCAST_PRIVATE_DNS_SUFFIXES`, `RELAYCAST_INSECURE_BASE_URL_HOSTS`
 - Verify: helm template refuses ingress with allowInsecureBaseUrl or an http baseUrl
-- Sources: [`charts/relaycast/values.yaml:36`](../charts/relaycast/values.yaml#L36), [`charts/relaycast/templates/_helpers.tpl:133`](../charts/relaycast/templates/_helpers.tpl#L133), [`charts/relaycast/templates/deployment.yaml:72`](../charts/relaycast/templates/deployment.yaml#L72)
+- Sources: [`charts/relaycast/values.yaml:36`](../charts/relaycast/values.yaml#L36), [`charts/relaycast/templates/_helpers.tpl:168`](../charts/relaycast/templates/_helpers.tpl#L168), [`charts/relaycast/templates/deployment.yaml:72`](../charts/relaycast/templates/deployment.yaml#L72)
 
 #### opt.relaycast.workspace-create
 
@@ -1433,7 +1628,7 @@ Off by default; workspaces are created through the internal admin API. Refused w
 - Values: `publicWorkspaceCreate`, `bootstrapProofRequired`
 - Env: `RELAYCAST_PUBLIC_WORKSPACE_CREATE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED`
 - Verify: POST /v1/workspaces without a key is refused
-- Sources: [`charts/relaycast/values.yaml:60`](../charts/relaycast/values.yaml#L60), [`charts/relaycast/templates/_helpers.tpl:130`](../charts/relaycast/templates/_helpers.tpl#L130)
+- Sources: [`charts/relaycast/values.yaml:85`](../charts/relaycast/values.yaml#L85), [`charts/relaycast/templates/_helpers.tpl:165`](../charts/relaycast/templates/_helpers.tpl#L165)
 
 #### opt.relaycast.retention
 
@@ -1449,7 +1644,7 @@ Empty keeps messages forever and uses the engine's mailbox defaults; positive in
 - Values: `retention.messageTtlDays`, `mailbox.ttlMs`, `mailbox.depthCap`
 - Env: `RELAYCAST_MESSAGE_TTL_DAYS`, `RELAYCAST_MAILBOX_TTL_MS`, `RELAYCAST_MAILBOX_DEPTH_CAP`
 - Verify: env of the relaycast pod
-- Sources: [`charts/relaycast/values.yaml:65`](../charts/relaycast/values.yaml#L65), [`charts/relaycast/templates/deployment.yaml:84`](../charts/relaycast/templates/deployment.yaml#L84)
+- Sources: [`charts/relaycast/values.yaml:90`](../charts/relaycast/values.yaml#L90), [`charts/relaycast/templates/deployment.yaml:84`](../charts/relaycast/templates/deployment.yaml#L84)
 
 #### opt.relaycast.backup
 
@@ -1464,7 +1659,7 @@ Online SQLite-backup-API copies of the database and the file directory to a seco
 - Provided by: operator
 - Values: `backup.*`
 - Verify: kubectl get cronjob -n relaycast; a completed backup Job
-- Sources: [`charts/relaycast/values.yaml:118`](../charts/relaycast/values.yaml#L118), [`charts/relaycast/templates/backup.yaml:156`](../charts/relaycast/templates/backup.yaml#L156)
+- Sources: [`charts/relaycast/values.yaml:143`](../charts/relaycast/values.yaml#L143), [`charts/relaycast/templates/backup.yaml:156`](../charts/relaycast/templates/backup.yaml#L156)
 
 #### opt.relaycast.runtime-backend
 
@@ -1483,6 +1678,30 @@ the chart refuses anything but sqlite until they are released and proven.
 - Verify: helm template refuses runtime.backend != sqlite
 - Sources: [`charts/relaycast/values.yaml:21`](../charts/relaycast/values.yaml#L21), [`charts/relaycast/templates/_helpers.tpl:77`](../charts/relaycast/templates/_helpers.tpl#L77), [`docs/self-hosted-reference-architecture.md:40`](../docs/self-hosted-reference-architecture.md#L40)
 
+#### opt.relaycast.credential-authority
+
+<a id="opt-relaycast-credential-authority"></a>
+
+**Workspace credential format and authority (ar_ / model B)** · shipped · chart `relaycast` · profiles relaycast
+
+credentials.format selects the workspace credential format (legacy is the
+default). format=ar requires an authority: relayauth makes RelayAuth the
+ar_ credential authority (model B — RelayAuth owns the ar_ tag keyring and
+pushes ar_ws_ keys into Relaycast, which verifies tags through RelayAuth's
+remote CredentialTagger via credentials.relayauth.url and
+secretKeys.relayauthToken); self verifies ar_ tags against the local
+keyring mounted by secretKeys.credentialKeyring. A mounted keyring always
+takes precedence over the remote tagger. ar_ custody requires a >=12.3.x
+engine image (image.digest override; the pinned default predates it).
+
+- Default: `legacy`
+- Choices: `legacy`: issue and verify legacy credentials locally; `ar`: ar_ credentials; requires credentials.authority (self or relayauth)
+- Provided by: operator
+- Values: `credentials.*`
+- Env: `RELAYCAST_CREDENTIAL_FORMAT`, `RELAYCAST_RELAYAUTH_URL`
+- Verify: helm template refuses format=ar without an authority, authority=relayauth without url+token, and authority=self without secretKeys.credentialKeyring
+- Sources: [`charts/relaycast/values.yaml:75`](../charts/relaycast/values.yaml#L75), [`charts/relaycast/templates/_helpers.tpl:133`](../charts/relaycast/templates/_helpers.tpl#L133), [`charts/relaycast/templates/deployment.yaml:95`](../charts/relaycast/templates/deployment.yaml#L95)
+
 #### opt.relaycast.network-policy
 
 <a id="opt-relaycast-network-policy"></a>
@@ -1496,7 +1715,7 @@ On by default; allows callers only from the release namespace unless ingressFrom
 - Provided by: operator
 - Values: `networkPolicy.enabled`, `networkPolicy.ingressFrom`
 - Verify: kubectl get networkpolicy -n relaycast
-- Sources: [`charts/relaycast/values.yaml:191`](../charts/relaycast/values.yaml#L191)
+- Sources: [`charts/relaycast/values.yaml:216`](../charts/relaycast/values.yaml#L216)
 
 #### opt.charts.image-pull-secrets
 
@@ -1527,7 +1746,7 @@ Optional Secret keys for the public, next and previous signing keys; each set ke
 - Values: `secretKeys.signingKeyPublic`, `secretKeys.signingKeyNext`, `secretKeys.signingKeyPrevious`
 - Env: `RELAYAUTH_SIGNING_KEY_PEM_PUBLIC_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_NEXT_FILE`, `RELAYAUTH_SIGNING_KEY_PEM_PREVIOUS_FILE`
 - Verify: the JWKS lists the next/previous kids during a rotation
-- Sources: [`charts/relayauth/values.yaml:48`](../charts/relayauth/values.yaml#L48), [`charts/relayauth/templates/deployment.yaml:74`](../charts/relayauth/templates/deployment.yaml#L74)
+- Sources: [`charts/relayauth/values.yaml:57`](../charts/relayauth/values.yaml#L57), [`charts/relayauth/templates/deployment.yaml:74`](../charts/relayauth/templates/deployment.yaml#L74)
 
 #### opt.relayauth.issuer
 
@@ -1562,7 +1781,7 @@ ingressFrom.
 - Values: `jwksIngress.*`, `networkPolicy.enabled`, `networkPolicy.ingressFrom`
 - Secret: `<jwksIngress.tls[].secretName>`; keys . kubernetes.io/tls for the JWKS host
 - Verify: curl -fsS https://<host>/.well-known/jwks.json; other paths are not routed
-- Sources: [`charts/relayauth/values.yaml:62`](../charts/relayauth/values.yaml#L62), [`charts/relayauth/templates/_helpers.tpl:91`](../charts/relayauth/templates/_helpers.tpl#L91)
+- Sources: [`charts/relayauth/values.yaml:77`](../charts/relayauth/values.yaml#L77), [`charts/relayauth/templates/_helpers.tpl:103`](../charts/relayauth/templates/_helpers.tpl#L103)
 
 #### opt.relayauth.cors-history
 
@@ -1579,6 +1798,28 @@ ALLOWED_ORIGINS (CORS only, not an audience allowlist); allowPrivateHttpOrigin p
 - Env: `ALLOWED_ORIGINS`, `RELAYAUTH_ALLOW_PRIVATE_HTTP_HISTORY_ORIGIN`, `RELAYAUTH_BOOTSTRAP_API_KEY_ORG`
 - Verify: env of the relayauth pod
 - Sources: [`charts/relayauth/values.yaml:30`](../charts/relayauth/values.yaml#L30), [`charts/relayauth/templates/deployment.yaml:84`](../charts/relayauth/templates/deployment.yaml#L84)
+
+#### opt.relayauth.relaycast-credentials
+
+<a id="opt-relayauth-relaycast-credentials"></a>
+
+**Push RelayAuth-issued ar_ workspace credentials into Relaycast (model B)** · shipped · chart `relayauth` · profiles relayauth
+
+When secretKeys.relaycastCredentialKeyring and
+secretKeys.relaycastInternalSecret are set together, RelayAuth owns the
+ar_ credential tag keyring and pushes ar_ws_ workspace keys into
+Relaycast's internal admin API at relaycast.url (RELAYAUTH_RELAYCAST_URL).
+secretKeys.relaycastServiceApiKey adds an optional service API key. The
+chart refuses partial wiring. The relaycast side is
+credentials.authority=relayauth (opt.relaycast.credential-authority).
+
+- Default: `""`
+- Choices: `""`: off; no relaycast credential push; `configured`: keyring + internal secret keys set (see req.relayauth.secret)
+- Provided by: operator
+- Values: `relaycast.url`
+- Env: `RELAYAUTH_RELAYCAST_URL`
+- Verify: helm template fails with "secretKeys.relaycastInternalSecret is required" when only the keyring key is set, and renders RELAYAUTH_RELAYCAST_* envs when both are set
+- Sources: [`charts/relayauth/values.yaml:48`](../charts/relayauth/values.yaml#L48), [`charts/relayauth/templates/deployment.yaml:87`](../charts/relayauth/templates/deployment.yaml#L87), [`charts/relayauth/templates/_helpers.tpl:84`](../charts/relayauth/templates/_helpers.tpl#L84)
 
 #### opt.relayfile.backend-profile
 
@@ -1734,6 +1975,8 @@ Rendered by the charts but not a requirement or an option: fixed by the chart or
 | `RELAYCAST_ENV` | relaycast | reserved name in the extraEnv guard; the environment is passed as --env (server.environment) |
 | `RELAYCAST_INTERNAL_SECRET` | relaycast | reserved prefix in the extraEnv guard; the Secret is mounted as a file |
 | `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET` | relaycast | reserved prefix in the extraEnv guard; the Secret is mounted as a file |
+| `RELAYCAST_RELAYAUTH` | relaycast | reserved prefix in the extraEnv guard; the RelayAuth remote tagger is wired through credentials.relayauth.url and secretKeys.relayauthToken |
+| `RELAYCAST_CREDENTIAL` | relaycast | reserved prefix in the extraEnv guard; the credential format and local keyring are wired through credentials.* and secretKeys.credentialKeyring |
 | `BACKUP_KEEP` | relaycast | backup CronJob; from backup.keep |
 | `LOCK_STALE_MS` | relaycast | backup CronJob lock timeout (fixed) |
 | `RELAYAUTH_DB_PATH` | relayauth | fixed path on the data PVC |

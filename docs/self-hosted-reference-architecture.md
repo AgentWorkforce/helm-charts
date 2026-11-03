@@ -5,8 +5,18 @@ from planned adapter work; it is not evidence that the HA profiles exist.
 
 The per-profile list of what an operator must provide and can choose, and the
 chart/image/migration compatibility matrix, are in the
-[self-hosted requirements registry](self-hosted-requirements.md), generated
-from [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml).
+[self-hosted requirements registry](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md),
+generated from [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml).
+
+Links into `docs/self-hosted-requirements.md`, `docs/diagrams/`, and the
+repository `README.md` point at the public source repository because those
+files are not part of the customer handoff archive. For the version matching
+an archive, open the same path at the revision recorded in its
+`RELEASE-MANIFEST.json`.
+
+For the deployed GKE shape — load balancer and ingress routing, in-namespace
+pods, and the Cloud SQL / GCS / PVC data plane — see the
+[self-hosted architecture diagram](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/diagrams/self-hosted-architecture.md).
 
 ## Product shape
 
@@ -28,7 +38,7 @@ depend on an add-on. In particular, Relaycast does not require Relayflows.
 
 Relaycast's options for these, including the planned `aws-ha` and `gcp-ha`
 backends, are registry entry
-[`opt.relaycast.runtime-backend`](self-hosted-requirements.md#opt-relaycast-runtime-backend).
+[`opt.relaycast.runtime-backend`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#opt-relaycast-runtime-backend).
 
 ### `portable-single` — implemented
 
@@ -70,7 +80,9 @@ not hidden in chart conditionals.
 Operator decision (2026-11-01): self-hosted deployments support two transcript
 search profiles. They select a backend; they do not fork RelayHistory
 behavior, which already has a Postgres search path and a derived ClickHouse
-path. No RelayHistory or ClickHouse chart ships in this repository today.
+path. A RelayHistory chart (`charts/relayhistory`, single-replica, digest-pinned
+proof image) ships on this branch; no ClickHouse chart ships in this repository
+today.
 
 ### Standard (default): PostgreSQL + `pg_trgm`
 
@@ -124,13 +136,13 @@ Selecting `clickhouse` keeps the Postgres path configured, so setting
 `search.backend` back to `postgres` is the single-switch rollback.
 
 Registry entries: the planned option
-[`opt.96bulls.search-backend`](self-hosted-requirements.md#opt-96bulls-search-backend)
+[`opt.96bulls.search-backend`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#opt-96bulls-search-backend)
 (CI fails if any template reads a `search.*` value while it is planned), and
 the shipped requirement
-[`req.db.postgres-17-extensions`](self-hosted-requirements.md#req-db-postgres-17-extensions)
+[`req.db.postgres-17-extensions`](https://github.com/AgentWorkforce/helm-charts/blob/main/docs/self-hosted-requirements.md#req-db-postgres-17-extensions)
 (`pg_trgm`, `btree_gin`) that the standard profile relies on.
 
-The 96Bulls chart notes in the [README](../README.md#transcript-search-profiles)
+The 96Bulls chart notes in the [README](https://github.com/AgentWorkforce/helm-charts/blob/main/README.md#transcript-search-profiles)
 point back to this section.
 
 ## Proof and commit gates
@@ -159,6 +171,19 @@ AWS proof is complete only when evidence covers:
   verdicts when that add-on is enabled;
 - add-ons independently disabled without breaking the Relaycast core;
 - no AWS-specific branches in provider-neutral engine behavior.
+
+## Release and migration safety
+
+Initial installation and upgrade are different operations: use `helm install`
+only for a confirmed absent release and `helm upgrade` only for a confirmed
+existing release. Do not use `helm upgrade --install` or `--atomic` for this
+suite. An atomic Helm failure can change Kubernetes resources, but it cannot
+reverse PostgreSQL or SQLite migrations or restore PVC and object-store data.
+
+Before an upgrade, require exact chart/image migration compatibility, a
+current complete backup, a successful isolated restore drill, and an approved
+database-aware recovery procedure. Helm rollback is not database rollback.
+See the [backup and restore runbook](selfhost-backup-restore.md).
 
 ## Unresolved decisions
 

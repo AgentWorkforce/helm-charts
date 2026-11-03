@@ -6,6 +6,10 @@ Single Helm chart repository for all AgentWorkforce services. Each service lives
 
 | Chart | Description |
 |-------|-------------|
+| [agent-relay](charts/agent-relay) | Self-hosted Agent Relay suite umbrella — relaycast, relayauth, 96bulls, relayhistory, control-plane API, dashboard (one GKE Ingress, no HA claim) |
+| [relay-cloud-api](charts/relay-cloud-api) | Self-host control-plane API — organizations, workspaces, device auth; existing-Secret file mounts only, separate migration Job |
+| [relay-dashboard](charts/relay-dashboard) | Static self-host dashboard — nginx SPA calling same-origin `/cloud/api` |
+| [relayhistory](charts/relayhistory) | Relay History data plane — session delivery, search, replay on its own Postgres database (digest-pinned proof image) |
 | [relaycast](charts/relaycast) | Portable self-hosted Relaycast core — realtime agent communication with single-writer SQLite persistence |
 | [relayfile](charts/relayfile) | Relayfile server — single Go binary, HTTP on :8080, Postgres-backed in production |
 | [relayflows](charts/relayflows) | Durable workflows running locally in Kubernetes, with optional Cloud assignment mode |

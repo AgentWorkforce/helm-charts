@@ -1,0 +1,45 @@
+# Existing proof-cluster overlay. Apply after values-gcp-proof.yaml.
+# RelayAuth and the Sessions pipeline already run in their own namespaces.
+# The exposed components inherit the proof profile's GKE load-balancer
+# NetworkPolicy rules.
+#
+# Cross-namespace requirement: relayhistory and relay-cloud-api below call
+# http://relayauth.relayauth.svc:8787 from this namespace. If the RelayAuth
+# release in the relayauth namespace runs with networkPolicy.enabled, its
+# default ingressFrom admits same-namespace pods only and these calls are
+# dropped. That release must admit this namespace, for example:
+#   networkPolicy:
+#     ingressFrom:
+#       - podSelector: {}
+#       - namespaceSelector:
+#           matchLabels: { kubernetes.io/metadata.name: agent-relay }
+components:
+  relayauth: false
+  sessionsPipeline: false
+
+relayhistory:
+  image:
+    digest: sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba
+  resources:
+    requests: { cpu: 25m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  relayauth:
+    jwksUrl: http://relayauth.relayauth.svc:8787/.well-known/jwks.json
+    issuer: http://relayauth.relayauth.svc:8787
+
+relay-cloud-api:
+  image:
+    digest: sha256:0452a72da76d36c9c69ac6de75e51299b1df1a0fdfaec37831bff6deb55c7cf8
+  resources:
+    requests: { cpu: 25m, memory: 128Mi }
+    limits: { memory: 512Mi }
+  services:
+    relayauthUrl: http://relayauth.relayauth.svc:8787
+  # The proof cluster's shared Cloud SQL database grants runtime access to the
+  # role the Sessions stack created; control_api_runtime does not exist there.
+  database:
+    runtimeRole: bulls96_runtime
+
+relay-dashboard:
+  image:
+    digest: sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe

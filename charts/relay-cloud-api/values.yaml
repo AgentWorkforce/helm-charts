@@ -1,0 +1,109 @@
+# The pilot runtime has process-local login/device rate limits. Exactly one
+# replica is enforced; this chart does not claim HA.
+replicaCount: 1
+image:
+  repository: ghcr.io/agentworkforce/selfhost-api
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Public origin of the minimal API, normally the api. host.
+publicUrl: ""
+existingSecret: ""
+secretKeys:
+  databaseUrl: database-url
+  databaseMigrationsUrl: database-migrations-url
+  relayauthApiKey: relayauth-api-key
+  bootstrapToken: selfhost-bootstrap-token
+  encryptionKey: selfhost-encryption-key
+database:
+  # Non-secret PostgreSQL role used by the long-running API. The migration
+  # owner grants this role only the runtime privileges after every migration.
+  runtimeRole: ""
+
+services:
+  relayauthUrl: ""
+  relaycastUrl: ""
+  relaycastPublicUrl: ""
+  relayhistoryUrl: ""
+  relayhistoryPublicUrl: ""
+
+server:
+  port: 3000
+  command: [node]
+  args: [node_modules/@cloud/selfhost-api/dist/server.js]
+
+migrations:
+  enabled: true
+  # The Job name carries a hash of the fully rendered pod template, so any
+  # change to it (image, env, resources, security context...) creates a new
+  # Job instead of patching the immutable spec.template. Change identitySalt
+  # only to force a re-run with an otherwise identical template.
+  identitySalt: ""
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  command: [node]
+  args: [node_modules/@cloud/selfhost-api/dist/migrate-cli.js]
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+  externalTls: false
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile: { type: RuntimeDefault }
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities: { drop: [ALL] }
+resources:
+  requests: { cpu: 250m, memory: 512Mi }
+  limits: { memory: 2Gi }
+startupProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 2
+  failureThreshold: 60
+livenessProbe:
+  httpGet: { path: /healthz, port: http }
+  periodSeconds: 20
+  timeoutSeconds: 3
+readinessProbe:
+  httpGet: { path: /readyz, port: http }
+  periodSeconds: 10
+  timeoutSeconds: 3
+networkPolicy:
+  enabled: true
+  # With allowAllEgress=false the pods may reach only same-namespace pods and
+  # DNS plus additionalEgress. The database (and any service URL outside the
+  # namespace) needs an additionalEgress rule, so rendering fails when
+  # allowAllEgress=false and additionalEgress is empty. Give each rule a
+  # non-empty `to` (enforced): an empty or omitted `to` matches every
+  # destination; use ipBlock 0.0.0.0/0 to allow any destination explicitly.
+  ingressFrom: []
+  allowAllEgress: false
+  additionalEgress: []
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

@@ -1,0 +1,51 @@
+# This umbrella intentionally contains messaging and sessions only.
+# Relayflows is an optional add-on via components.relayflows; Relayfile is not
+# a dependency.
+components:
+  relaycast: true
+  relayauth: true
+  sessionsPipeline: true
+  relayhistory: true
+  cloudApi: true
+  dashboard: true
+  relayflows: false
+
+gkeIngress:
+  enabled: false
+  name: agent-relay
+  staticIpName: agent-relay-ingress
+  managedCertificateName: agent-relay
+  frontendConfigName: agent-relay
+  hosts:
+    root: ""
+    api: ""
+    cast: ""
+    history: ""
+  # serviceName is derived from each child chart's fullname (fullnameOverride,
+  # else <release>-<chart>); an explicit value must match it. servicePort must
+  # match the child's service.port.
+  backends:
+    dashboard: { serviceName: "", servicePort: 8080 }
+    api: { serviceName: "", servicePort: 80 }
+    cast: { serviceName: "", servicePort: 8787 }
+    history: { serviceName: "", servicePort: 8080 }
+
+# Child values are intentionally not populated with credentials or image
+# placeholders here. Every leaf chart fails closed until its existingSecret,
+# public origins and immutable image digest are supplied.
+relaycast: {}
+relayauth:
+  # JWKS publication is off by default; the umbrella routes nothing to
+  # relayauth's public JWKS ingress (gkeIngress refuses jwksIngress.enabled).
+  jwksIngress:
+    enabled: false
+96bulls: {}
+relayhistory: {}
+relay-cloud-api: {}
+relay-dashboard: {}
+# Opt-in only: enabling components.relayflows without configuring this block
+# renders a standalone Job that fails for lack of a flow source (or a
+# cloudWorker Deployment that cannot enroll). Set mode, a flow source
+# (standalone.flow.*) or worker credentials (credentials.existingSecret,
+# worker.cloudUrl), and an immutable image for production.
+relayflows: {}
