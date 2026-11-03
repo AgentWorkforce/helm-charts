@@ -147,6 +147,8 @@ case "$REQUIRE_WRITES_QUIESCED" in
 esac
 [[ "$QUIESCE_WAIT_SECONDS" =~ ^[0-9]+$ ]] ||
   die "QUIESCE_WAIT_SECONDS must be a non-negative integer"
+# Force base 10 so values with leading zeros (060, 08) are not read as octal.
+QUIESCE_WAIT_SECONDS=$((10#$QUIESCE_WAIT_SECONDS))
 WRITER_SELECTOR="${WRITER_SELECTOR:-app.kubernetes.io/instance=${HELM_RELEASE}}"
 
 # Print the deployed Helm revision of HELM_RELEASE. Helm output is parsed in
@@ -216,12 +218,14 @@ writers_quiesced() {
 # Wait up to QUIESCE_WAIT_SECONDS for the pods of scaled-down writers to
 # finish terminating. Fails at once when a controller is not at zero.
 wait_for_writers_quiesced() {
-  local waited=0
+  local waited=0 step
   writer_controllers_at_zero || return 1
   until writer_pods_gone; do
     ((waited < QUIESCE_WAIT_SECONDS)) || return 1
-    sleep 5
-    waited=$((waited + 5))
+    step=$((QUIESCE_WAIT_SECONDS - waited))
+    ((step > 5)) && step=5
+    sleep "$step"
+    waited=$((waited + step))
     writer_controllers_at_zero || return 1
   done
 }

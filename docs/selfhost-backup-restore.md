@@ -104,6 +104,11 @@ credential-file path. The identity needs:
 - read and list access to the source bucket (`GCS_SOURCE_BUCKET`), which the
   `gcs-copy` phase copies from, plus read (bucket metadata), list, and write
   access to the archive bucket (`GCS_ARCHIVE_BUCKET`);
+- the Cloud SQL instance's service agent (shown as `serviceAccountEmailAddress`
+  in `gcloud sql instances describe`) needs `roles/storage.objectCreator` on
+  the archive bucket. Cloud SQL writes the export files as that agent, not as
+  the script's identity, so the export fails without it:
+  `gcloud storage buckets add-iam-policy-binding gs://$GCS_ARCHIVE_BUCKET --member="serviceAccount:<service-agent>" --role=roles/storage.objectCreator`;
 - Kubernetes rights in the release namespace to list Deployments,
   StatefulSets, and Pods (the quiesce check), read PVCs, and create and read
   `VolumeSnapshot` objects;

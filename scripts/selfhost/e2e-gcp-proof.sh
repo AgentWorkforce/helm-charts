@@ -379,9 +379,11 @@ else
     state_set_json bulls "$(python3 -c 'import json,sys; print(json.dumps(dict(orgId=sys.argv[1], workspaceId=sys.argv[2] or "default", origin=sys.argv[3], machineId=sys.argv[4])))' \
       "$(env_of TENANT_ORG_ID)" "$(env_of WORKSPACE_ID)" "$(env_of RELAYHISTORY_ORIGIN)" "$machine")"
     [[ -n "$(state_get marker)" ]] || state_set_json marker "\"$marker\""
-    if ! "${KB[@]}" exec -i "$BULLS_POD" -- sh -c 'umask 077; cat > /tmp/e2e-gcp-proof-96bulls.ts' <"$BULLS_PROBE"; then
-      emit FAIL pipeline.install_probe "could not copy the probe into $BULLS_POD"
-    fi
+    # Remove any helper left by an earlier run first, so a failed copy can
+    # never execute a stale probe.
+    if ! "${KB[@]}" exec -i "$BULLS_POD" -- sh -c 'umask 077; rm -f /tmp/e2e-gcp-proof-96bulls.ts && cat > /tmp/e2e-gcp-proof-96bulls.ts' <"$BULLS_PROBE"; then
+      emit FAIL pipeline.install_probe "could not copy the probe into $BULLS_POD; skipping the rest of case 8"
+    else
     pushed_at="$(date -u +%FT%TZ)"
     run_phase mint-96bulls
     state_pop_to_file bullsAssertion "$WORK/assertion"
@@ -414,6 +416,7 @@ else
       fi
     else
       emit FAIL pipeline.verify "courier push produced no session"
+    fi
     fi
   fi
 fi
