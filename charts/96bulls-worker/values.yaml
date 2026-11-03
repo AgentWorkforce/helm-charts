@@ -249,6 +249,10 @@ affinity: {}
 # infer the CIDRs of an external database/object store or a cluster's DNS and
 # workload-identity endpoints. When enabled, every destination the worker and
 # migration pods need must be listed explicitly; egress is otherwise denied.
+# An empty `to` would match every destination, so rendering fails when dns,
+# database or objectStorage (plus workloadIdentity in podIdentity mode and
+# observability when global.otel.endpoint is set) has no `to` entries. Rules
+# with destinations but no ports allow every port to those destinations.
 #
 # Kubernetes NetworkPolicy has no FQDN matching. For GCS, use customer DNS
 # that maps googleapis.com to private.googleapis.com (199.36.153.8/30) or

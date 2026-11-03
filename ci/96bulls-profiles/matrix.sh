@@ -279,6 +279,21 @@ if [ "$mode" = static ]; then
   for n in HOOPDB_DB_MODE HOOPDB_SUPABASE_SHIM HOOPDB_RUNTIME_ROLE HOOPDB_RUNTIME_ROLE_LOGIN HOOPDB_FUNCTION_BOUNDARY_MODE HOOPDB_FUNCTION_BOUNDARY_APPROVED HOOPDB_ROLE_BOOTSTRAP; do
     expect_fail "extraEnv must not set $n" "${GCP[@]}" --set "worker.extraEnv[0].name=$n" --set "worker.extraEnv[0].value=x"
   done
+  # Worker NetworkPolicy: an empty `to` matches every destination, so a
+  # required rule without destinations must refuse to render, and a rendered
+  # egress rule must never carry an empty or missing `to`.
+  NP=(--set worker.networkPolicy.enabled=true
+    --set-json 'worker.networkPolicy.dns.to=[{"ipBlock":{"cidr":"10.0.0.10/32"}}]'
+    --set-json 'worker.networkPolicy.database.to=[{"ipBlock":{"cidr":"10.10.0.0/24"}}]'
+    --set-json 'worker.networkPolicy.objectStorage.to=[{"ipBlock":{"cidr":"199.36.153.8/30"}}]')
+  expect_fail "networkPolicy.dns.to must list destinations" "${IN[@]}" --set worker.networkPolicy.enabled=true
+  expect_fail "networkPolicy.workloadIdentity.to must list destinations" "${GCP[@]}" "${NP[@]}"
+  out=$(render "${GCP[@]}" "${NP[@]}" --set-json 'worker.networkPolicy.workloadIdentity.to=[{"ipBlock":{"cidr":"169.254.169.254/32"}}]') \
+    || err "worker NetworkPolicy with explicit destinations did not render"
+  np_rules=$(yq 'select(.kind == "NetworkPolicy" and .metadata.labels."app.kubernetes.io/name" == "worker") | .spec.egress | length' <<<"$out")
+  [ "$np_rules" = 4 ] || err "worker NetworkPolicy: expected 4 egress rules, got $np_rules"
+  np_open=$(yq 'select(.kind == "NetworkPolicy" and .metadata.labels."app.kubernetes.io/name" == "worker") | .spec.egress[] | select((.to // []) | length == 0)' <<<"$out")
+  [ -z "$np_open" ] || err "worker NetworkPolicy renders an egress rule with an empty to (allows every destination)"
 fi
 
 [ $fail -eq 0 ] && echo "96bulls profile matrix ($mode): OK (${#MATRIX[@]} profiles)"
