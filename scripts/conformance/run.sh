@@ -525,11 +525,17 @@ scenario_db_outage() {
     return
   fi
 
+  # Mark the outage active before calling begin: a hook can disable the
+  # database and then exit non-zero, and the exit trap must still run the
+  # repeat-safe end action.
+  DB_OUTAGE_ACTIVE=true
   if ! run_hook "${DB_OUTAGE_HOOK}" begin; then
     emit_evidence "${scenario}" "FAIL" "database outage hook failed to start"
+    if run_hook "${DB_OUTAGE_HOOK}" end; then
+      DB_OUTAGE_ACTIVE=false
+    fi
     return
   fi
-  DB_OUTAGE_ACTIVE=true
 
   local stayed_ready=false
   if ! run_quiet safe_kubectl wait --for=condition=Ready=false pod \

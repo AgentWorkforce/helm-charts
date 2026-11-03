@@ -352,6 +352,25 @@ jq -e '
   fail "mutating scenarios ran without an isolated fresh install"
 pass "mutating scenarios require the isolated fresh install"
 
+: >"${command_log}"
+failing_begin_hook="${tmp_root}/failing-begin-hook"
+cat >"${failing_begin_hook}" <<'MOCK'
+#!/usr/bin/env bash
+printf 'hook %s\n' "$1" >>"${MOCK_COMMAND_LOG}"
+[[ "$1" != "begin" ]]
+MOCK
+chmod +x "${failing_begin_hook}"
+"${TEST_BASH}" "${HARNESS}" --apply --approval APPLY --chart ./umbrella \
+  --namespace aw-outage --release aw-outage \
+  --db-outage-hook "${failing_begin_hook}" \
+  --evidence-dir "${tmp_root}/outage-begin-fails" >/dev/null 2>&1 || true
+assert_contains "${command_log}" '^hook begin'
+assert_contains "${command_log}" '^hook end'
+jq -e '.scenarios[] | select(.scenario == "db-outage-readiness") | .status == "FAIL"' \
+  "${tmp_root}/outage-begin-fails/summary.json" >/dev/null ||
+  fail "failed outage begin was not reported"
+pass "database outage end runs even when begin fails"
+
 # expect_wrapper RC MODE COMMAND... runs a wrapper in an isolated subshell
 # under TEST_BASH and asserts both the exit code and that a blocked command
 # never reached the mocked binary.
