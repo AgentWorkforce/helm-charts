@@ -14,7 +14,7 @@ registered, every shipped entry must exist in the charts, planned entries must
 not be referenced by any template, and the compatibility matrix must equal
 the pinned digests.
 
-Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 95 entries: 39 requirements (38 shipped, 1 planned), 56 options (54 shipped, 2 planned).
+Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 96 entries: 39 requirements (38 shipped, 1 planned), 57 options (55 shipped, 2 planned).
 
 ## Contents
 
@@ -62,9 +62,9 @@ Services image (96bulls-worker, alleyoop and the privileged SQL Jobs):
 | relayauth-0.1.2 | unreleased | relayauth 0.1.2 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | License-annotation patch bump of 0.1.1. |
 | relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2. |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
-| agent-relay-0.2.0 | unreleased | agent-relay 0.2.0<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.0<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.0, relayauth 0.1.2, 96bulls 0.5.4, relayhistory 0.1.1, relay-cloud-api 0.2.0, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade, README). |
-| relayfile-0.2.0 | unreleased | relayfile 0.2.0 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker, deploy Job: ghcr.io/agentworkforce/relayfile-actors by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged. |
-| durable-actors-0.14.6 | unreleased | durable-actors 0.14.6 |  |  |  | Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee); one schema patch (root global). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md). |
+| agent-relay-0.2.0 | unreleased | agent-relay 0.2.0<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.0, relayauth 0.1.2, 96bulls 0.5.4, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe. selfhost-api remains fail-closed until published and supplied by digest. The dashboard's same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required. |
+| relayfile-0.2.0 | unreleased | relayfile 0.2.0 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker: ghcr.io/agentworkforce/relayfile-actors by digest; deploy Job and dev sidecar: relayfile-actors-workspace by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged. |
+| durable-actors-0.14.6 | unreleased | durable-actors 0.14.6 |  |  |  | Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee) with the local patches listed in charts/durable-actors/UPSTREAM.md (root global, invoke-only key, host idle timeout, pool-manager name length, zero-valued bounds, lowercase ingress host, schema patterns, README links). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md). |
 | relayfile-0.1.1 | shipped | relayfile 0.1.1 | relayfile: `ghcr.io/agentworkforce/relayfile:0.1.0` |  |  | image by tag (Chart.appVersion), not digest. Superseded by 0.2.0. |
 | relayflows-0.2.4 | unreleased | relayflows 0.2.4 | relayflows: `node:22.23.3-bookworm-slim` |  |  | License-annotation patch bump of 0.2.3; the stock image installs the pinned relayflows runtime at start. |
 | relayflows-0.2.3 | shipped | relayflows 0.2.3 | relayflows: `node:22.23.3-bookworm-slim` |  |  | the stock image installs the pinned relayflows runtime at start; production uses an immutable flow image. Superseded by 0.2.4. |
@@ -481,6 +481,7 @@ chart `relaycast` · install: `helm install relaycast agentworkforce/relaycast -
 | | option | choices | default here | maps to |
 | --- | --- | --- | --- | --- |
 | shipped | [Install the Relaycast core](#opt-stack-relaycast) | `installed` | `installed` |  |
+| shipped | [GKE BackendConfig binding for the Relaycast Service](#opt-relaycast-service-backend-config) | `empty`, `<gkeIngress.name>-cast` | `empty` | values `service.backendConfig` |
 | shipped | [Relaycast ingress scheme](#opt-relaycast-exposure) | `internal`, `ingress-tls`, `ingress-external-tls` | `internal` | values `allowInsecureBaseUrl`, `privateDnsSuffixes`, `insecureBaseUrlHosts`, `ingress.enabled`, `ingress.externalTls`, `service.type`; env `RELAYCAST_ALLOW_INSECURE_BASE_URL`, `RELAYCAST_PRIVATE_DNS_SUFFIXES`, `RELAYCAST_INSECURE_BASE_URL_HOSTS` |
 | shipped | [Anonymous workspace creation](#opt-relaycast-workspace-create) | `false`, `true` | `false` | values `publicWorkspaceCreate`, `bootstrapProofRequired`; env `RELAYCAST_PUBLIC_WORKSPACE_CREATE`, `RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED` |
 | shipped | [Message retention and mailbox limits](#opt-relaycast-retention) | `<positive integer>`, `""` | (no default) | values `retention.messageTtlDays`, `mailbox.ttlMs`, `mailbox.depthCap`; env `RELAYCAST_MESSAGE_TTL_DAYS`, `RELAYCAST_MAILBOX_TTL_MS`, `RELAYCAST_MAILBOX_DEPTH_CAP` |
@@ -525,7 +526,7 @@ chart `relayhistory` · values [`ci/default-values.yaml`](../charts/relayhistory
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [Relay History database and optional provider Secrets](#req-relayhistory-config) | operator | values `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`; env `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`; Secret `<database.existingSecret>` keys `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`; Secret `<optional provider Secret>` keys `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | the migration Job completes, then /readyz returns 200 through the history host |
+| shipped | [Relay History database and optional provider Secrets](#req-relayhistory-config) | operator | values `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`; env `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `HISTORY_SELECTOR`, `DRAIN_WAIT_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`; Secret `<database.existingSecret>` keys `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`; Secret `<optional provider Secret>` keys `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`; Secret `<ingress.tls[].secretName>` (kubernetes.io/tls); Secret `<imagePullSecrets[].name>` (optional registry pull Secret) | the migration Job completes, then /readyz returns 200 through the history host |
 
 ### Profile: relay-cloud-api
 
@@ -676,7 +677,7 @@ chart `relayfile` · values [`ci/durable-actors-values.yaml`](../charts/relayfil
 
 **GCP proof suite with the durable-actors control plane, Relaycast and Relayfile in actor mode.** components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer.
 
-chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`values-gcp-proof-durable-actors.yaml`](../charts/agent-relay/values-gcp-proof-durable-actors.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml --set relayfile.runtime.durableActors.image.digest=sha256:<d> --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<d>`
+chart `agent-relay` · values [`values-gcp-proof.yaml`](../charts/agent-relay/values-gcp-proof.yaml), [`values-gcp-proof-live.yaml`](../charts/agent-relay/values-gcp-proof-live.yaml), [`values-gcp-proof-durable-actors.yaml`](../charts/agent-relay/values-gcp-proof-durable-actors.yaml), [`values-gcp-proof-relayfile.yaml`](../charts/agent-relay/values-gcp-proof-relayfile.yaml), [`ci/gcp-proof-values.yaml`](../charts/agent-relay/ci/gcp-proof-values.yaml) · install: `helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml --set relayfile.runtime.durableActors.image.digest=sha256:<d> --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<d>`
 
 **Requirements (provide these)**
 
@@ -1076,7 +1077,7 @@ also reference existing Secrets; no Secret is created by the chart.
 
 - Provided by: operator
 - Values: `database.existingSecret`, `database.keys.*`, `relayauth.jwksUrl`, `ingress.tls`, `imagePullSecrets`, `embeddings.existingSecret`, `embeddings.key`, `sessionAnalysis.existingSecret`, `sessionAnalysis.key`, `telemetry.existingSecret`, `telemetry.key`
-- Env: `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`
+- Env: `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`, `DATABASE_RUNTIME_ROLE`, `EMBEDDING_API_KEY`, `OPENAI_API_KEY`, `POSTHOG_API_KEY`, `ALLOW_WRITE_HOLD`, `ROLLOUT_BUDGET_SECONDS`, `HISTORY_SELECTOR`, `DRAIN_WAIT_SECONDS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_BODY_BYTES`, `SHUTDOWN_GRACE_MS`, `SHUTDOWN_DRAIN_DELAY_MS`, `PG_POOL_MAX`, `CRON_ENABLED`, `RELAYAUTH_AUDIENCE`, `RELAYHISTORY_ORIGIN`, `AGENT_RELAY_CLOUD_API_URL`, `SESSION_EVENTS_ENABLED`, `POSTHOG_HOST`
 - Secret: `<database.existingSecret>` from `database.existingSecret`; keys `DATABASE_URL` from `database.keys.url`; `DATABASE_MIGRATIONS_URL` from `database.keys.migrationsUrl`
 - Secret: `<optional provider Secret>`; keys `EMBEDDING_API_KEY` from `embeddings.key`; `OPENAI_API_KEY` from `sessionAnalysis.key`; `POSTHOG_API_KEY` from `telemetry.key`
 - Secret: `<ingress.tls[].secretName>`; keys . kubernetes.io/tls
@@ -1942,7 +1943,10 @@ flows worker queue SSE stream open past GCE's 30s default. The
 BackendConfig is named <gkeIngress.name>-api (the name truncated to 59
 characters first); relay-cloud-api renders the annotation from
 relay-cloud-api.service.backendConfig, which must equal that name (the
-render fails with the expected name otherwise).
+render fails with the expected name otherwise). The relaycast Service is
+bound the same way to <gkeIngress.name>-cast (the name truncated to 58
+characters; gkeIngress.backends.cast.timeoutSec, default 3600) through
+relaycast.service.backendConfig, so Relaycast WebSockets stay open.
 
 - Default: `disabled`
 - Choices: `enabled`; `disabled`
@@ -1984,6 +1988,27 @@ Relaycast is the required core of the self-hosted product; add-ons consume it an
 - Provided by: operator
 - Verify: helm status relaycast; curl <baseUrl>/health
 - Sources: [`docs/self-hosted-reference-architecture.md:11`](../docs/self-hosted-reference-architecture.md#L11), [`README.md:55`](../README.md#L55)
+
+#### opt.relaycast.service-backend-config
+
+<a id="opt-relaycast-service-backend-config"></a>
+
+**GKE BackendConfig binding for the Relaycast Service** · shipped · chart `relaycast` · profiles relaycast
+
+service.backendConfig renders the Service annotation
+cloud.google.com/backend-config ({"default": "<name>"}); empty renders
+none. The name must be a DNS-1123 subdomain (at most 253 characters) and
+cannot be combined with a hand-written annotation. Behind the agent-relay
+GKE ingress it must equal <gkeIngress.name>-cast, the BackendConfig whose
+timeoutSec (gkeIngress.backends.cast.timeoutSec, default 3600) keeps
+Relaycast WebSockets open (opt.agent-relay.gke-ingress).
+
+- Default: `empty`
+- Choices: `empty`; `<gkeIngress.name>-cast`
+- Provided by: operator
+- Values: `service.backendConfig`
+- Verify: kubectl get svc <relaycast Service> -o jsonpath='{.metadata.annotations.cloud\.google\.com/backend-config}'
+- Sources: [`charts/relaycast/templates/service.yaml:10`](../charts/relaycast/templates/service.yaml#L10), [`charts/agent-relay/templates/gke-ingress.yaml:144`](../charts/agent-relay/templates/gke-ingress.yaml#L144)
 
 #### opt.stack.relayauth
 

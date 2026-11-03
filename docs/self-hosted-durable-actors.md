@@ -8,7 +8,7 @@ deployments. The umbrella can run the durable-actors control plane itself.
 
 | Piece | Where |
 | --- | --- |
-| Control plane | `charts/durable-actors`, the upstream release chart vendored verbatim at v0.14.6 (`charts/durable-actors/UPSTREAM.md`), umbrella `components.durableActors`, values key `durable-actors` |
+| Control plane | `charts/durable-actors`, the upstream release chart v0.14.6 vendored with documented local patches (`charts/durable-actors/UPSTREAM.md`), umbrella `components.durableActors`, values key `durable-actors` |
 | Relaycast actor mode | `charts/relaycast` `runtime.backend: durable-actors` (env contract v1, below) |
 | Relayfile actor mode | `charts/relayfile` `runtime.backend: durable-actors`, umbrella `components.relayfile` |
 | Requirements and options | `self-hosted/requirements.yaml` profiles `durable-actors`, `relaycast-durable-actors`, `relayfile-durable-actors`, `agent-relay-durable-actors` |
@@ -99,11 +99,17 @@ Chart behaviour and validation:
 - The gateway Deployment keeps the SQLite Deployment's name and selector, so the
   Service, edge-deny Service, Ingress, umbrella `gkeIngress` and NetworkPolicy are
   unchanged. The SQLite render is byte-identical apart from the chart label.
-- The gateway never mounts the admin key: `invocationSecret` must differ from
-  `adminKeySecret` and from `existingSecret`. `invocationSecret.scope: admin`
-  records that it is still a copy of the admin key (NOT release-grade); when
-  upstream ships the invoke-only key, change the Secret's value and set
-  `scope: invoke-only`.
+- The gateway never mounts `adminKeySecret` (the control plane's credentials
+  Secret): `invocationSecret` must differ from `adminKeySecret` and from
+  `existingSecret`. With `invocationSecret.scope: admin` the invocation Secret
+  still holds a copy of the admin key's value (NOT release-grade); with a
+  control plane that accepts an invoke-only key (`durable-actors.invokeApiKeySecretKey`),
+  put that key in the Secret and set `scope: invoke-only`, as the GKE proof does.
+- The deploy Jobs are named `<deployer>-<8-hex pod-template hash>` with the
+  prefix cut to 54 characters, so the Job name and its pods' `job-name` label
+  fit 63 characters for any release name; `deployer.activeDeadlineSeconds`
+  (default 3600) bounds a hung deploy. `extraEnv` must not repeat an env name
+  the gateway sets (control-plane URL, credentials, file store).
 - Requires `credentials.format=ar` and a keyring, an HTTPS public `baseUrl` (no
   `allowInsecureBaseUrl`), and no SQLite-only settings (`backup`, `retention`,
   `mailbox`, `bootstrapProofRequired`; set those as actor env instead).
@@ -144,8 +150,17 @@ durable-actors SDK compiler; commands `deploy` and, for kind/CI, `dev`).
 - The gateway Deployment keeps the Go server's name and selector (Service,
   Ingress, HPA, PDB, NetworkPolicy shared). The default `go` render is unchanged.
 - `adminKeySecret` must differ from `runtime.durableActors.existingSecret`;
-  `blobStore.driver: inline` is refused unless `devRuntime`; images by digest
-  (a tag is accepted for local proofs only).
+  `blobStore.driver: inline` is refused unless `devRuntime`; `image` and
+  `workspaceImage` must be pinned by digest (a tag is accepted only with
+  `devRuntime`).
+- With `auth.jwksUrl` set, `RELAYFILE_JWT_SECRET` is read as an optional key,
+  so a JWKS-only `existingSecret` may omit it (set `secretKeys.jwtSecret: ""`
+  to drop the variable entirely).
+- The gateway pod does not mount a ServiceAccount token
+  (`automountServiceAccountToken: false`); GKE Workload Identity uses the
+  metadata server. Its NetworkPolicy behind the umbrella's `files` host must be
+  `allowExternalTraffic: false` with `ingressFrom` = same-namespace pods plus
+  the GKE ranges 35.191.0.0/16 and 130.211.0.0/22 (the render fails otherwise).
 
 ## Umbrella wiring (`charts/agent-relay`)
 
@@ -212,7 +227,7 @@ pool), release `REL` in namespace `NS` (sandbox namespace `NS-REL`).
      `meta.helm.sh/release-name: REL`, `meta.helm.sh/release-namespace: NS`) so
      the release adopts it. A deployer Job that ran before the Secret existed
      must be deleted to run again.
-   - `relayfile-actors`: `RELAYFILE_JWT_SECRET` (unless `auth.jwksUrl`),
+   - `relayfile-actors`: `RELAYFILE_JWT_SECRET` (optional when `auth.jwksUrl` is set),
      `RELAYFILE_ACTORS_BROKER_TOKEN`, optional `RELAYFILE_INTERNAL_HMAC_SECRET`.
 7. DNS: `actors.<domain>` and `files.<domain>` A records on the suite static IP
    (the managed certificate gains both domains).

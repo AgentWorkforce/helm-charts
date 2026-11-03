@@ -169,7 +169,7 @@ profiles:
   - id: agent-relay-durable-actors
     title: GCP proof suite with the durable-actors control plane, Relaycast and Relayfile in actor mode
     chart: agent-relay
-    values_file: [values-gcp-proof.yaml, values-gcp-proof-live.yaml, values-gcp-proof-durable-actors.yaml, ci/gcp-proof-values.yaml]
+    values_file: [values-gcp-proof.yaml, values-gcp-proof-live.yaml, values-gcp-proof-durable-actors.yaml, values-gcp-proof-relayfile.yaml, ci/gcp-proof-values.yaml]
     install: helm upgrade agent-relay agentworkforce/agent-relay -f values-gcp-proof.yaml -f values-gcp-proof-live.yaml -f values-gcp-proof-durable-actors.yaml -f values-gcp-proof-relayfile.yaml --set relayfile.runtime.durableActors.image.digest=sha256:<d> --set relayfile.runtime.durableActors.workspaceImage.digest=sha256:<d>
     summary: components.durableActors and components.relayfile on the GKE proof cluster; actors and files hosts on the suite load balancer.
 # charts/96bulls/ci/*-values.yaml rendered by ci/96bulls-profiles/matrix.sh that are
@@ -317,15 +317,15 @@ compatibility:
     - id: agent-relay-0.2.0
       status: unreleased
       current: true
-      charts: { agent-relay: 0.2.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0 }
+      charts: { agent-relay: 0.2.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.3.0, relayauth: 0.1.2, 96bulls: 0.5.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.0, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+        agent-relay: { relaycast: 0.3.0, relayauth: 0.1.2, 96bulls: 0.5.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: 'relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Proof digests: dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe; experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade, README).'
+      notes: 'relay-cloud-api 0.2.0 renders the relaycontrol contract (encryption.keyId required; internal token, dashboardUrl, flows, telemetry off by default). The GKE ingress denies /internal on the api host and gives the api backend a BackendConfig timeout (default 3600s) for the flows queue SSE stream. Supersedes the never-released 0.1.0. GKE proof packaging. Live proof pins (values-gcp-proof-live.yaml): dashboard sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62 (relay-dashboard 53d484b); experimental unsupported RelayHistory sha256:8fbda9bd89dd33994b6b3331fb403c38a25f04e6742050bd717e99661f3544ba. The CI render fixture and customer-images.yaml keep dashboard sha256:9bfc0c6b873411c7a0da60d746883bdef6aafd86a9b733c719500a603890b6fe. selfhost-api remains fail-closed until published and supplied by digest. The dashboard''s same-origin /cloud/api is served by selfhost-api natively (it owns /cloud/api and /login; no ingress rewrite). No HA claim. 0.2.0 adds optional components.durableActors (vendored durable-actors 0.14.6) and components.relayfile, both off by default. relayhistory 0.1.1 adds migrations.drainForWriteHold (two-step write-hold upgrade; the migrate Job waits until no History pod exists, README). relay-cloud-api 0.2.1: telemetry.egressTo defaults to empty (restricted egress with https telemetry must list the ingest addresses), the standalone Ingress denies /internal when secretKeys.internalToken is set, and Helm 3.10+ is required.'
     - id: relayfile-0.2.0
       status: unreleased
       current: true
@@ -333,13 +333,13 @@ compatibility:
       app_versions: { relayfile: 0.1.0 }
       images:
         relayfile: { repository: ghcr.io/agentworkforce/relayfile }
-      notes: 'License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker, deploy Job: ghcr.io/agentworkforce/relayfile-actors by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged.'
+      notes: 'License-annotation bump of 0.1.1 (unreleased 0.1.2) plus runtime.backend=durable-actors (gateway, session broker: ghcr.io/agentworkforce/relayfile-actors by digest; deploy Job and dev sidecar: relayfile-actors-workspace by digest). Go server image by tag (Chart.appVersion), not digest; default render unchanged.'
     - id: durable-actors-0.14.6
       status: unreleased
       current: true
       charts: { durable-actors: 0.14.6 }
       app_versions: { durable-actors: 0.14.6 }
-      notes: 'Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee); one schema patch (root global). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md).'
+      notes: 'Vendored TerseAI/durable-actors release chart v0.14.6 (tag commit 5f0a2d62, asset sha256 a489cd15...bee) with the local patches listed in charts/durable-actors/UPSTREAM.md (root global, invoke-only key, host idle timeout, pool-manager name length, zero-valued bounds, lowercase ingress host, schema patterns, README links). Never published by this repo; images pinned by upstream digest (charts/durable-actors/UPSTREAM.md).'
 
     - id: relayfile-0.1.1
       status: shipped
@@ -1648,6 +1648,8 @@ entries:
       - POSTHOG_API_KEY
       - ALLOW_WRITE_HOLD
       - ROLLOUT_BUDGET_SECONDS
+      - HISTORY_SELECTOR
+      - DRAIN_WAIT_SECONDS
       - MAX_BODY_BYTES
       - MAX_INFLIGHT_BODY_BYTES
       - SHUTDOWN_GRACE_MS
@@ -1723,7 +1725,10 @@ entries:
       BackendConfig is named <gkeIngress.name>-api (the name truncated to 59
       characters first); relay-cloud-api renders the annotation from
       relay-cloud-api.service.backendConfig, which must equal that name (the
-      render fails with the expected name otherwise).
+      render fails with the expected name otherwise). The relaycast Service is
+      bound the same way to <gkeIngress.name>-cast (the name truncated to 58
+      characters; gkeIngress.backends.cast.timeoutSec, default 3600) through
+      relaycast.service.backendConfig, so Relaycast WebSockets stay open.
     chart: agent-relay
     values:
       - gkeIngress.enabled
@@ -1790,6 +1795,31 @@ entries:
     sources:
       - "docs/self-hosted-reference-architecture.md:11"
       - "README.md:55"
+
+  - id: opt.relaycast.service-backend-config
+    kind: option
+    title: GKE BackendConfig binding for the Relaycast Service
+    description: |
+      service.backendConfig renders the Service annotation
+      cloud.google.com/backend-config ({"default": "<name>"}); empty renders
+      none. The name must be a DNS-1123 subdomain (at most 253 characters) and
+      cannot be combined with a hand-written annotation. Behind the agent-relay
+      GKE ingress it must equal <gkeIngress.name>-cast, the BackendConfig whose
+      timeoutSec (gkeIngress.backends.cast.timeoutSec, default 3600) keeps
+      Relaycast WebSockets open (opt.agent-relay.gke-ingress).
+    chart: relaycast
+    values: [service.backendConfig]
+    profiles: [relaycast]
+    status: shipped
+    provided_by: operator
+    default: empty
+    choices:
+      - { value: empty, notes: no backend-config annotation }
+      - { value: <gkeIngress.name>-cast, notes: required behind the agent-relay GKE ingress }
+    verify: kubectl get svc <relaycast Service> -o jsonpath='{.metadata.annotations.cloud\.google\.com/backend-config}'
+    sources:
+      - "charts/relaycast/templates/service.yaml:10"
+      - "charts/agent-relay/templates/gke-ingress.yaml:144"
 
   - id: opt.stack.relayauth
     kind: option
