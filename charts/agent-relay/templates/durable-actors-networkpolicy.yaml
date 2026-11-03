@@ -6,7 +6,7 @@
 {{- $name := printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- $sandbox := dig "sandboxNamespace" "" $da | default (printf "%s-%s" .Release.Namespace .Release.Name | trunc 63 | trimSuffix "-") -}}
 # The vendored durable-actors chart restricts only the sandbox namespace. This
-# policy limits who reaches the control plane (port 7100): pods of this
+# policy limits who reaches the control plane and pool manager (port 7100): pods of this
 # release namespace (gateways, session broker, deployers), actor sandboxes, and
 # the GKE load balancer ranges when gkeIngress.hosts.actors is set. Egress is
 # not restricted (GCS, Postgres, Redis, the Kubernetes API).
@@ -20,9 +20,13 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: durable-actors
 spec:
+  # Both control-plane workloads: <name> and <name>-pool-manager (the vendored
+  # chart's actors.poolManagerName).
   podSelector:
-    matchLabels:
-      app.kubernetes.io/name: {{ $name }}
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [{{ $name | quote }}, {{ printf "%s-pool-manager" ($name | trunc 50 | trimSuffix "-") | quote }}]
   policyTypes: [Ingress]
   ingress:
     - from:

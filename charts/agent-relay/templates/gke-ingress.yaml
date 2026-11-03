@@ -13,7 +13,13 @@
 {{- if and $apiBasePath (ne $apiBasePath "/cloud/api") }}{{ fail "gkeIngress routes /cloud/api to relay-cloud-api; relay-dashboard.runtime.apiBasePath must be /cloud/api" }}{{ end -}}
 {{- $loginPath := dig "runtime" "loginPath" "" $dashboard -}}
 {{- if and $loginPath (ne $loginPath "/login") }}{{ fail "gkeIngress routes /login to relay-cloud-api; relay-dashboard.runtime.loginPath must be /login" }}{{ end -}}
-{{- range $name, $backendValues := dict "relaycast" $relaycast "relayhistory" $relayhistory "relay-cloud-api" $cloudApi "relay-dashboard" $dashboard }}
+{{- $policyBackends := dict "relaycast" $relaycast "relayhistory" $relayhistory "relay-cloud-api" $cloudApi "relay-dashboard" $dashboard -}}
+{{- if dig "hosts" "files" "" $gke }}
+{{- /* Relayfile behind the public files host gets the same GKE-only policy shape. */ -}}
+{{- $_ := set $policyBackends "relayfile" (.Values.relayfile | default dict) -}}
+{{- if dig "networkPolicy" "allowExternalTraffic" true (.Values.relayfile | default dict) }}{{ fail "gkeIngress.hosts.files requires relayfile.networkPolicy.allowExternalTraffic=false and relayfile.networkPolicy.ingressFrom with same-namespace pods and the GKE ranges" }}{{ end -}}
+{{- end }}
+{{- range $name, $backendValues := $policyBackends }}
 {{- if not (dig "networkPolicy" "enabled" false $backendValues) }}{{ fail (printf "gkeIngress requires %s.networkPolicy.enabled=true" $name) }}{{ end -}}
 {{- $hasSameNamespace := false -}}
 {{- $hasGfePrimary := false -}}
@@ -55,7 +61,7 @@
 {{- if $hostFiles }}
 {{- if not $components.relayfile }}{{ fail "gkeIngress.hosts.files requires components.relayfile=true" }}{{ end -}}
 {{- if dig "ingress" "enabled" false $relayfile }}{{ fail "gkeIngress.hosts.files requires relayfile.ingress.enabled=false" }}{{ end -}}
-{{- if ne (dig "service" "annotations" "cloud.google.com/neg" "" $relayfile) "{\"ingress\": true}" }}{{ fail "gkeIngress.hosts.files requires relayfile.service.annotations[cloud.google.com/neg]={\"ingress\": true}" }}{{ end -}}
+{{- if ne (dig "service" "annotations" "cloud.google.com/neg" "" $relayfile | toString | nospace) "{\"ingress\":true}" }}{{ fail "gkeIngress.hosts.files requires relayfile.service.annotations[cloud.google.com/neg]={\"ingress\": true}" }}{{ end -}}
 {{- $optionalHosts = append $optionalHosts $hostFiles -}}
 {{- end }}
 {{- range $name, $host := dict "actors" $hostActors "files" $hostFiles }}
@@ -64,6 +70,8 @@
 {{- $allHosts := concat (list $hostRoot $hostApi $hostCast $hostHistory) $optionalHosts -}}
 {{- if ne (len ($allHosts | uniq)) (len $allHosts) }}{{ fail "gkeIngress.hosts must all be distinct" }}{{ end -}}
 {{- $actorsName := printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- $actorsTimeout := dig "actorsBackendTimeoutSec" 3600 $gke -}}
+{{- if or (kindIs "bool" $actorsTimeout) (kindIs "string" $actorsTimeout) (lt (int $actorsTimeout) 60) (gt (int $actorsTimeout) 86400) (ne (float64 $actorsTimeout) (float64 (int $actorsTimeout))) }}{{ fail "gkeIngress.actorsBackendTimeoutSec must be an integer from 60 to 86400" }}{{ end -}}
 {{- $actorsEdge := printf "%s-actors-edge" $gkeName | trunc 63 | trimSuffix "-" -}}
 {{- $filesService := "" -}}
 {{- if $hostFiles }}
@@ -138,7 +146,13 @@ and durable-actors backends serve sockets on that Service). */ -}}
 {{- if lt $castTimeout 60 }}{{ fail "gkeIngress.backends.cast.timeoutSec must be at least 60: relaycast WebSockets need a backend timeout above GCE's 30s default" }}{{ end -}}
 {{- if gt $castTimeout 86400 }}{{ fail "gkeIngress.backends.cast.timeoutSec must be at most 86400" }}{{ end -}}
 {{- $haveCastBackendConfig := dig "service" "backendConfig" "" $relaycast | toString -}}
-{{- if ne $haveCastBackendConfig $castBackendConfig }}{{ fail (printf "gkeIngress requires relaycast.service.backendConfig=%s (<gkeIngress.name>-cast) so relaycast WebSockets get the BackendConfig timeout" $castBackendConfig) }}{{ end }}
+{{- if $haveCastBackendConfig }}
+{{- if ne $haveCastBackendConfig $castBackendConfig }}{{ fail (printf "gkeIngress requires relaycast.service.backendConfig=%s (<gkeIngress.name>-cast) so relaycast WebSockets get the BackendConfig timeout" $castBackendConfig) }}{{ end -}}
+{{- else }}
+{{- /* Legacy: a hand-written annotation is accepted when it matches. */ -}}
+{{- $haveCastAnnotation := dig "service" "annotations" "cloud.google.com/backend-config" "" $relaycast | toString | nospace -}}
+{{- if ne $haveCastAnnotation (nospace (printf "{\"default\": \"%s\"}" $castBackendConfig)) }}{{ fail (printf "gkeIngress requires relaycast.service.backendConfig=%s (<gkeIngress.name>-cast) so relaycast WebSockets get the BackendConfig timeout" $castBackendConfig) }}{{ end -}}
+{{- end }}
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
@@ -218,7 +232,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: actors-edge
 spec:
-  timeoutSec: {{ dig "actorsBackendTimeoutSec" 3600 $gke | int }}
+  timeoutSec: {{ $actorsTimeout | int }}
   healthCheck:
     type: HTTP
     requestPath: /healthz

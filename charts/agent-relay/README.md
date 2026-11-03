@@ -9,7 +9,12 @@ Umbrella chart for the self-hosted messaging and Sessions proof:
 - static dashboard
 
 Relayflows is an optional add-on (`components.relayflows`, off by default;
-see `docs/self-hosted-relayflows.md`). Relayfile is not a dependency.
+see `docs/self-hosted-relayflows.md`). Relayfile (`components.relayfile`) and
+the durable-actors control plane (`components.durableActors`) are optional and
+off by default; see `docs/self-hosted-durable-actors.md`.
+
+Requires Helm 3.10 or newer: the relay-cloud-api subchart uses
+`{{ continue }}`, which older Helm versions cannot parse.
 
 ## Customer-neutral GCP template
 
@@ -45,6 +50,8 @@ before installing. The required value overrides are:
 | `relay-cloud-api.services.relaycastPublicUrl` | Same origin as `relaycast.baseUrl`. |
 | `relay-cloud-api.services.relayhistoryPublicUrl` | Same origin as `relayhistory.relayauth.historyOrigin`. |
 | `relay-dashboard.runtime.publicUrl` | `https://` plus `gkeIngress.hosts.root`. |
+| `relay-cloud-api.service.backendConfig` | `<gkeIngress.name>-api` (the name truncated to 59 characters first). The umbrella renders that BackendConfig and refuses any other value. |
+| `relaycast.service.backendConfig` | `<gkeIngress.name>-cast` (the name truncated to 58 characters first), for the Relaycast WebSocket backend timeout. |
 
 The referenced Secret must provide these keys:
 
@@ -172,7 +179,25 @@ The live overlay expects an existing Secret (the portable example names it
 - RelayHistory: `DATABASE_URL`, `DATABASE_MIGRATIONS_URL`
 - selfhost-api: `database-url`, `database-migrations-url`,
   `relayauth-api-key`, `selfhost-bootstrap-token`,
-  `selfhost-encryption-key`
+  `selfhost-encryption-key`, `selfhost-internal-token` (the live overlay sets
+  `relay-cloud-api.secretKeys.internalToken`, which enables `/internal/v1`;
+  the api host denies `/internal` at the edge)
+
+With `values-gcp-proof-durable-actors.yaml` (Relaycast in
+`runtime.backend=durable-actors`) the Relaycast gateway reads these keys of
+the same Secret instead of the two SQLite Relaycast keys above
+(`ci/agent-relay/render.sh` checks this exact set):
+
+- `relaycast-credential-keyring` (`{"current":"a","keys":{"a":"<random>"}}`)
+- `relaycast-actors-internal-secret` (at least 32 characters; equal to
+  `RELAYCAST_INTERNAL_SECRET` in the sandbox Secret `relaycast-actor-env`)
+- `relaycast-file-signing-secret` (equal to `RELAYCAST_FILE_SIGNING_SECRET` in
+  `relaycast-actor-env`)
+
+It also needs the Secrets `actors-credentials` (`postgres-url`,
+`jwt-signing-key`, `api-key`, `invoke-api-key`) and
+`relaycast-durable-actors-invoke` (`durable-actors-invoke-key`, equal to
+`invoke-api-key`); see docs/self-hosted-durable-actors.md ("GCP provisioning").
 
 `relayauth-api-key` must equal the existing RelayAuth bootstrap API key.
 `selfhost-bootstrap-token` must be at least 32 bytes.

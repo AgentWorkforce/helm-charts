@@ -27,8 +27,13 @@ relayfile:
     jwksUrl: http://relayauth.relayauth.svc:8787/.well-known/jwks.json
   networkPolicy:
     enabled: true
-    # GKE load balancer health checks and proxies reach the gateway.
-    allowExternalTraffic: true
+    # Same-namespace pods plus the GKE load balancer health-check/proxy
+    # ranges (gkeIngress.hosts.files requires exactly this shape).
+    allowExternalTraffic: false
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 35.191.0.0/16 }
+      - ipBlock: { cidr: 130.211.0.0/22 }
   runtime:
     backend: durable-actors
     durableActors:
