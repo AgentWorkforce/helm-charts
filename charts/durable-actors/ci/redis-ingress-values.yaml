@@ -1,0 +1,21 @@
+# CI fixture (not part of the upstream release): two controllers with Redis,
+# Rapid storage and the chart's own Ingress.
+publicUrl: https://actors.example.com
+placement:
+  zone: us-west4-a
+storage:
+  bucket: example-actor-state
+  mode: rapid
+  rapid:
+    buckets:
+      - {bucket: example-actor-rapid-a, zone: us-west4-a}
+      - {bucket: example-actor-rapid-b, zone: us-west4-b}
+serviceAccount:
+  googleServiceAccount: actors@example-project.iam.gserviceaccount.com
+replicaCount: 2
+redis:
+  urlSecretKey: redis-url
+ingress:
+  enabled: true
+  className: gce
+  tlsSecret: actors-tls

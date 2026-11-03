@@ -136,6 +136,15 @@ for chart in "${charts[@]}"; do
         if [ "$chart" = agent-relay ]; then
           dryrun_out=$(yq 'select(.kind != "ManagedCertificate" and .kind != "FrontendConfig" and .kind != "BackendConfig")' <<<"$dryrun_out")
         fi
+        # A server-side dry run does not create a Namespace it applies, so
+        # objects a chart places in a namespace it renders itself (the
+        # durable-actors sandbox namespace) would fail as NotFound. Create
+        # rendered Namespaces for real first; CI clusters are disposable.
+        rendered_ns=$(yq 'select(.kind == "Namespace")' <<<"$dryrun_out")
+        if [ -n "$(tr -d '[:space:]-' <<<"$rendered_ns")" ]; then
+          kubectl apply --server-side --field-manager=ci -f - <<<"$rendered_ns" >/dev/null \
+            || err "$label: creating rendered Namespaces failed"
+        fi
         kubectl apply --server-side --dry-run=server --field-manager=ci -n ci -f - <<<"$dryrun_out" >/dev/null \
           || err "$label: server-side dry-run apply failed"
         ;;
