@@ -2,7 +2,9 @@
 //
 // Runs inside the relay-cloud-api pod (the only agent-relay workload whose
 // NetworkPolicy reaches Relaycast, RelayHistory, and RelayAuth) with Node's
-// built-in fetch. Usage:
+// built-in fetch. The `sessions` and `admin` phases instead run on the
+// operator's machine with E2E_API_URL set to the public dashboard origin, so
+// they exercise the same /cloud/api path the browser uses. Usage:
 //
 //   node e2e-gcp-proof-driver.mjs <phase>   < state.json  > result.json
 //
@@ -12,7 +14,7 @@
 // and is kept by the caller in a mode-0600 file; `proofs` holds only curated,
 // non-secret details. Nothing here logs a token, key, or response body.
 
-import { createHash, createPublicKey, randomBytes, verify as cryptoVerify } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, randomUUID, verify as cryptoVerify } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const RELAYCAST = process.env.E2E_RELAYCAST_URL ?? "http://relaycast:8787";
@@ -63,7 +65,9 @@ async function call(method, url, { token, headers = {}, body } = {}) {
   } catch {
     json = null;
   }
-  return { status: response.status, json };
+  // `text` is kept only for leak checks (does a body contain a value it must
+  // never return); it is never logged or written to the state.
+  return { status: response.status, json, text };
 }
 
 // Relaycast wraps payloads as { ok, data }.
@@ -78,8 +82,42 @@ function errorCode(response) {
 
 // ---------------------------------------------------------------- bootstrap
 
-async function createTenant(label) {
-  const bootstrap = readFileSync(BOOTSTRAP_FILE, "utf8").trim();
+const bootstrapToken = () => readFileSync(BOOTSTRAP_FILE, "utf8").trim();
+
+// The control plane holds exactly one organization per installation. The
+// proof reuses it and adds two uniquely named test workspaces to it.
+async function installationOrganization(bootstrap) {
+  const orgs = await call("GET", `${API}/api/v1/organizations`, { token: bootstrap });
+  must(orgs.status === 200 && Array.isArray(orgs.json?.organizations), `organizations list status=${orgs.status}`);
+  must(orgs.json.organizations.length === 1, `organizations=${orgs.json.organizations.length} expected exactly 1`);
+  const org = orgs.json.organizations[0];
+  const members = await call("GET", `${API}/api/v1/organizations/${org.id}/memberships`, { token: bootstrap });
+  must(members.status === 200 && Array.isArray(members.json?.memberships), `memberships status=${members.status}`);
+  const owners = members.json.memberships
+    .filter((member) => member.role === "owner")
+    .map((member) => member.userId)
+    .sort();
+  must(owners.length > 0, "the organization has no owner");
+  return { organizationId: org.id, organizationName: org.name, ownerUserId: owners[0], members: members.json.memberships.length };
+}
+
+// Device authorization exactly as Desktop does it, approved by the bootstrap
+// bearer on behalf of the organization owner for one workspace.
+async function deviceLogin(bootstrap, userId, workspaceId, clientName) {
+  const start = await call("POST", `${API}/api/v1/auth/device/start`, { body: { client_name: clientName } });
+  must(start.status === 201, `device start status=${start.status}`);
+  const approve = await call("POST", `${API}/api/v1/auth/device/approve`, {
+    token: bootstrap,
+    body: { action: "approve", user_code: start.json.user_code, user_id: userId, workspace_id: workspaceId },
+  });
+  must(approve.status === 200, `device approve status=${approve.status} error=${errorCode(approve)}`);
+  const tokens = await call("POST", `${API}/api/v1/auth/device/token`, { body: { device_code: start.json.device_code } });
+  must(tokens.status === 200 && tokens.json?.access_token, `device token status=${tokens.status}`);
+  return tokens.json;
+}
+
+async function createTenant(label, org) {
+  const bootstrap = bootstrapToken();
   const marker = state.marker;
 
   const rc = await call("POST", `${RELAYCAST}/internal/workspaces`, {
@@ -91,17 +129,7 @@ async function createTenant(label) {
   const rcKey = rcWorkspace.api_key;
   must(typeof rcKey === "string" && rcKey.startsWith("rk_live_"), "relaycast returned no workspace key");
 
-  const org = await call("POST", `${API}/api/v1/organizations`, {
-    token: bootstrap,
-    body: {
-      name: `e2e-${marker}-${label}`,
-      ownerEmail: `e2e-${marker}-${label}@gcp-proof.agentrelay.com`,
-      ownerName: `E2E ${label.toUpperCase()}`,
-    },
-  });
-  must(org.status === 201, `organization create status=${org.status} error=${errorCode(org)}`);
-
-  const ws = await call("POST", `${API}/api/v1/organizations/${org.json.id}/workspaces`, {
+  const ws = await call("POST", `${API}/api/v1/organizations/${org.organizationId}/workspaces`, {
     token: bootstrap,
     body: {
       name: `e2e-${marker}-${label}`,
@@ -110,51 +138,55 @@ async function createTenant(label) {
     },
   });
   must(ws.status === 201, `workspace create status=${ws.status} error=${errorCode(ws)}`);
+  must(ws.json?.organizationId === org.organizationId, "workspace was created in another organization");
 
-  // Device authorization exactly as Desktop does it, approved by the bootstrap
-  // bearer on behalf of the organization owner.
-  const start = await call("POST", `${API}/api/v1/auth/device/start`, {
-    body: { client_name: `e2e-${marker}-${label}` },
-  });
-  must(start.status === 201, `device start status=${start.status}`);
-  const approve = await call("POST", `${API}/api/v1/auth/device/approve`, {
-    token: bootstrap,
-    body: {
-      action: "approve",
-      user_code: start.json.user_code,
-      user_id: org.json.owner.id,
-      workspace_id: ws.json.id,
-    },
-  });
-  must(approve.status === 200, `device approve status=${approve.status} error=${errorCode(approve)}`);
-  const tokens = await call("POST", `${API}/api/v1/auth/device/token`, {
-    body: { device_code: start.json.device_code },
-  });
-  must(tokens.status === 200 && tokens.json?.access_token, `device token status=${tokens.status}`);
-
+  const tokens = await deviceLogin(bootstrap, org.ownerUserId, ws.json.id, `e2e-${marker}-${label}`);
   return {
     relaycastWorkspaceId: rcWorkspace.workspace_id,
-    organizationId: org.json.id,
-    ownerUserId: org.json.owner.id,
+    organizationId: org.organizationId,
+    ownerUserId: org.ownerUserId,
     workspaceId: ws.json.id,
-    accessToken: tokens.json.access_token,
-    scope: tokens.json.scope,
+    workspaceName: ws.json.name,
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    scope: tokens.scope,
   };
 }
 
 async function phaseBootstrap() {
   state.marker = state.marker ?? `e2e${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
   state.startedAt = new Date().toISOString();
+  const bootstrap = bootstrapToken();
+  const org = await installationOrganization(bootstrap);
+  state.org = { organizationId: org.organizationId, ownerUserId: org.ownerUserId };
+  pass("bootstrap.organization", `org=${org.organizationId} name=${JSON.stringify(org.organizationName)} owner=${org.ownerUserId} members=${org.members}`);
+
+  // A second organization is refused, and the installation still has one.
+  const second = await call("POST", `${API}/api/v1/organizations`, {
+    token: bootstrap,
+    body: {
+      name: `e2e-${state.marker}-second-org`,
+      ownerEmail: `e2e-${state.marker}-second@gcp-proof.agentrelay.com`,
+      ownerName: "E2E Second",
+    },
+  });
+  must(second.status === 409 && errorCode(second) === "organization_already_configured",
+    `second organization create status=${second.status} error=${errorCode(second)}`);
+  const after = await installationOrganization(bootstrap);
+  must(after.organizationId === org.organizationId, "the installation organization changed");
+  pass("bootstrap.single_organization", `second_org_create=${second.status} error=${errorCode(second)} organizations=1`);
+
   for (const label of ["a", "b"]) {
-    const tenant = await createTenant(label);
+    const tenant = await createTenant(label, org);
     state[label] = tenant;
     pass(
       `bootstrap.tenant_${label}`,
-      `relaycast_ws=${tenant.relaycastWorkspaceId} org=${tenant.organizationId} workspace=${tenant.workspaceId} owner=${tenant.ownerUserId} scope=${tenant.scope.replace(/ /g, ",")}`,
+      `relaycast_ws=${tenant.relaycastWorkspaceId} org=${tenant.organizationId} workspace=${tenant.workspaceId} name=${tenant.workspaceName} owner=${tenant.ownerUserId} scope=${tenant.scope.replace(/ /g, ",")}`,
     );
     const who = await call("GET", `${API}/api/v1/auth/whoami`, { token: tenant.accessToken });
     must(
-      who.status === 200 && who.json?.currentWorkspace?.id === tenant.workspaceId,
+      who.status === 200 && who.json?.currentWorkspace?.id === tenant.workspaceId &&
+        who.json?.currentOrganization?.id === org.organizationId,
       `whoami status=${who.status}`,
     );
     const resolved = await call("GET", `${API}/api/v1/workspaces/${tenant.workspaceId}/resolve`, {
@@ -171,9 +203,77 @@ async function phaseBootstrap() {
     tenant.relaycastKey = resolved.json.relaycastApiKey;
     pass(
       `bootstrap.resolve_${label}`,
-      `whoami_workspace_matches=true relaycast_url=${resolved.json.urls?.relaycastUrl}`,
+      `whoami_workspace_matches=true whoami_org_matches=true relaycast_url=${resolved.json.urls?.relaycastUrl}`,
     );
   }
+  const listed = await call("GET", `${API}/api/v1/organizations/${org.organizationId}/workspaces`, { token: bootstrap });
+  must(listed.status === 200 && Array.isArray(listed.json?.workspaces), `workspace list status=${listed.status}`);
+  const ids = listed.json.workspaces.map((workspace) => workspace.id);
+  must(ids.includes(state.a.workspaceId) && ids.includes(state.b.workspaceId), "org workspace list is missing a test workspace");
+  pass("bootstrap.workspaces_listed", `org_workspaces=${ids.length} contains_a_and_b=true`);
+
+  await checkMembershipGate(bootstrap, org);
+}
+
+// Device approval is gated on organization membership (per org), and a user
+// token can only approve for the workspace it is bound to.
+async function checkMembershipGate(bootstrap, org) {
+  const startCode = async (name) => {
+    const start = await call("POST", `${API}/api/v1/auth/device/start`, { body: { client_name: name } });
+    must(start.status === 201, `device start status=${start.status}`);
+    return start.json;
+  };
+  const approveAs = (code, userId, workspaceId, token = bootstrap) =>
+    call("POST", `${API}/api/v1/auth/device/approve`, {
+      token,
+      body: { action: "approve", user_code: code.user_code, workspace_id: workspaceId, ...(userId ? { user_id: userId } : {}) },
+    });
+
+  // 1. A user id that never existed.
+  const ghostCode = await startCode(`e2e-${state.marker}-ghost`);
+  const ghost = await approveAs(ghostCode, randomUUID(), state.a.workspaceId);
+  must(ghost.status === 403 && errorCode(ghost) === "not_member", `unknown user approve status=${ghost.status} error=${errorCode(ghost)}`);
+
+  // 2. A real user whose membership was removed: add, remove, then approve.
+  const email = `e2e-${state.marker}-outsider@gcp-proof.agentrelay.com`;
+  const added = await call("POST", `${API}/api/v1/organizations/${org.organizationId}/memberships`, {
+    token: bootstrap,
+    body: { email, name: `E2E Outsider ${state.marker}`, role: "member" },
+  });
+  must(added.status === 200 && typeof added.json?.userId === "string", `membership add status=${added.status} error=${errorCode(added)}`);
+  const outsider = added.json.userId;
+  const removed = await call("DELETE", `${API}/api/v1/organizations/${org.organizationId}/memberships/${outsider}`, { token: bootstrap });
+  must(removed.status === 204, `membership remove status=${removed.status} error=${errorCode(removed)}`);
+  const members = await call("GET", `${API}/api/v1/organizations/${org.organizationId}/memberships`, { token: bootstrap });
+  must(members.status === 200 && !members.json.memberships.some((m) => m.userId === outsider), "removed user is still listed as a member");
+  const outsiderCode = await startCode(`e2e-${state.marker}-outsider`);
+  const refused = await approveAs(outsiderCode, outsider, state.a.workspaceId);
+  must(refused.status === 403 && errorCode(refused) === "not_member", `non-member approve status=${refused.status} error=${errorCode(refused)}`);
+  const pending = await call("POST", `${API}/api/v1/auth/device/token`, { body: { device_code: outsiderCode.device_code } });
+  must(pending.status === 400 && errorCode(pending) === "authorization_pending",
+    `non-member device poll status=${pending.status} error=${errorCode(pending)}`);
+  state.outsider = { userId: outsider };
+
+  // 3. A's user token approving a code for workspace B.
+  const crossCode = await startCode(`e2e-${state.marker}-cross`);
+  const cross = await approveAs(crossCode, null, state.b.workspaceId, state.a.accessToken);
+  must(cross.status === 404 && errorCode(cross) === "workspace_not_found", `A approving for B status=${cross.status} error=${errorCode(cross)}`);
+
+  // Deny the leftover codes so nothing stays pending, and confirm a denied
+  // code never yields a token.
+  for (const code of [ghostCode, outsiderCode, crossCode]) {
+    const denied = await call("POST", `${API}/api/v1/auth/device/approve`, {
+      token: bootstrap,
+      body: { action: "deny", user_code: code.user_code, user_id: org.ownerUserId, workspace_id: state.a.workspaceId },
+    });
+    must(denied.status === 200 && denied.json?.status === "denied", `deny leftover code status=${denied.status}`);
+  }
+  const deniedPoll = await call("POST", `${API}/api/v1/auth/device/token`, { body: { device_code: outsiderCode.device_code } });
+  must(deniedPoll.status === 400 && !deniedPoll.json?.access_token, `denied code poll status=${deniedPoll.status}`);
+  pass(
+    "bootstrap.membership_gate",
+    `unknown_user=${ghost.status}/${errorCode(ghost)} removed_member=${refused.status}/${errorCode(refused)} removed_member_poll=${errorCode(pending)} a_token_for_b=${cross.status}/${errorCode(cross)} denied_poll=${errorCode(deniedPoll)} outsider=${outsider}`,
+  );
 }
 
 // ---------------------------------------------------------------- messaging
@@ -453,6 +553,28 @@ async function phaseDelivery() {
     "delivery.single_projection",
     `projected_events=${projected.length} expected=${expected.length} content_matches=true unique=${new Set(ids).size} retained_records=${recordCount}`,
   );
+
+  // Conversation turns are a separate RelayHistory stream (Desktop's session
+  // handoff writes them); the delivery batch does not create them. Ingest two
+  // so the sessions API transcript case has turns to read.
+  const turns = await call("POST", `${HISTORY}/v1/sessions/${encodeURIComponent(state.session.sessionId)}/turns`, {
+    token: sync.accessToken,
+    body: { sessionOwner: `e2e-${state.marker}`, turns: expectedTurns() },
+  });
+  must(turns.status === 200 && turns.json?.accepted === 2, `turn ingest status=${turns.status} accepted=${turns.json?.accepted}`);
+  pass("delivery.turns", `accepted=${turns.json.accepted}`);
+}
+
+function expectedTurns() {
+  const now = Date.parse(state.startedAt);
+  const turn = (turnIndex, role, content, ts) => ({
+    turnIndex, role, content, actorName: `e2e-${state.marker}`, actorRole: "owner",
+    metadata: { nativeCli: SOURCE }, ts: new Date(ts).toISOString(),
+  });
+  return [
+    turn(0, "user", `${state.marker} first prompt`, now),
+    turn(1, "assistant", `${state.marker} assistant answer`, now + 1000),
+  ];
 }
 
 // ---------------------------------------------------------------- reads
@@ -514,18 +636,140 @@ async function phaseReads() {
 
 // ---------------------------------------------------------------- isolation
 
+const utcDay = (iso) => new Date(iso).toISOString().slice(0, 10);
+const today = () => new Date().toISOString().slice(0, 10);
+const isoEnvName = () => `E2E_ISO_${state.marker.toUpperCase()}`;
+
+// The deterministic smoke flow: two shell steps, no agents, marker in output.
+function smokeFlowSource(name) {
+  return [
+    "version: '1.0'",
+    `name: ${name}`,
+    "description: e2e-gcp-proof deterministic smoke flow",
+    "swarm:",
+    "  pattern: pipeline",
+    "  timeoutMs: 120000",
+    "workflows:",
+    "  - name: main",
+    "    steps:",
+    "      - name: generate",
+    "        type: deterministic",
+    `        command: printf '${state.marker} step one\\nvalue=42\\n'`,
+    "        captureOutput: true",
+    "        failOnError: true",
+    "      - name: transform",
+    "        type: deterministic",
+    "        dependsOn: [generate]",
+    "        command: echo \"{{steps.generate.output}}\" | tr '[:lower:]' '[:upper:]'",
+    "",
+  ].join("\n");
+}
+
+// Every workspace-scoped control-plane route B might aim at A's workspace or
+// A's resources. Each must answer 404, exactly as for a workspace that does
+// not exist, so B learns nothing.
+function crossWorkspaceProbes(a, flowId) {
+  const ws = `/api/v1/workspaces/${a.workspaceId}`;
+  const sessions = `/cloud/api/v1/workspaces/${a.workspaceId}/sessions`;
+  const sid = encodeURIComponent(state.session.sessionId);
+  const day = utcDay(state.startedAt);
+  return [
+    ["sessions.list", "GET", sessions],
+    ["sessions.list_filtered", "GET", `${sessions}?source=${SOURCE}&q=${state.marker}`],
+    ["sessions.events", "GET", `${sessions}/${sid}/events?source=${SOURCE}`],
+    ["sessions.turns", "GET", `${sessions}/${sid}/turns?source=${SOURCE}`],
+    ["sessions.timing", "GET", `${sessions}/${sid}/timing?source=${SOURCE}`],
+    ["sessions.catalog", "GET", `${sessions}/${sid}/catalog?source=${SOURCE}`],
+    ["sessions.search", "GET", `${sessions}/search?q=${state.marker}`],
+    ["sessions.activity", "GET", `${sessions}/activity?first=${day}&last=${today()}`],
+    ["sessions.output", "GET", `${sessions}/output?first=${day}&last=${today()}`],
+    ["history.session", "POST", `${ws}/relayhistory/session`, { mode: "read" }],
+    ["settings.resolve", "GET", `${ws}/resolve`],
+    ["settings.runtime_get", "GET", `${ws}/runtime`],
+    ["settings.runtime_put", "PUT", `${ws}/runtime`, { runtime: { e2e: state.marker } }],
+    ["env.list", "GET", `${ws}/secrets`],
+    ["env.create", "POST", `${ws}/secrets`, { name: isoEnvName(), value: `cross-${state.marker}` }],
+    ["env.get", "GET", `${ws}/secrets/${isoEnvName()}`],
+    ["env.delete", "DELETE", `${ws}/secrets/${isoEnvName()}`],
+    ["settings.integrations", "GET", `${ws}/integrations`],
+    ["settings.integration_providers", "GET", `${ws}/integrations/providers`],
+    ["settings.api_tokens_list", "GET", `${ws}/deployment-api-tokens`],
+    ["settings.api_tokens_create", "POST", `${ws}/deployment-api-tokens`, { label: `e2e-${state.marker}-cross` }],
+    ["settings.audit", "GET", `${ws}/admin/audit`],
+    ["flows.get", "GET", `/api/v1/flows/${flowId}`],
+    ["flows.patch", "PATCH", `/api/v1/flows/${flowId}`, { name: `e2e-${state.marker}-hijack` }],
+    ["flows.invoke", "POST", `/api/v1/flows/${flowId}/invoke`, {}],
+    ["flows.delete", "DELETE", `/api/v1/flows/${flowId}`],
+    ["flows.run_in_a", "POST", "/api/v1/workflows/run", { workspaceId: a.workspaceId, workflow: smokeFlowSource("x"), fileType: "yaml" }],
+    ["flows.enroll_in_a", "POST", "/api/v1/workers/enrollment-tokens", { workspaceId: a.workspaceId, name: `e2e-${state.marker}-cross` }],
+  ];
+}
+
 async function phaseIsolation() {
   const { sessionId } = state.session;
-  const crossList = await dashboardList(state.b, state.a.workspaceId);
-  must(crossList.status === 404, `B listing A's workspace status=${crossList.status}`);
-  const crossReplay = await dashboardEvents(state.b, state.a.workspaceId, sessionId);
-  must(crossReplay.status === 404, `B replaying A's session status=${crossReplay.status}`);
-  pass("isolation.control_plane", `b_list_a=${crossList.status} b_replay_a=${crossReplay.status}`);
+  const a = state.a;
+  const b = state.b;
 
-  const ownSearch = await dashboardList(state.b, state.b.workspaceId, state.marker);
+  // A owns a flow and an env var; B must not see or touch either.
+  const isoValue = randomBytes(18).toString("base64url");
+  const flow = await call("POST", `${API}/api/v1/flows`, {
+    token: a.accessToken,
+    body: { name: `e2e-${state.marker}-isolation`, source: smokeFlowSource(`e2e-${state.marker}-isolation`) },
+  });
+  must(flow.status === 201 && flow.json?.flow?.id, `A flow create status=${flow.status} error=${errorCode(flow)}`);
+  const flowId = flow.json.flow.id;
+  const env = await call("POST", `${API}/api/v1/workspaces/${a.workspaceId}/secrets`, {
+    token: a.accessToken,
+    body: { name: isoEnvName(), value: isoValue },
+  });
+  must(env.status === 201, `A env create status=${env.status} error=${errorCode(env)}`);
+
+  const results = [];
+  for (const [name, method, path, body] of crossWorkspaceProbes(a, flowId)) {
+    const response = await call(method, `${API}${path}`, { token: b.accessToken, body });
+    must(response.status === 404, `B ${name} on A status=${response.status} error=${errorCode(response)}`);
+    must(!response.text.includes(isoValue) && !response.text.includes(state.marker),
+      `B ${name} on A leaked A's data in a 404 body`);
+    results.push(name);
+  }
+  pass("isolation.control_plane_routes", `b_on_a_404=${results.length}/${results.length} (${results.join(",")})`);
+
+  // B's own views do not contain A's resources.
+  const bFlows = await call("GET", `${API}/api/v1/flows`, { token: b.accessToken });
+  must(bFlows.status === 200 && Array.isArray(bFlows.json?.flows), `B flow list status=${bFlows.status}`);
+  must(!bFlows.json.flows.some((item) => item.id === flowId), "B's flow list contains A's flow");
+  const bEnv = await call("GET", `${API}/api/v1/workspaces/${b.workspaceId}/secrets`, { token: b.accessToken });
+  must(bEnv.status === 200 && Array.isArray(bEnv.json?.data?.items), `B env list status=${bEnv.status}`);
+  must(!bEnv.json.data.items.some((item) => item.name === isoEnvName()), "B's env list contains A's variable");
+  const bEnvItem = await call("GET", `${API}/api/v1/workspaces/${b.workspaceId}/secrets/${isoEnvName()}`, { token: b.accessToken });
+  must(bEnvItem.status === 404, `B reading A's variable name in its own workspace status=${bEnvItem.status}`);
+  const bRuns = await call("GET", `${API}/api/v1/workflows/runs`, { token: b.accessToken });
+  must(bRuns.status === 200 && Array.isArray(bRuns.json?.runs), `B run list status=${bRuns.status}`);
+  must(!bRuns.json.runs.some((run) => run.flowId === flowId), "B's run list contains a run of A's flow");
+  pass("isolation.b_own_views", `b_flows=${bFlows.json.flows.length} b_env=${bEnv.json.data.items.length} b_runs=${bRuns.json.runs.length} contains_a=false`);
+
+  // B's attempts changed nothing in A.
+  const aFlow = await call("GET", `${API}/api/v1/flows/${flowId}`, { token: a.accessToken });
+  must(aFlow.status === 200 && aFlow.json?.flow?.name === `e2e-${state.marker}-isolation`, `A flow after B status=${aFlow.status} renamed=${aFlow.json?.flow?.name !== `e2e-${state.marker}-isolation`}`);
+  must(Array.isArray(aFlow.json.recentRuns) && aFlow.json.recentRuns.length === 0, "B's invoke created a run of A's flow");
+  const aEnv = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${isoEnvName()}`, { token: a.accessToken });
+  must(aEnv.status === 200 && aEnv.json?.name === isoEnvName(), `A env after B status=${aEnv.status}`);
+  const aRuntime = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/runtime`, { token: a.accessToken });
+  must(aRuntime.status === 200 && !JSON.stringify(aRuntime.json).includes(state.marker), "B's runtime write reached A");
+  const aTokens = await call("GET", `${API}/api/v1/workspaces/${a.workspaceId}/deployment-api-tokens`, { token: a.accessToken });
+  must(aTokens.status === 200 && !aTokens.text.includes(`e2e-${state.marker}-cross`), `A api tokens after B status=${aTokens.status}`);
+  const aEnroll = await call("GET", `${API}/api/v1/workers/enrollment-tokens`, { token: a.accessToken });
+  must(aEnroll.status === 200 && !aEnroll.text.includes(`e2e-${state.marker}-cross`), `A enrollment tokens after B status=${aEnroll.status}`);
+  pass("isolation.a_unchanged", "flow_name_unchanged=true flow_runs=0 env_present=true runtime_untouched=true no_cross_tokens=true");
+
+  const delFlow = await call("DELETE", `${API}/api/v1/flows/${flowId}`, { token: a.accessToken });
+  const delEnv = await call("DELETE", `${API}/api/v1/workspaces/${a.workspaceId}/secrets/${isoEnvName()}`, { token: a.accessToken });
+  must(delFlow.status === 200 && delEnv.status === 200, `A cleanup flow=${delFlow.status} env=${delEnv.status}`);
+
+  const ownSearch = await dashboardList(b, b.workspaceId, state.marker);
   must(ownSearch.status === 200, `B own search status=${ownSearch.status}`);
   must(!ownSearch.json.items.some((item) => item.sessionId === sessionId), "B's own workspace search returned A's session");
-  const ownReplay = await dashboardEvents(state.b, state.b.workspaceId, sessionId);
+  const ownReplay = await dashboardEvents(b, b.workspaceId, sessionId);
   const own = absentOrDenied(ownReplay, eventLeaks, [404]);
   must(own.ok, `B's own workspace replay of A's session status=${ownReplay.status} leaked_events=${own.leaked ?? "unknown"}`);
   pass("isolation.b_workspace_views", `search_matches=${ownSearch.json.items.length} replay_status=${ownReplay.status} leaked_events=0`);
@@ -565,6 +809,328 @@ async function phaseIsolation() {
   });
   must(crossSend.status >= 400 && crossSend.status < 500, `B's agent DMed A's agent status=${crossSend.status}`);
   pass("isolation.relaycast", `b_roster_size=${bRoster.length} b_read_a_dm=${crossDm.status} b_dm_a_agent=${crossSend.status}`);
+}
+
+// ---------------------------------------------------------------- sessions API
+
+// Runs on the operator's machine against the public dashboard origin
+// (E2E_API_URL=https://<base>), i.e. through the GCE edge and the same
+// /cloud/api prefix the SPA uses.
+async function phaseSessions() {
+  const a = state.a;
+  const { sessionId } = state.session;
+  const base = `${API}/cloud/api/v1/workspaces/${a.workspaceId}/sessions`;
+  const sid = encodeURIComponent(sessionId);
+  const get = (path, token = a.accessToken) => call("GET", `${base}${path}`, { token });
+  const has = (response) => response.json.items.some((item) => item.sessionId === sessionId);
+
+  const anonymous = await call("GET", base);
+  must(anonymous.status === 401, `anonymous list status=${anonymous.status}`);
+
+  const list = await get("");
+  must(list.status === 200 && Array.isArray(list.json?.items), `list status=${list.status} error=${errorCode(list)}`);
+  const item = list.json.items.find((entry) => entry.sessionId === sessionId);
+  must(item, "list does not include the delivered session");
+  must(item.source === SOURCE, `list item source=${item.source}`);
+  must(Array.isArray(list.json.members) && list.json.members.some((m) => m.id === a.ownerUserId), "list members do not include the owner");
+  pass("sessions.list", `items=${list.json.items.length} contains_session=true source=${item.source} members=${list.json.members.length} anonymous=${anonymous.status}`);
+
+  // Filters: each one must keep the session when it matches and drop it when
+  // it does not.
+  const since = new Date(Date.parse(state.startedAt) - 3_600_000).toISOString();
+  const until = new Date(Date.now() + 3_600_000).toISOString();
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  const past = new Date(Date.parse(state.startedAt) - 7 * 86_400_000).toISOString();
+  const filters = [
+    ["source_match", `?source=${SOURCE}`, true],
+    ["source_other", "?source=codex", false],
+    ["window_match", `?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}`, true],
+    ["window_future", `?since=${encodeURIComponent(future)}`, false],
+    ["window_past", `?until=${encodeURIComponent(past)}`, false],
+    ["q_match", `?q=${state.marker}`, true],
+    ["q_other", `?q=${state.marker}zz-no-such-text`, false],
+  ];
+  if (item.project?.name) {
+    filters.push(["project_match", `?project=${encodeURIComponent(item.project.name)}`, true]);
+    filters.push(["project_other", `?project=${encodeURIComponent(`/e2e/${state.marker}-other`)}`, false]);
+  }
+  const filterDetail = [];
+  for (const [name, query, expected] of filters) {
+    const response = await get(query);
+    must(response.status === 200 && Array.isArray(response.json?.items), `filter ${name} status=${response.status} error=${errorCode(response)}`);
+    must(has(response) === expected, `filter ${name} contains_session=${has(response)} expected=${expected}`);
+    filterDetail.push(`${name}=${expected ? "kept" : "dropped"}`);
+  }
+  const bad = await get("?limit=5");
+  must(bad.status === 400, `limit without ranking status=${bad.status}`);
+  pass("sessions.filters", `${filterDetail.join(" ")} invalid_param=${bad.status}`);
+
+  // Transcript: events (replay) and turns.
+  const events = await get(`/${sid}/events?source=${SOURCE}`);
+  must(events.status === 200 && Array.isArray(events.json?.events), `events status=${events.status} error=${errorCode(events)}`);
+  const replayed = markerEvents(events.json.events);
+  must(replayed.length === state.session.projectedEvents && projectionMatches(replayed),
+    `events=${replayed.length} expected=${state.session.projectedEvents} content_matches=${projectionMatches(replayed)}`);
+  const ordered = events.json.events.every((event, index, all) => index === 0 || Date.parse(all[index - 1].ts) <= Date.parse(event.ts));
+  must(ordered, "events are not in time order");
+  const desc = await get(`/${sid}/events?source=${SOURCE}&order=desc&limit=2`);
+  must(desc.status === 200 && Array.isArray(desc.json?.events) && desc.json.events.length === 2,
+    `events limit=2 status=${desc.status} count=${desc.json?.events?.length}`);
+  const turns = await get(`/${sid}/turns?source=${SOURCE}`);
+  must(turns.status === 200 && Array.isArray(turns.json?.turns), `turns status=${turns.status} error=${errorCode(turns)}`);
+  const got = turns.json.turns.map((turn) => `${turn.turnIndex}:${turn.role}:${turn.content}`);
+  const want = expectedTurns().map((turn) => `${turn.turnIndex}:${turn.role}:${turn.content}`);
+  must(JSON.stringify(got) === JSON.stringify(want), `turns=${turns.json.turns.length} expected=${want.length} content_matches=false`);
+  const timing = await get(`/${sid}/timing?source=${SOURCE}`);
+  must(timing.status === 200 && "timing" in (timing.json ?? {}), `timing status=${timing.status} error=${errorCode(timing)}`);
+  const catalog = await get(`/${sid}/catalog?source=${SOURCE}`);
+  must(catalog.status === 200 && Array.isArray(catalog.json?.children), `catalog status=${catalog.status} error=${errorCode(catalog)}`);
+  pass("sessions.transcript", `events=${replayed.length} ordered=true limited_desc=${desc.json.events.length} turns=${turns.json.turns.length} turns_match=true timing=${timing.json.timing ? "present" : "null"} catalog=${catalog.status}`);
+
+  // Search (event-level matches with citation paths).
+  const search = await get(`/search?q=${state.marker}`);
+  must(search.status === 200 && Array.isArray(search.json?.matches), `search status=${search.status} error=${errorCode(search)}`);
+  const hits = search.json.matches.filter((match) => match.sessionId === sessionId);
+  must(hits.length > 0, "search does not find the marker");
+  must(hits.every((match) => typeof match.citationPath === "string" && match.citationPath.includes(sid)), "search match has no citation path");
+  const miss = await get(`/search?q=${state.marker}zz-no-such-text`);
+  must(miss.status === 200 && !miss.json.matches.some((match) => match.sessionId === sessionId), `search miss status=${miss.status}`);
+  const noQ = await get("/search");
+  must(noQ.status === 400, `search without q status=${noQ.status}`);
+  pass("sessions.search", `matches=${hits.length} citation=true miss_dropped=true missing_q=${noQ.status}`);
+
+  // Activity: the session's day counts it under its source.
+  const day = utcDay(state.startedAt);
+  const activity = await get(`/activity?first=${day}&last=${today()}`);
+  must(activity.status === 200 && Array.isArray(activity.json?.days), `activity status=${activity.status} error=${errorCode(activity)}`);
+  const row = activity.json.days.find((entry) => entry.date === day);
+  must(row && row.conversations >= 1 && (row.bySource?.[SOURCE] ?? 0) >= 1,
+    `activity ${day} conversations=${row?.conversations} ${SOURCE}=${row?.bySource?.[SOURCE]}`);
+  const filtered = await get(`/activity?first=${day}&last=${today()}&q=${state.marker}zz-no-such-text`);
+  must(filtered.status === 200 && Array.isArray(filtered.json?.days), `activity q status=${filtered.status}`);
+  const filteredTotal = filtered.json.days.reduce((sum, entry) => sum + entry.conversations, 0);
+  must(filteredTotal === 0, `activity with a non-matching q counted ${filteredTotal}`);
+  const backwards = await get(`/activity?first=${today()}&last=${day === today() ? "2000-01-01" : day}`);
+  must(backwards.status === 400, `activity reversed range status=${backwards.status}`);
+  pass("sessions.activity", `day=${day} conversations=${row.conversations} ${SOURCE}=${row.bySource[SOURCE]} non_matching_q_total=0 reversed_range=${backwards.status}`);
+
+  // B's token on every one of these A routes, through the public edge.
+  const crossPaths = ["", `/${sid}/events?source=${SOURCE}`, `/${sid}/turns?source=${SOURCE}`, `/search?q=${state.marker}`, `/activity?first=${day}&last=${today()}`];
+  for (const path of crossPaths) {
+    const response = await get(path, state.b.accessToken);
+    must(response.status === 404, `B on A ${path || "/"} status=${response.status}`);
+  }
+  pass("sessions.cross_workspace", `b_on_a_404=${crossPaths.length}/${crossPaths.length}`);
+}
+
+// ---------------------------------------------------------------- admin
+
+// Also runs against the public origin. The value is generated here, kept in
+// memory only, and checked never to appear in any response body.
+async function phaseAdmin() {
+  const a = state.a;
+  const base = `${API}/cloud/api/v1/workspaces/${a.workspaceId}/secrets`;
+  const name = `E2E_ADMIN_${state.marker.toUpperCase()}`;
+  const value = `e2e-${randomBytes(24).toString("base64url")}`;
+  const rotated = `e2e-${randomBytes(24).toString("base64url")}`;
+  const clean = (response) => !response.text.includes(value) && !response.text.includes(rotated) &&
+    !response.text.includes(value.slice(4, 20)) && !response.text.includes(rotated.slice(4, 20));
+  const maskOk = (masked, plain) =>
+    typeof masked === "string" && masked !== plain && /^.{2}\*{4,}.{2}$/.test(masked) &&
+    masked.length === plain.length && masked.slice(-2) === plain.slice(-2);
+  const bodies = [];
+
+  const created = await call("POST", base, { token: a.accessToken, body: { name, value } });
+  bodies.push(["create", created]);
+  must(created.status === 201 && created.json?.name === name, `create status=${created.status} error=${errorCode(created)}`);
+  must(!("value" in created.json) && maskOk(created.json.maskedValue, value), "create response is not masked");
+
+  const list = await call("GET", base, { token: a.accessToken });
+  bodies.push(["list", list]);
+  must(list.status === 200 && Array.isArray(list.json?.data?.items), `list status=${list.status}`);
+  const listed = list.json.data.items.find((entry) => entry.name === name);
+  must(listed && maskOk(listed.maskedValue, value) && !("value" in listed), "list entry missing or not masked");
+
+  const item = await call("GET", `${base}/${name}`, { token: a.accessToken });
+  bodies.push(["get", item]);
+  must(item.status === 200 && maskOk(item.json?.maskedValue, value) && !("value" in item.json), `get status=${item.status}`);
+
+  const updated = await call("POST", base, { token: a.accessToken, body: { name, value: rotated } });
+  bodies.push(["update", updated]);
+  must(updated.status === 200 && maskOk(updated.json?.maskedValue, rotated), `update status=${updated.status} error=${errorCode(updated)}`);
+
+  const invalid = await call("POST", base, { token: a.accessToken, body: { name: "PATH", value: "x" } });
+  must(invalid.status === 400, `reserved name status=${invalid.status}`);
+
+  const anonymous = await call("GET", base);
+  must(anonymous.status === 401, `anonymous list status=${anonymous.status}`);
+
+  const deleted = await call("DELETE", `${base}/${name}`, { token: a.accessToken });
+  bodies.push(["delete", deleted]);
+  must(deleted.status === 200, `delete status=${deleted.status}`);
+  const gone = await call("GET", `${base}/${name}`, { token: a.accessToken });
+  must(gone.status === 404, `get after delete status=${gone.status}`);
+  const after = await call("GET", base, { token: a.accessToken });
+  bodies.push(["list_after", after]);
+  must(after.status === 200 && !after.json.data.items.some((entry) => entry.name === name), "list still contains the deleted variable");
+
+  const audit = await call("GET", `${API}/cloud/api/v1/workspaces/${a.workspaceId}/admin/audit`, { token: a.accessToken });
+  bodies.push(["audit", audit]);
+  must(audit.status === 200 && Array.isArray(audit.json?.events), `audit status=${audit.status}`);
+  const actions = audit.json.events.filter((event) => JSON.stringify(event).includes(name)).map((event) => event.action).sort();
+  for (const action of ["env_var.create", "env_var.delete", "env_var.update"]) {
+    must(actions.includes(action), `audit is missing ${action}`);
+  }
+
+  for (const [label, response] of bodies) must(clean(response), `${label} response contains the plaintext value`);
+  pass("admin.env_var", `create=${created.status} list_masked=true get_masked=true update=${updated.status} reserved_name=${invalid.status} anonymous=${anonymous.status} delete=${deleted.status} get_after_delete=${gone.status} audit=${actions.join(",")} plaintext_in_bodies=0/${bodies.length}`);
+}
+
+// In-cluster: the /internal runtime routes exist behind the edge and refuse
+// anything but a service/worker credential.
+async function phaseAdminInternal() {
+  const url = `${API}/internal/v1/workspaces/${state.a.workspaceId}/environment`;
+  const anonymous = await call("GET", url);
+  const user = await call("GET", url, { token: state.a.accessToken });
+  const forged = await call("GET", url, { token: "sh_wrk_forged" });
+  must(anonymous.status === 401 && user.status === 401 && forged.status === 401,
+    `internal environment anonymous=${anonymous.status} user_token=${user.status} forged_worker=${forged.status}`);
+  pass("admin.internal_requires_service_credential", `anonymous=${anonymous.status} user_token=${user.status} forged_worker=${forged.status}`);
+}
+
+// ---------------------------------------------------------------- flows
+
+const workerName = () => `e2e-${state.marker}-worker`;
+
+async function phaseFlowsEnroll() {
+  const a = state.a;
+  const enroll = await call("POST", `${API}/api/v1/workers/enrollment-tokens`, {
+    token: a.accessToken,
+    body: { workspaceId: a.workspaceId, name: workerName(), expiresInMinutes: 30 },
+  });
+  must(enroll.status === 200 && typeof enroll.json?.token === "string" && enroll.json.token.length >= 20,
+    `enrollment token status=${enroll.status} error=${errorCode(enroll)}`);
+  must(typeof enroll.json.registerCommand === "string" && enroll.json.registerCommand.includes("cloud worker register"), "no register command");
+  const listed = await call("GET", `${API}/api/v1/workers/enrollment-tokens`, { token: a.accessToken });
+  must(listed.status === 200 && Array.isArray(listed.json?.tokens), `enrollment list status=${listed.status}`);
+  must(listed.json.tokens.some((token) => token.id === enroll.json.id), "enrollment token not listed");
+  must(!listed.text.includes(enroll.json.token), "enrollment token list returns the plaintext token");
+  // B cannot see or revoke A's token.
+  const bList = await call("GET", `${API}/api/v1/workers/enrollment-tokens`, { token: state.b.accessToken });
+  must(bList.status === 200 && !bList.json.tokens.some((token) => token.id === enroll.json.id), `B enrollment list status=${bList.status}`);
+  const bRevoke = await call("DELETE", `${API}/api/v1/workers/enrollment-tokens/${enroll.json.id}`, { token: state.b.accessToken });
+  must(bRevoke.status === 404, `B revoking A's enrollment token status=${bRevoke.status}`);
+  state.flows = { enrollmentTokenId: enroll.json.id, workerName: workerName() };
+  state.enrollmentToken = enroll.json.token;
+  pass("flows.enrollment_token", `id=${enroll.json.id} expires=${enroll.json.expiresAt} listed=true plaintext_listed=false b_list_contains=false b_revoke=${bRevoke.status}`);
+}
+
+async function phaseFlowsRun() {
+  const a = state.a;
+  const flows = state.flows;
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const workers = await call("GET", `${API}/api/v1/workers`, { token: a.accessToken });
+  must(workers.status === 200 && Array.isArray(workers.json?.workers), `worker list status=${workers.status}`);
+  const worker = workers.json.workers.find((entry) => entry.name === flows.workerName);
+  must(worker, "the e2e worker is not registered in workspace A");
+  must(worker.status === "online", `worker status=${worker.status}`);
+  flows.workerId = worker.id;
+  const bWorker = await call("GET", `${API}/api/v1/workers/${worker.id}`, { token: state.b.accessToken });
+  must(bWorker.status === 404, `B reading A's worker status=${bWorker.status}`);
+  const reuse = await call("POST", `${API}/api/v1/workers/register`, {
+    body: { enrollmentToken: secrets.enrollmentToken, name: `${flows.workerName}-reuse` },
+  });
+  must(typeof secrets.enrollmentToken === "string" && secrets.enrollmentToken.length > 0, "the caller did not pass the enrollment token back");
+  must(reuse.status >= 400 && reuse.status < 500, `reusing the enrollment token status=${reuse.status}`);
+  pass("flows.worker_registered", `worker=${worker.id} name=${worker.name} status=${worker.status} b_get=${bWorker.status} token_reuse=${reuse.status}`);
+
+  const flowName = `e2e-${state.marker}-smoke`;
+  const flow = await call("POST", `${API}/api/v1/flows`, {
+    token: a.accessToken,
+    body: { name: flowName, description: "e2e-gcp-proof", source: smokeFlowSource(flowName) },
+  });
+  must(flow.status === 201 && flow.json?.flow?.id, `flow create status=${flow.status} error=${errorCode(flow)}`);
+  flows.flowId = flow.json.flow.id;
+  const invoked = await call("POST", `${API}/api/v1/flows/${flows.flowId}/invoke`, {
+    token: a.accessToken,
+    body: { runtime: { id: "worker", config: { workerId: worker.id } } },
+  });
+  must(invoked.status === 201 && invoked.json?.runId, `invoke status=${invoked.status} error=${errorCode(invoked)}`);
+  const runId = invoked.json.runId;
+  flows.runId = runId;
+
+  let run = null;
+  const deadline = Date.now() + Number(process.env.E2E_FLOW_RUN_TIMEOUT_MS ?? 300_000);
+  while (Date.now() < deadline) {
+    const response = await call("GET", `${API}/api/v1/workflows/runs/${runId}`, { token: a.accessToken });
+    must(response.status === 200, `run get status=${response.status}`);
+    run = response.json;
+    if (["completed", "failed", "cancelled"].includes(run.status)) break;
+    await sleep(3_000);
+  }
+  must(run?.status === "completed", `run ${runId} status=${run?.status} error=${run?.error ?? "none"}`);
+  pass("flows.run_completed", `run=${runId} status=${run.status} worker=${run.workerName ?? run.workerId ?? "n/a"} exit=${run.exitCode ?? "n/a"} duration_ms=${run.durationMs ?? "n/a"}`);
+
+  const events = await call("GET", `${API}/api/v1/workflows/runs/${runId}/events?limit=100`, { token: a.accessToken });
+  must(events.status === 200 && Array.isArray(events.json?.events), `events status=${events.status}`);
+  const types = events.json.events.map((event) => event.eventType);
+  const expected = ["run.queued", "run.assigned", "run.acknowledged", "run.running", "run.completed"];
+  let cursor = -1;
+  for (const type of expected) {
+    const index = types.indexOf(type, cursor + 1);
+    must(index > cursor, `run events are missing ${type} in order (have ${types.join(",")})`);
+    cursor = index;
+  }
+  const steps = await call("GET", `${API}/api/v1/workflows/runs/${runId}/steps`, { token: a.accessToken });
+  must(steps.status === 200 && Array.isArray(steps.json?.steps), `steps status=${steps.status}`);
+  const stepStatus = Object.fromEntries(steps.json.steps.map((step) => [step.stepName, step.status]));
+  must(stepStatus.generate === "completed" && stepStatus.transform === "completed",
+    `steps source=${steps.json.source} statuses=${JSON.stringify(stepStatus)}`);
+  const logs = await call("GET", `${API}/api/v1/workflows/runs/${runId}/logs`, { token: a.accessToken });
+  must(logs.status === 200 && typeof logs.json?.content === "string" && typeof logs.json?.available === "boolean" && logs.json.done === true,
+    `logs status=${logs.status} done=${logs.json?.done}`);
+  if (logs.json.available) must(logs.json.content.includes(state.marker), "runner log does not contain the step output");
+  const definition = await call("GET", `${API}/api/v1/workflows/runs/${runId}/workflow`, { token: a.accessToken });
+  must(definition.status === 200 && definition.json?.workflow === smokeFlowSource(flowName), `run workflow status=${definition.status}`);
+  const artifacts = await call("GET", `${API}/api/v1/workflows/runs/${runId}/artifacts`, { token: a.accessToken });
+  must(artifacts.status === 200 && Array.isArray(artifacts.json?.artifacts), `artifacts status=${artifacts.status}`);
+  pass("flows.run_readable", `events=${types.join(">")} steps_source=${steps.json.source} steps=${Object.entries(stepStatus).map(([k, v]) => `${k}:${v}`).join(",")} logs_available=${logs.json.available} log_bytes=${logs.json.totalSize} definition_matches=true artifacts=${artifacts.json.artifacts.length}`);
+
+  // B cannot read any of it.
+  const crossPaths = ["", "/events", "/steps", "/logs", "/workflow", "/artifacts"];
+  for (const path of crossPaths) {
+    const response = await call("GET", `${API}/api/v1/workflows/runs/${runId}${path}`, { token: state.b.accessToken });
+    must(response.status === 404, `B reading A's run${path} status=${response.status}`);
+  }
+  const bCancel = await call("POST", `${API}/api/v1/workflows/runs/${runId}/retry`, { token: state.b.accessToken, body: {} });
+  must(bCancel.status === 404, `B retrying A's run status=${bCancel.status}`);
+  pass("flows.run_isolated", `b_on_a_run_404=${crossPaths.length + 1}/${crossPaths.length + 1}`);
+}
+
+async function phaseFlowsCleanup() {
+  const a = state.a;
+  const flows = state.flows ?? {};
+  const done = [];
+  if (flows.workerId) {
+    const revoked = await call("DELETE", `${API}/api/v1/workers/${flows.workerId}`, { token: a.accessToken });
+    must(revoked.status === 200 && revoked.json?.status === "revoked", `worker revoke status=${revoked.status} result=${revoked.json?.status}`);
+    done.push(`worker=${revoked.json.status}`);
+  }
+  if (flows.enrollmentTokenId) {
+    // Used tokens cannot be revoked; an unused one (failed registration) can.
+    const revoked = await call("DELETE", `${API}/api/v1/workers/enrollment-tokens/${flows.enrollmentTokenId}`, { token: a.accessToken });
+    must(revoked.status === (flows.workerId ? 404 : 200), `enrollment token revoke status=${revoked.status}`);
+    done.push(`enrollment_token=${flows.workerId ? "used" : "revoked"}`);
+  }
+  if (flows.flowId) {
+    const deleted = await call("DELETE", `${API}/api/v1/flows/${flows.flowId}`, { token: a.accessToken });
+    must(deleted.status === 200, `flow delete status=${deleted.status}`);
+    const gone = await call("GET", `${API}/api/v1/flows/${flows.flowId}`, { token: a.accessToken });
+    must(gone.status === 404, `flow get after delete status=${gone.status}`);
+    done.push("flow=deleted");
+  }
+  pass("flows.cleanup", done.join(" ") || "nothing to clean");
 }
 
 // ---------------------------------------------------------------- durability
@@ -723,7 +1289,10 @@ async function phaseErasure() {
   );
   must(direct.status === 200 && Array.isArray(direct.json?.sessions), `relayhistory search after erasure status=${direct.status}`);
   must(!direct.json.sessions.some((item) => item.sessionId === sessionId), "relayhistory search still returns it");
-  pass("erasure.verified", `list_absent=true search_absent=true replay_status=${replay.status} replay_events=0 relayhistory_status=${direct.status} relayhistory_absent=true`);
+  const turns = await call("GET", `${API}/cloud/api/v1/workspaces/${state.a.workspaceId}/sessions/${encodeURIComponent(sessionId)}/turns?source=${SOURCE}`, { token: state.a.accessToken });
+  const turnsLeft = turns.status === 200 && Array.isArray(turns.json?.turns) ? turns.json.turns.length : null;
+  must(turns.status === 404 || turnsLeft === 0, `turns after erasure status=${turns.status} turns=${turnsLeft ?? "unknown"}`);
+  pass("erasure.verified", `turns_status=${turns.status} turns_left=${turnsLeft ?? 0} list_absent=true search_absent=true replay_status=${replay.status} replay_events=0 relayhistory_status=${direct.status} relayhistory_absent=true`);
 
   // The receipt survives erasure, so a stale client retry of the original
   // batch must replay that receipt without resurrecting the session.
@@ -785,6 +1354,31 @@ async function phaseCleanup() {
     must(response.status === 204, `delete relaycast workspace ${label} status=${response.status}`);
     pass(`cleanup.relaycast_${label}`, `deleted=${tenant.relaycastWorkspaceId}`);
   }
+  // Revoke the device sessions the run minted; revocation covers both the
+  // access and the refresh token of the session.
+  for (const label of ["a", "b"]) {
+    const tenant = state[label];
+    if (!tenant?.accessToken) continue;
+    const revoked = await call("POST", `${API}/api/v1/auth/token/revoke`, { body: { token: tenant.accessToken } });
+    must(revoked.status === 200 && revoked.json?.revoked === true, `revoke ${label} status=${revoked.status}`);
+    const who = await call("GET", `${API}/api/v1/auth/whoami`, { token: tenant.accessToken });
+    const refresh = await call("POST", `${API}/api/v1/auth/token/refresh`, { body: { refreshToken: tenant.refreshToken } });
+    must(who.status === 401 && refresh.status === 403, `after revoke ${label} whoami=${who.status} refresh=${refresh.status}`);
+    pass(`cleanup.tokens_${label}`, `revoked=true whoami_after=${who.status} refresh_after=${refresh.status}`);
+  }
+  // relaycontrol has no workspace (or user) delete route, so the two test
+  // workspaces and the removed outsider user stay in the organization.
+  const bootstrap = bootstrapToken();
+  const probe = await call("DELETE", `${API}/api/v1/organizations/${state.org.organizationId}/workspaces/${state.b.workspaceId}`, { token: bootstrap });
+  const listed = await call("GET", `${API}/api/v1/organizations/${state.org.organizationId}/workspaces`, { token: bootstrap });
+  must(listed.status === 200, `workspace list status=${listed.status}`);
+  const left = listed.json.workspaces.filter((workspace) => [state.a.workspaceId, state.b.workspaceId].includes(workspace.id));
+  if (probe.status === 404 && left.length === 2) {
+    proof("SKIP", "cleanup.control_plane_workspaces",
+      `no workspace delete API (DELETE answered ${probe.status}); kept ${left.map((w) => w.name).join(",")} in org ${state.org.organizationId}; outsider user ${state.outsider?.userId ?? "n/a"} has no membership`);
+  } else {
+    fail("cleanup.control_plane_workspaces", `unexpected workspace delete status=${probe.status} remaining=${left.length}; update the e2e to use the delete API`);
+  }
 }
 
 const phases = {
@@ -799,6 +1393,12 @@ const phases = {
   erasure: phaseErasure,
   "issue-public": phaseIssuePublic,
   "mint-96bulls": phaseMint96bulls,
+  sessions: phaseSessions,
+  admin: phaseAdmin,
+  "admin-internal": phaseAdminInternal,
+  "flows-enroll": phaseFlowsEnroll,
+  "flows-run": phaseFlowsRun,
+  "flows-cleanup": phaseFlowsCleanup,
   cleanup: phaseCleanup,
 };
 
