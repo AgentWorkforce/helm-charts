@@ -2,7 +2,7 @@ name: Lint Charts
 
 on:
   pull_request:
-  workflow_call:  # release.yml calls this before publishing a chart
+  workflow_call:  # release.yml and release-agent-relay.yml call this before publishing
     secrets:
       BULLS96_READ_TOKEN:
         required: false  # search-worker-role-kind fails closed without it
@@ -185,7 +185,7 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" != pull_request ] \
-            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|deps/pins\.txt$|ci/96bulls-search-worker-role/|ci/96bulls-profiles/|\.github/workflows/(lint|release)\.yml$)'; then
+            || git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(charts/96bulls/|charts/96bulls-worker/|deps/cnpg-|deps/pins\.txt$|ci/96bulls-search-worker-role/|ci/96bulls-profiles/|\.github/workflows/(lint|release|release-agent-relay)\.yml$)'; then
             echo run=true >> "$GITHUB_OUTPUT"
           fi
 

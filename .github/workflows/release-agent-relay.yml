@@ -1,0 +1,228 @@
+name: Publish Agent Relay Chart
+
+# Leaf charts (relaycast, relayauth, 96bulls, ...) are published by
+# release.yml on every push to main. This workflow publishes only the
+# agent-relay umbrella, from an agent-relay-X.Y.Z tag, with build provenance.
+on:
+  push:
+    # The shell gate below applies a strict agent-relay-X.Y.Z regex. GitHub's
+    # tag filter is intentionally only a coarse pre-filter. The tag scheme
+    # matches the repo convention: <chart>-<version> (e.g. agent-relay-0.1.0),
+    # which the self-hosted requirements registry and version-bump check read.
+    tags:
+      - agent-relay-*
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-agent-relay
+  cancel-in-progress: false
+
+env:
+  CHART_DIR: charts/agent-relay
+  CHART_NAME: agent-relay
+  HELM_VERSION: v4.3.1
+
+jobs:
+  # Reusable workflows do not inherit secrets. lint.yml's
+  # search-worker-role-kind job runs on every non-pull_request event and fails
+  # closed without this token, so omitting it would block every publish.
+  lint:
+    uses: ./.github/workflows/lint.yml
+    secrets:
+      BULLS96_READ_TOKEN: ${{ secrets.BULLS96_READ_TOKEN }}
+
+  publish:
+    name: Lint, attest, and publish
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Validate release tag and commit
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "::error::This workflow only accepts tag events."
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_NAME}" =~ ^agent-relay-((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            echo "::error::Release tags must be exactly agent-relay-X.Y.Z (stable SemVer)."
+            exit 1
+          fi
+
+          chart_metadata="$(helm show chart "$CHART_DIR")"
+          chart_name="$(awk '$1 == "name:" { print $2; exit }' <<<"$chart_metadata")"
+          chart_version="$(awk '$1 == "version:" { print $2; exit }' <<<"$chart_metadata")"
+          chart_type="$(awk '$1 == "type:" { print $2; exit }' <<<"$chart_metadata")"
+          [[ "$chart_name" == "$CHART_NAME" ]] \
+            || { echo "::error::Expected chart name $CHART_NAME, got $chart_name."; exit 1; }
+          [[ "$chart_version" == "$version" ]] \
+            || { echo "::error::Tag version $version does not match Chart.yaml version $chart_version."; exit 1; }
+          [[ "$chart_type" == "application" ]] \
+            || { echo "::error::The release target must be an application chart."; exit 1; }
+
+          tag_commit="$(git rev-list -n 1 "$GITHUB_REF")"
+          [[ "$tag_commit" == "$(git rev-parse HEAD)" ]] \
+            || { echo "::error::The checkout does not match the release tag."; exit 1; }
+          git show-ref --verify --quiet refs/remotes/origin/main \
+            || { echo "::error::origin/main is unavailable; refusing to publish."; exit 1; }
+          git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main \
+            || { echo "::error::The tagged commit is not reachable from origin/main."; exit 1; }
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Add locked dependency repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          helm repo add cnpg https://cloudnative-pg.github.io/charts
+          helm repo add minio https://charts.min.io/
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Build locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Helm does not recursively vendor file:// dependencies.
+          helm dependency build charts/96bulls
+          helm dependency build "$CHART_DIR"
+          git diff --exit-code -- charts/96bulls/Chart.lock "$CHART_DIR/Chart.lock" \
+            || { echo "::error::Dependency build changed a lock file."; exit 1; }
+
+      - name: Lint and render the umbrella chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          helm lint --strict "$CHART_DIR" \
+            -f "$CHART_DIR/values-gcp-proof.yaml" \
+            -f "$CHART_DIR/ci/gcp-proof-values.yaml"
+          ci/agent-relay/render.sh
+          git diff --exit-code -- charts/96bulls/Chart.lock "$CHART_DIR/Chart.lock" \
+            || { echo "::error::Linting changed a lock file."; exit 1; }
+
+      - name: Package and checksum the chart
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          helm package "$CHART_DIR" --destination .release
+
+          package=".release/${CHART_NAME}-${VERSION}.tgz"
+          [[ -f "$package" ]] \
+            || { echo "::error::Helm did not create the expected package $package."; exit 1; }
+          [[ "$(find .release -maxdepth 1 -type f -name '*.tgz' | wc -l)" -eq 1 ]] \
+            || { echo "::error::Expected exactly one chart archive."; exit 1; }
+
+          packaged_metadata="$(helm show chart "$package")"
+          [[ "$(awk '$1 == "name:" { print $2; exit }' <<<"$packaged_metadata")" == "$CHART_NAME" ]]
+          [[ "$(awk '$1 == "version:" { print $2; exit }' <<<"$packaged_metadata")" == "$VERSION" ]]
+
+          (
+            cd .release
+            sha256sum "${CHART_NAME}-${VERSION}.tgz" > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          echo "path=$package" >> "$GITHUB_OUTPUT"
+
+      - name: Store package and checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-relay-${{ steps.release.outputs.version }}
+          path: |
+            ${{ steps.package.outputs.path }}
+            .release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      # This creates keyless build provenance through GitHub OIDC. It must
+      # succeed before the package can be pushed to GHCR.
+      - name: Attest package provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: ${{ steps.package.outputs.path }}
+
+      - name: Publish only the Helm OCI artifact
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          repository="${owner}/charts/${CHART_NAME}"
+          registry="oci://ghcr.io/${owner}/charts"
+          package="${{ steps.package.outputs.path }}"
+
+          # A lookup failure other than a definitive 404 is fatal. Existing
+          # versions are never overwritten or treated as a successful no-op.
+          registry_token="$(curl --fail --silent --show-error \
+            --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" \
+            --get \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode "scope=repository:${repository}:pull" \
+            https://ghcr.io/token \
+            | jq --exit-status --raw-output '.token // .access_token')"
+          [[ -n "$registry_token" ]] \
+            || { echo "::error::GHCR did not issue a pull token; refusing to publish."; exit 1; }
+          status="$(curl --silent --show-error --output /tmp/ghcr-manifest \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${registry_token}" \
+            --header 'Accept: application/vnd.oci.image.manifest.v1+json' \
+            "https://ghcr.io/v2/${repository}/manifests/${VERSION}")"
+          unset registry_token
+          case "$status" in
+            404) ;;
+            200)
+              echo "::error::ghcr.io/${repository}:${VERSION} already exists; refusing to overwrite it."
+              exit 1
+              ;;
+            *)
+              echo "::error::GHCR existence check failed with HTTP ${status}; refusing to publish."
+              exit 1
+              ;;
+          esac
+
+          printf '%s' "$GITHUB_TOKEN" \
+            | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          trap 'helm registry logout ghcr.io >/dev/null 2>&1 || true' EXIT
+
+          # There are deliberately no Docker/buildx operations in this
+          # workflow: proof-only container images can never be published here.
+          helm push "$package" "$registry"
+
+          mkdir -p .release/verify
+          helm pull "${registry}/${CHART_NAME}" \
+            --version "$VERSION" \
+            --destination .release/verify
+          expected="$(awk '{ print $1 }' .release/SHA256SUMS)"
+          actual="$(sha256sum ".release/verify/${CHART_NAME}-${VERSION}.tgz" | awk '{ print $1 }')"
+          [[ "$actual" == "$expected" ]] \
+            || { echo "::error::The package pulled from GHCR does not match SHA256SUMS."; exit 1; }
