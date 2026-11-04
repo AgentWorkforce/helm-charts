@@ -37,11 +37,10 @@ Desktop setup. Relayflows, durable actors and Relayfile are optional preview
 components, off by default. Billing, provider integrations and hosted fleet
 are out of scope.
 
-## agent-relay 0.3.4 (2026-11-03): documentation patch, pending publication
+## agent-relay 0.3.4 (2026-11-03): documentation patch
 
-To be published from the `agent-relay-0.3.4` tag
-(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.4); it is not
-available until that tag's release workflow succeeds. The relaycast leaf chart
+Published from the `agent-relay-0.3.4` tag
+(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.4). The relaycast leaf chart
 is 0.3.3 and the relayauth leaf chart is 0.1.3. Both drop the stale
 instruction to override the Relaycast `image.digest` for `ar_` credentials:
 the pinned default (engine 12.7.0) already satisfies the `>=12.3.x`
