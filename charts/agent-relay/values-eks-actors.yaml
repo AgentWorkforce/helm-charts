@@ -1,0 +1,114 @@
+# Durable-actors overlay for AWS EKS: Relaycast and Relayfile in actor mode on
+# TerseAI durable-actors with S3 storage. Apply on top of values-eks.yaml (or
+# on its own with the other components off, as the actors proof does):
+#
+#   helm upgrade --install agent-relay charts/agent-relay -n agent-relay \
+#     -f values-eks.yaml -f values-eks-actors.yaml -f <your overrides>
+#
+# It needs a durable-actors control-plane image built from the AgentWorkforce
+# fork (S3 storage, AWS placement and sandbox scheduling; charts/durable-actors
+# UPSTREAM.md patch 10), and deployer images with S3 artifact upload (relaycast
+# #626, relayfile #559). Replace every <...> value. No credential values appear
+# here: the Secrets are listed in docs/self-hosted-durable-actors.md.
+#
+# Identity (EKS Pod Identity; IRSA works through serviceAccount annotations):
+# - <release>-durable-actors (control plane and pool manager): S3 Get/Put/List
+#   on the bucket, and sts:AssumeRole + sts:TagSession on storage.s3.actorRoleArn.
+# - storage.s3.actorRoleArn: trusted by the control-plane role, S3 Get/Put on
+#   <bucket>/durable-actors/v3/* and ListBucket. The control plane narrows it per
+#   actor with an inline session policy; actor hosts get nothing else.
+# - The relaycast and relayfile deployer ServiceAccounts: s3:PutObject and
+#   s3:GetObject on <bucket>/durable-actors/v3/artifacts/*.
+# - The relaycast and relayfile ServiceAccounts: their file and blob buckets.
+#
+# Actor hosts run on the cluster's default runtime (runc), hardened (non-root,
+# read-only rootfs, seccomp RuntimeDefault, no capabilities, no ServiceAccount
+# token, no AWS identity, IMDS blocked by the NetworkPolicy), on a dedicated
+# node group labelled durable-actors/role=actor-host and tainted
+# durable-actors/actor-host=true:NoSchedule. For untrusted or multi-tenant actor
+# code, add a gVisor RuntimeClass and set sandbox.runtimeClassName: gvisor
+# (docs: relay-briefs actors-aws-design.md, section c).
+components:
+  durableActors: true
+  relayfile: true
+
+durable-actors:
+  publicUrl: https://<actors host>
+  placement:
+    zone: <the actor node group's availability zone, e.g. us-west-2a>
+  storage:
+    provider: s3
+    bucket: <bucket>
+    s3:
+      region: <region>
+      actorRoleArn: arn:aws:iam::<account>:role/<actor storage role>
+  credentialsSecret: actors-credentials
+  invokeApiKeySecretKey: invoke-api-key
+  images:
+    controlPlane:
+      repository: ghcr.io/agentworkforce/durable-actors-control-plane
+      digest: <digest>
+    typescript:
+      repository: ghcr.io/agentworkforce/durable-actors-typescript
+      digest: <digest>
+  serviceAccount:
+    googleServiceAccount: ""
+  sandbox:
+    runtimeClassName: ""
+    nodeSelector:
+      durable-actors/role: actor-host
+    tolerations:
+      - {key: durable-actors/actor-host, operator: Exists, effect: NoSchedule}
+  ingress:
+    enabled: false
+  actors:
+    hostIdleTimeoutMs: 120000
+    warm: 1
+    maxStarting: 4
+
+relaycast:
+  credentials:
+    format: ar
+    authority: self
+  runtime:
+    backend: durable-actors
+    durableActors:
+      invocationSecret:
+        name: relaycast-durable-actors-invoke
+        key: durable-actors-invoke-key
+        scope: invoke-only
+      adminKeySecret:
+        name: actors-credentials
+        key: api-key
+      deployer:
+        artifactBucket: <bucket>
+        artifactStore:
+          driver: s3
+          s3:
+            region: <region>
+      actorEnvSecrets: [relaycast-actor-env]
+      fileStore:
+        driver: s3
+        bucket: <relaycast files bucket>
+        s3:
+          region: <region>
+
+relayfile:
+  runtime:
+    backend: durable-actors
+    durableActors:
+      existingSecret: relayfile-actors
+      adminKeySecret:
+        name: actors-credentials
+        key: api-key
+      deployer:
+        artifactBucket: <bucket>
+        artifactStore:
+          driver: s3
+          s3:
+            region: <region>
+      blobStore:
+        driver: s3
+        bucket: <relayfile blob bucket>
+        s3:
+          region: <region>
