@@ -34,13 +34,27 @@ See [`HANDOFF.md`](HANDOFF.md) for the full layout and verification steps.
 The charts cover Relaycast, RelayAuth, Sessions Pipeline, RelayHistory, the
 headless control-plane API (relaycontrol), Relay Dashboard, and custom-origin
 Desktop setup. Relayflows, durable actors and Relayfile are optional preview
-components, off by default. Billing, provider integrations and hosted fleet
-are out of scope.
+components, off by default. Billing, hosted (Nango) provider integrations and
+hosted fleet are out of scope; operator-configured integration OAuth apps
+(relay-cloud-api `integrations`, 0.2.3, in agent-relay 0.3.8) are a preview.
 
-## agent-relay 0.3.7 (2026-11-04): proof overlay patch
+## agent-relay 0.3.8 (2026-11-04): integration OAuth apps
 
-To be published from the `agent-relay-0.3.7` tag (not tagged yet). 0.3.7 is
-a GKE proof-overlay and documentation patch of 0.3.6:
+To be published from the `agent-relay-0.3.8` tag (not tagged yet). 0.3.7 was
+never tagged; its changes ship here (below). relay-cloud-api 0.2.3 adds
+`integrations.<provider>.existingSecret`: the customer's own OAuth app per
+integration (GitHub, Slack, Linear, Notion, ...), read from an existing
+Secret (client ID as `SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID`, client secret
+mounted as a file), so users connect integrations just in time from the
+CLI, flow onboarding and flow creation instead of a settings page. Register
+`<publicUrl>/api/v1/integrations/oauth/callback` as the callback URL in each
+provider app; a provider without an entry tells users their administrator
+needs to configure it. It needs a selfhost-api image with operator OAuth
+apps (relaycontrol `selfhost/jit-integrations`). A default render is
+unchanged apart from the `helm.sh/chart` labels.
+
+From the never-released 0.3.7, a GKE proof-overlay and documentation patch of
+0.3.6:
 `values-gcp-proof-live.yaml` sets `relay-dashboard.customerProfile.desktop`
 (`urlScheme`, `siteUrl`) for the proof's custom Desktop build, and the
 relay-dashboard chart (0.1.3) documents `customerProfile.desktop`. The
