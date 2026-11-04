@@ -175,9 +175,10 @@ For `global.singleHost.host: relay.example.com`:
   `gkeIngress.hosts.files`/`actors` when set) stay separate hosts, see below.
   The ManagedCertificate covers the single host plus those hosts.
 
-Set the host once. `relay-cloud-api.publicUrl`, `relay-dashboard.runtime.publicUrl`
-and `relay-dashboard.ingress.host` are derived as `https://<host>`, and the
-chart fails if any of them is set to something else. `gkeIngress.hosts.root`
+Set the host once. `relay-cloud-api.publicUrl` and
+`relay-dashboard.runtime.publicUrl` are derived as `https://<host>`, and
+`relay-dashboard.ingress.host` as the bare `<host>`; the chart fails if any of
+them is set to something else. `gkeIngress.hosts.root`
 must be empty (or equal the host) and `gkeIngress.hosts.api` must be empty.
 `relay-cloud-api.dashboardUrl` can stay empty: its default, `publicUrl + "/"`,
 is the dashboard in this mode. Without the GKE Ingress, enable the

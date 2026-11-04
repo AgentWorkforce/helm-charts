@@ -53,17 +53,18 @@ render_all() { # root outdir
 helm_line="# helm $(helm version --template '{{ .Version }}')"
 want_helm=$(sed -n 's/^  HELM_VERSION: *//p' .github/workflows/lint.yml)
 
+mode=${1:-check}
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-case ${1:-check} in
+case $mode in
   check|update)
     if [ "$helm_line" != "# helm $want_helm" ]; then
       msg="hashes are for Helm $want_helm (lint.yml HELM_VERSION), this is ${helm_line#\# helm }"
-      [ "$1" = check ] && [ -z "${CI:-}" ] && { echo "::warning::$msg; skipping (use: $0 diff origin/main)"; exit 0; }
+      [ "$mode" = check ] && [ -z "${CI:-}" ] && { echo "::warning::$msg; skipping (use: $0 diff origin/main)"; exit 0; }
       echo "::error::$msg" >&2; exit 1
     fi
     render_all . "$tmp/head"
     { echo "$helm_line"; ( cd "$tmp/head" && sha256sum -- *.yaml | sort -k2 ); } >"$tmp/head.sha256"
-    if [ "$1" = update ]; then cp "$tmp/head.sha256" "$golden"; echo "wrote $golden"; exit 0; fi
+    if [ "$mode" = update ]; then cp "$tmp/head.sha256" "$golden"; echo "wrote $golden"; exit 0; fi
     if ! diff -u "$golden" "$tmp/head.sha256"; then
       echo "::error::a default (subdomain) render changed; if that is intended run $0 update and explain it in the PR ($0 diff origin/main shows the change)"
       exit 1

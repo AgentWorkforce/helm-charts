@@ -84,7 +84,7 @@ durable-actors: the control plane refuses a publicUrl with a path and issues act
 {{- define "agent-relay.validateSingleHost" -}}
 {{- $single := dig "singleHost" "host" "" (.Values.global | default dict) -}}
 {{- if $single }}
-{{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $single) }}{{ fail "global.singleHost.host must be a DNS hostname (no scheme, port or path)" }}{{ end -}}
+{{- if or (gt (len $single) 253) (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" $single)) }}{{ fail "global.singleHost.host must be a lowercase DNS hostname (no scheme, port or path; labels of 1-63 characters that start and end with a letter or digit)" }}{{ end -}}
 {{- $components := .Values.components | default dict -}}
 {{- $cloudApi := index .Values "relay-cloud-api" | default dict -}}
 {{- $sessions := index .Values "sessions-pipeline" | default dict -}}

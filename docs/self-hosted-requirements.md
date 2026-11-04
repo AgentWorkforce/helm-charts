@@ -1956,9 +1956,10 @@ allowAllEgress=false, the level is not off and the transport is https.
 global.singleHost.host (off when empty) puts the dashboard and the
 self-host control API on one host: / to the dashboard and /cloud/api,
 /login and /api to relay-cloud-api (flows workers and the integrations
-OAuth callback use <publicUrl>/api/v1/...). relay-cloud-api.publicUrl,
-relay-dashboard.runtime.publicUrl and relay-dashboard.ingress.host are
-derived as https://<host> and must be left empty (or equal it). The GKE
+OAuth callback use <publicUrl>/api/v1/...). relay-cloud-api.publicUrl
+and relay-dashboard.runtime.publicUrl are derived as https://<host>, and
+relay-dashboard.ingress.host as the bare <host>; each must be left empty
+or equal its derived value. The GKE
 Ingress then renders no api host and its ManagedCertificate drops it;
 the api and cast BackendConfigs are unchanged. The leaf dashboard
 Ingress (non-GKE edges) adds the /api route. Relaycast, Relay History,

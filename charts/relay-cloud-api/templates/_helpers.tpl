@@ -42,7 +42,7 @@ of set a second time. Desktop and the CLI log in against that same origin. */ -}
 {{- define "relay-cloud-api.validateSingleHost" -}}
 {{- $single := include "relay-cloud-api.singleHost" . -}}
 {{- if $single }}
-{{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $single) }}{{ fail "global.singleHost.host must be a DNS hostname (no scheme, port or path)" }}{{ end -}}
+{{- if or (gt (len $single) 253) (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" $single)) }}{{ fail "global.singleHost.host must be a lowercase DNS hostname (no scheme, port or path; labels of 1-63 characters that start and end with a letter or digit)" }}{{ end -}}
 {{- if and .Values.publicUrl (ne (trimSuffix "/" .Values.publicUrl) (printf "https://%s" $single)) }}{{ fail (printf "publicUrl is derived from global.singleHost.host (https://%s); leave publicUrl empty" $single) }}{{ end -}}
 {{- if .Values.ingress.enabled }}{{ fail "global.singleHost.host serves the API through the dashboard host's routes (/cloud/api, /login, /api); set ingress.enabled=false (relay-dashboard.ingress or the agent-relay gkeIngress routes it)" }}{{ end -}}
 {{- end -}}
