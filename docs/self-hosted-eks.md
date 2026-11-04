@@ -71,6 +71,14 @@ Cloudflare DNS the same way.
 
 ## Images used
 
+These are the images the proof ran. From agent-relay 0.3.11, `values-eks.yaml`
+pins the newer selfhost-api 0.3.0
+(`sha256:95c7877741054dc2f1cafa26be3faa9bfe4660ed85d637aef4524daa10481963`)
+and dashboard
+(`sha256:c50005fcdd1fc5ab5ef3dac9b621db8e0c7e03480406bfe519743ae435d8f1ad`)
+digests, the same as `values-gcp.yaml`. The proof has not been re-run with
+them yet.
+
 | Component | Image | Source |
 | --- | --- | --- |
 | relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:81274dca…` | chart pin |
