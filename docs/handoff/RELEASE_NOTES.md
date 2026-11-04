@@ -39,7 +39,7 @@ are out of scope.
 
 ## agent-relay 0.3.4 (2026-11-03): documentation patch, pending publication
 
-Published from the `agent-relay-0.3.4` tag
+To be published from the `agent-relay-0.3.4` tag
 (`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.4); it is not
 available until that tag's release workflow succeeds. The relaycast leaf chart
 is 0.3.3 and the relayauth leaf chart is 0.1.3. Both drop the stale
