@@ -38,14 +38,16 @@ components, off by default. Billing, hosted (Nango) provider integrations and
 hosted fleet are out of scope; operator-configured integration OAuth apps
 (relay-cloud-api `integrations`, 0.2.3, in agent-relay 0.3.8) are a preview.
 
-## agent-relay 0.3.10 (2026-11-04): current images, every pin public
+## agent-relay 0.3.11 (2026-11-04): current images, every pin public
 
-Released by `release-agent-relay.yml` when the `agent-relay-0.3.10` tag is
-pushed (`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.10). It
-supersedes the never-tagged 0.3.7, 0.3.8 and 0.3.9 and includes their changes
-(below), so it covers everything since 0.3.6. The leaf charts are unchanged
-from 0.3.9 (relay-cloud-api 0.2.4, relay-dashboard 0.1.3, relayhistory 0.1.1,
-sessions-pipeline 0.6.0); only `values-gcp.yaml` moves.
+Released by `release-agent-relay.yml` when the `agent-relay-0.3.11` tag is
+pushed (`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.11). It
+supersedes the never-tagged 0.3.7, 0.3.8, 0.3.9 and 0.3.10 and includes their
+changes (below), so it covers everything since 0.3.6. The leaf charts are
+unchanged from 0.3.9 (relay-cloud-api 0.2.4, relay-dashboard 0.1.3,
+relayhistory 0.1.1, sessions-pipeline 0.6.0). Only `values-gcp.yaml` and the
+selfhost-api and dashboard pins in the new `values-eks.yaml` (0.3.10, below)
+move.
 
 **Images.** Every image `values-gcp.yaml` renders is now a public GHCR
 release digest, with linux/amd64 and linux/arm64 pullable anonymously. The two
@@ -96,7 +98,7 @@ What the new images bring, in one place:
 **Flows worker CLI.** The relayflows chart still installs agent-relay
 12.4.1 into the flows worker (`runtimeInstaller.agentRelayVersion`). The
 agent-relay CLI release with the new coding-agent device logins (15.1.2 or
-later) was not on npm when 0.3.10 was cut; raise that value once it ships.
+later) was not on npm when 0.3.11 was cut; raise that value once it ships.
 
 **Upgrade step: HoopDb roles (required).** The new Sessions services image
 checks roles that the sessions-pipeline 0.6.0 chart does not create in the
@@ -124,14 +126,31 @@ install.
 Proof: the EKS proof passed all 15 end-to-end cases with services `070fe6fd`,
 RelayHistory `d3166bb1` and the interim bearer off, using earlier API and
 dashboard builds. The GKE proof also ran earlier proof builds of the API and
-dashboard. Neither proof has been re-run with the 0.3.10 selfhost-api and
+dashboard. Neither proof has been re-run with the 0.3.11 selfhost-api and
 dashboard digests yet. Renders with your own
 `image.repository`/`image.digest` overrides are unchanged apart from the
 `helm.sh/chart` labels.
 
-## agent-relay 0.3.9 (never tagged; ships in 0.3.10): first boot, sign-in and invites
+## agent-relay 0.3.10 (never tagged; ships in 0.3.11): AWS EKS profile
 
-Never tagged; it ships in 0.3.10 (above). It
+Never tagged; it ships in 0.3.11 (above). It adds
+`charts/agent-relay/values-eks.yaml`, the AWS EKS profile, and
+[`docs/self-hosted-eks.md`](../self-hosted-eks.md) (helm-charts #47). The
+profile was proven end to end on EKS Auto Mode with real DNS and TLS and the
+interim bearer off (15/15 cases). It uses one ALB Ingress with host rules and
+an ACM certificate (`scripts/selfhost/eks-alb-ingress.sh`), EKS Pod Identity
+to S3 for the Sessions Pipeline, and in-cluster CloudNativePG for HoopDb, the
+control API and RelayHistory. Relaycast runs on SQLite.
+`scripts/selfhost/eks-proof-install.sh hoopdb-roles` runs the HoopDb role
+bootstraps in-cluster on EKS. Durable actors stay GKE-only. Templates are
+unchanged. It is a proof profile, not a production reference architecture.
+0.3.11 moves its selfhost-api and dashboard pins to the same digests as
+`values-gcp.yaml`. The EKS proof ran the earlier `535e6718` and `bbeca872`
+digests.
+
+## agent-relay 0.3.9 (never tagged; ships in 0.3.11): first boot, sign-in and invites
+
+Never tagged; it ships in 0.3.11 (above). It
 supersedes the never-tagged 0.3.8 (and 0.3.7) and includes their changes. It ships with
 relay-cloud-api 0.2.4.
 
@@ -159,14 +178,14 @@ Requirements:
 - a selfhost-api image from relaycontrol #13 or later;
 - a dashboard image from relay-dashboard #92 or later, for the invite UI.
 
-0.3.10 pins images that include both.
+0.3.11 pins images that include both.
 
 With none of these values set, renders are byte-identical apart from the
 `helm.sh/chart` labels.
 
-## agent-relay 0.3.8 (never tagged; ships in 0.3.10): integration OAuth apps
+## agent-relay 0.3.8 (never tagged; ships in 0.3.11): integration OAuth apps
 
-Never tagged; it ships in 0.3.10. 0.3.7 was also never tagged; its changes ship here (below). relay-cloud-api 0.2.3 adds
+Never tagged; it ships in 0.3.11. 0.3.7 was also never tagged; its changes ship here (below). relay-cloud-api 0.2.3 adds
 `integrations.<provider>.existingSecret`: the customer's own OAuth app per
 integration (GitHub, Slack, Linear, Notion, ...), read from an existing
 Secret (client ID as `SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID`, client secret

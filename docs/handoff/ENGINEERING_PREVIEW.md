@@ -4,14 +4,14 @@ This archive is the complete current Helm-chart and agent-prompt engineering
 handoff. It is provided for architecture and integration review, not
 installation or production use.
 
-Hard blockers as of 2026-11-04 (agent-relay 0.3.10; details in [STATUS.md](STATUS.md)):
+Hard blockers as of 2026-11-04 (agent-relay 0.3.11; details in [STATUS.md](STATUS.md)):
 
-- None for images: since 0.3.10 every image in `values-gcp.yaml` is a public
+- None for images: since 0.3.11 every image in `values-gcp.yaml` is a public
   GHCR release digest (control-plane API, dashboard, RelayHistory, Sessions
   services, Relaycast, RelayAuth, PostgreSQL).
 - Session ingest auth with the interim RelayAuth bearer off (origin-bound
   History assertions, services image `070fe6fd…`) passed end to end on the
-  EKS proof; it has not been re-run on GKE with the 0.3.10 image set.
+  EKS proof; it has not been re-run on GKE with the 0.3.11 image set.
 - Branch protection and a protected release environment are not configured.
 - The supported-100 load and soak test, alerts, dashboards and runbooks
   evidence, and the server/Desktop version-compatibility matrix have not run.

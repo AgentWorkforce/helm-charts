@@ -10,7 +10,7 @@ metadata:
   auditedAt: "2026-11-04"
   chart:
     name: agent-relay
-    version: 0.3.10
+    version: 0.3.11
     values:
       - charts/agent-relay/values-gcp.yaml
 
@@ -433,7 +433,7 @@ promotionProcedure:
     action: update-customer-values
     gate: Pin the destination repository and digest; render and reject proof registries, private vendor-only references, mutable tags, or missing digests.
 
-# IMG-BLOCK-001/-002/-003/-005 closed in agent-relay 0.3.10: the Sessions
+# IMG-BLOCK-001/-002/-003/-005 closed in agent-relay 0.3.11: the Sessions
 # services, RelayHistory and selfhost-api release images are public, built by
 # reviewed workflows from recorded main revisions, with an SBOM and max-mode
 # provenance, and amd64+arm64 verified anonymously.

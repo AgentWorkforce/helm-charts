@@ -61,7 +61,7 @@
   "operationalReadiness": {
     "loadTest": {
       "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      "chartVersion": "0.3.10",
+      "chartVersion": "0.3.11",
       "evidence": "Not yet done; planned. The supported-100 ramp, 24-hour steady run, burst, drain and fault phases in docs/operations/capacity-and-load-test.md have not run. No capacity or SLO claim is made.",
       "imageManifestSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       "result": "not-run",
@@ -116,14 +116,14 @@
       "requiredStatusChecks": [],
       "requiresPullRequest": false
     },
-    "chartVersion": "0.3.10",
+    "chartVersion": "0.3.11",
     "environmentControls": {
       "name": "customer-release",
       "preventsSelfReview": false,
       "protected": false,
       "requiredApprovals": 0
     },
-    "imageManifestSha256": "sha256:0b67db4fcfb75b43c56ad3f5a9d23b2fe5262f609970bc0d212bde323a6b5a96",
+    "imageManifestSha256": "sha256:4c29bbfa50e10b575db1cc32a8467ff4e671d7707f7774ad4a4d8025f22b9f41",
     "valuesFile": "charts/agent-relay/values-gcp.yaml"
   },
   "releaseDecision": "blocked",
@@ -153,7 +153,7 @@
         "desktopVersion": "unreleased-custom-origin",
         "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
         "result": "not-run",
-        "serverVersion": "0.3.10",
+        "serverVersion": "0.3.11",
         "testedPlatforms": [
           "linux/amd64"
         ]
@@ -163,7 +163,7 @@
         "desktopVersion": "none",
         "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
         "result": "not-run",
-        "serverVersion": "0.3.10",
+        "serverVersion": "0.3.11",
         "testedPlatforms": [
           "linux/amd64"
         ]
@@ -189,7 +189,7 @@
         ]
       }
     },
-    "serverCurrentVersion": "0.3.10",
+    "serverCurrentVersion": "0.3.11",
     "serverPreviousVersion": "0.3.6"
   }
 }

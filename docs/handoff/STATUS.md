@@ -1,14 +1,15 @@
 # Release status: what is proven and what is preview
 
-Current release: `agent-relay` chart 0.3.10. `release-agent-relay.yml`
-publishes it when the `agent-relay-0.3.10` tag is pushed; from then on it is
+Current release: `agent-relay` chart 0.3.11. `release-agent-relay.yml`
+publishes it when the `agent-relay-0.3.11` tag is pushed; from then on it is
 pullable anonymously from `oci://ghcr.io/agentworkforce/charts/agent-relay`. Every image
 `values-gcp.yaml` renders is now a public GHCR release digest: the
 control-plane API (selfhost-api 0.3.0), the redesigned dashboard,
 RelayHistory and the Sessions services image join Relaycast, RelayAuth and
-PostgreSQL, so there is no REQUIRED OVERRIDE image left. 0.3.10 includes the
+PostgreSQL, so there is no REQUIRED OVERRIDE image left. 0.3.11 includes the
 never-tagged 0.3.7 (Desktop deep-link settings), 0.3.8 (integration OAuth
-apps) and 0.3.9 (first-boot bootstrap, OIDC / email sign-in and invites).
+apps), 0.3.9 (first-boot bootstrap, OIDC / email sign-in and invites) and
+0.3.10 (the AWS EKS profile `values-eks.yaml`, proven on EKS Auto Mode).
 Upgrading needs the HoopDb role bootstraps described in RELEASE_NOTES.md.
 
 Published versions of the umbrella chart:
@@ -19,7 +20,7 @@ Published versions of the umbrella chart:
 | 0.3.3 | `agent-relay-0.3.3` | Pins the attested Relaycast image `81274dca…` (engine 12.7.0) and the GKE proof-overlay refresh. 0.3.2 was never tagged. |
 | 0.3.4 | `agent-relay-0.3.4` | Documentation patch of 0.3.3 (Relaycast `ar_` credentials guidance). Published by [run 41754926487](https://github.com/AgentWorkforce/helm-charts/actions/runs/41754926487). |
 | 0.3.6 | `agent-relay-0.3.6` | Opt-in single-host mode and optional dashboard `customerProfile` branding (relay-dashboard 0.1.2); 0.3.5 was never tagged. Published by [run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329). |
-| 0.3.10 | `agent-relay-0.3.10` | Public release digests for every customer image (selfhost-api 0.3.0, dashboard redesign, RelayHistory, Sessions services with origin-bound ingest auth). Includes the never-tagged 0.3.7 (Desktop deep links), 0.3.8 (integration OAuth apps) and 0.3.9 (bootstrap, OIDC / email sign-in, invites). |
+| 0.3.11 | `agent-relay-0.3.11` | Public release digests for every customer image (selfhost-api 0.3.0, dashboard redesign, RelayHistory, Sessions services with origin-bound ingest auth). Includes the never-tagged 0.3.7 (Desktop deep links), 0.3.8 (integration OAuth apps), 0.3.9 (bootstrap, OIDC / email sign-in, invites) and 0.3.10 (AWS EKS profile). |
 
 This release is for **review by a company evaluating a self-hosted Agent Relay
 on GCP**. It is a reviewable `portable-single` release that pins every
@@ -69,16 +70,16 @@ These gate items are open. None of them is claimed.
   `docs/operations/capacity-and-load-test.md` have not run. Alerts, dashboards
   and runbooks evidence are not produced. No SLO or capacity claim is made.
 - **Version compatibility** (server N and N-1 x Desktop current and previous): not
-  run (server N is 0.3.10, N-1 is 0.3.6).
+  run (server N is 0.3.11, N-1 is 0.3.6).
 - **Desktop**: the custom-origin Desktop (self-hosted sign-in) passes CI on
   macOS arm64/x64, Linux x64/arm64 and Windows (relay-desktop CI run
   41606660810), but it is not merged or released yet.
 - **High availability**: Relaycast and RelayAuth are single-writer SQLite
   workloads on RWO volumes.
 - **Session ingest auth on GKE**: with the interim RelayAuth bearer off,
-  couriers present origin-bound History assertions, which the 0.3.10 Sessions
+  couriers present origin-bound History assertions, which the 0.3.11 Sessions
   services image verifies. This passed end to end on the EKS proof (15/15);
-  it has not been re-run on GKE with the 0.3.10 image set.
+  it has not been re-run on GKE with the 0.3.11 image set.
 - **Release evidence bound to this manifest**: the gate also rejects evidence
   that was recorded against other images. The upgrade and restore drills ran
   other image sets than `self-hosted/customer-images.yaml` (and the restore
