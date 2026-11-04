@@ -5,3 +5,4 @@ temp-values.yaml
 dist/
 __pycache__/
 *.pyc
+.eks-proof/
