@@ -76,8 +76,8 @@ wiring):
   `http://relayauth.auth.svc:8787` for the standalone install above);
 - `secretKeys.relayauthToken` naming the key, in its `existingSecret`, that
   holds the token Relaycast presents to RelayAuth's CredentialTagger;
-- an `image.digest` for a `>=12.3.x` relaycast engine build. The relaycast
-  chart's pinned default predates `ar_` custody.
+- a `>=12.3.x` relaycast engine image. The relaycast chart's pinned default
+  (engine 12.7.0) satisfies this, so no `image.digest` override is needed.
 
 ## Rotation
 

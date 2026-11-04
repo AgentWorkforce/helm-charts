@@ -97,8 +97,8 @@ By default Relaycast issues and verifies legacy credentials locally. With
   `RELAYCAST_CREDENTIAL_KEYRING_FILE`).
 
 A mounted `secretKeys.credentialKeyring` always takes precedence over the
-remote tagger. `ar_` custody requires a `>=12.3.x` engine image — override
-`image.digest`; the pinned default predates it.
+remote tagger. `ar_` custody requires a `>=12.3.x` engine image; the pinned
+default (engine 12.7.0) satisfies it, so no `image.digest` override is needed.
 
 ```yaml
 credentials:

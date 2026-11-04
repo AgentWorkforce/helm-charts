@@ -291,14 +291,21 @@ compatibility:
       images_note: not built for the charts yet
       notes: 'Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/sessions-pipeline-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped.'
       db_combos: []
-    - id: relaycast-0.3.2
+    - id: relaycast-0.3.3
       status: unreleased
       current: true
+      charts: { relaycast: 0.3.3 }
+      app_versions: { relaycast: 12.7.0 }
+      images:
+        relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e }
+      notes: 'Comment and README fix of 0.3.2: the pinned default (engine 12.7.0) already satisfies the >=12.3.x requirement for ar_ custody, so the credentials guidance no longer asks for an image.digest override. Same default image as 0.3.2.'
+    - id: relaycast-0.3.2
+      status: shipped
       charts: { relaycast: 0.3.2 }
       app_versions: { relaycast: 12.7.0 }
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e }
-      notes: 'Default image moves to relaycast-self-host 12.7.0 (relaycast main bf713d86, engine 12.7.0), built by the reviewed publish-container workflow with an SPDX SBOM, max-mode provenance and a GitHub build-provenance attestation (run 41717074565); public, amd64+arm64.'
+      notes: 'Default image moves to relaycast-self-host 12.7.0 (relaycast main bf713d86, engine 12.7.0), built by the reviewed publish-container workflow with an SPDX SBOM, max-mode provenance and a GitHub build-provenance attestation (run 41717074565); public, amd64+arm64. Superseded by 0.3.3.'
     - id: relaycast-0.3.1
       status: shipped
       charts: { relaycast: 0.3.1 }
@@ -328,14 +335,21 @@ compatibility:
       images:
         relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:5c86c095a335259060dc34ce7aa2e90809267395af915977a1ae608f93a83b98 }
       notes: 'image 8.0.0; superseded by 0.2.0. ci/relaycast/smoke.sh upgrades from it.'
-    - id: relayauth-0.1.2
+    - id: relayauth-0.1.3
       status: unreleased
       current: true
+      charts: { relayauth: 0.1.3 }
+      app_versions: { relayauth: 0.2.34 }
+      images:
+        relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288 }
+      notes: 'README-only bump of 0.1.2: the relaycast default (engine 12.7.0) satisfies ar_ custody, so no relaycast image.digest override is listed.'
+    - id: relayauth-0.1.2
+      status: shipped
       charts: { relayauth: 0.1.2 }
       app_versions: { relayauth: 0.2.34 }
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288 }
-      notes: License-annotation patch bump of 0.1.1.
+      notes: License-annotation patch bump of 0.1.1. Superseded by 0.1.3.
     - id: relayauth-0.1.1
       status: shipped
       charts: { relayauth: 0.1.1 }
@@ -350,9 +364,20 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.3.3
+    - id: agent-relay-0.3.4
       status: unreleased
       current: true
+      charts: { agent-relay: 0.3.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
+      app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
+      depends:
+        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+      images:
+        relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
+        relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
+        relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
+      notes: '0.3.4 (tag agent-relay-0.3.4) is a documentation patch of 0.3.3: relaycast chart 0.3.3 and relayauth chart 0.1.3 drop the stale instruction to override the relaycast image.digest for ar_ credentials (the pinned engine 12.7.0 default satisfies >=12.3.x), and values-gcp.yaml''s credentials comment says the same. Images, templates and rendered values-gcp.yaml are unchanged from 0.3.3.'
+    - id: agent-relay-0.3.3
+      status: shipped
       charts: { agent-relay: 0.3.3, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
@@ -361,7 +386,7 @@ compatibility:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: '0.3.3 (tag agent-relay-0.3.3) moves relaycast to chart 0.3.2 and pins relaycast-self-host sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e (relaycast main bf713d86, engine 12.7.0; SBOM + max-mode provenance + GitHub attestation; public) in values-gcp.yaml, and includes the never-tagged 0.3.2 proof refresh: GKE proof refresh on top of 0.3.1 (tag agent-relay-0.3.1). Proof overlays only: values-gcp-proof-durable-actors.yaml pins relaycast-actors-gateway sha256:faf66ec45d2c755ab5cdc6ee32bca6dc48446dff444118cab18fa1f765124ffa and relaycast-actors-deployer sha256:a81e91ed52bfb7cbb0a8c2773752df3b5d78afdc443608998b3203a30e314cee (relaycast main 3624cc12); values-gcp-proof-relayfile.yaml pins relayfile-actors sha256:7fb2110701a004f9f7ed2b025d25156fbe993208598bfbd0498a48b30df48299 and relayfile-actors-workspace sha256:c5851a1b1f7624390a1a00ebdee69e8e521dc3f23f345c582d62e09dba9a6e83 (relayfile main 39f84fcf); values-gcp-proof-live.yaml pins the experimental unsupported RelayHistory sha256:f36ae1671bdcd88a2b8b2df62c8edecb1381237d9f968747b39298959ad33563 (relayhistory-cloud 3cb76752). Proof CPU requests sized for the e2-medium pool, and the README documents the write-hold upgrade with the Relayflows smoke Job. The customer profile (values-gcp.yaml) and templates are unchanged from 0.3.1.'
+      notes: '0.3.3 (tag agent-relay-0.3.3) moves relaycast to chart 0.3.2 and pins relaycast-self-host sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e (relaycast main bf713d86, engine 12.7.0; SBOM + max-mode provenance + GitHub attestation; public) in values-gcp.yaml, and includes the never-tagged 0.3.2 proof refresh: GKE proof refresh on top of 0.3.1 (tag agent-relay-0.3.1). Proof overlays only: values-gcp-proof-durable-actors.yaml pins relaycast-actors-gateway sha256:faf66ec45d2c755ab5cdc6ee32bca6dc48446dff444118cab18fa1f765124ffa and relaycast-actors-deployer sha256:a81e91ed52bfb7cbb0a8c2773752df3b5d78afdc443608998b3203a30e314cee (relaycast main 3624cc12); values-gcp-proof-relayfile.yaml pins relayfile-actors sha256:7fb2110701a004f9f7ed2b025d25156fbe993208598bfbd0498a48b30df48299 and relayfile-actors-workspace sha256:c5851a1b1f7624390a1a00ebdee69e8e521dc3f23f345c582d62e09dba9a6e83 (relayfile main 39f84fcf); values-gcp-proof-live.yaml pins the experimental unsupported RelayHistory sha256:f36ae1671bdcd88a2b8b2df62c8edecb1381237d9f968747b39298959ad33563 (relayhistory-cloud 3cb76752). Proof CPU requests sized for the e2-medium pool, and the README documents the write-hold upgrade with the Relayflows smoke Job. The customer profile (values-gcp.yaml) and templates are unchanged from 0.3.1 apart from the Relaycast pin. Superseded by 0.3.4.'
     - id: agent-relay-0.3.1
       status: shipped
       charts: { agent-relay: 0.3.1, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
@@ -2123,7 +2148,7 @@ entries:
       secretKeys.relayauthToken); self verifies ar_ tags against the local
       keyring mounted by secretKeys.credentialKeyring. A mounted keyring always
       takes precedence over the remote tagger. ar_ custody requires a >=12.3.x
-      engine image (image.digest override; the pinned default predates it).
+      engine image; the pinned default (engine 12.7.0) satisfies it.
     chart: relaycast
     values: [credentials.*]
     env: [RELAYCAST_CREDENTIAL_FORMAT, RELAYCAST_RELAYAUTH_URL]

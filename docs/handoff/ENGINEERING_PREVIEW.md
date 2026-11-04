@@ -4,12 +4,12 @@ This archive is the complete current Helm-chart and agent-prompt engineering
 handoff. It is provided for architecture and integration review, not
 installation or production use.
 
-Hard blockers as of 2026-11-03 (agent-relay 0.3.1; details in [STATUS.md](STATUS.md)):
+Hard blockers as of 2026-11-03 (agent-relay 0.3.4; details in [STATUS.md](STATUS.md)):
 
 - The RelayHistory and Sessions services release images are not published
   yet, so those two images stay REQUIRED OVERRIDE in `values-gcp.yaml`.
 - The control-plane API image is published but its GHCR package is not public
-  yet. The Relaycast image has no SBOM and only min-mode provenance.
+  yet.
 - Session ingest auth: Desktop couriers need machine-bound History
   assertions. The interim RelayAuth bearer is off in the customer profile, and
   ingest without it has not been verified end to end.

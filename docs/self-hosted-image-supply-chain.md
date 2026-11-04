@@ -1,7 +1,7 @@
 # Self-hosted customer image and source inventory
 
-Status: **blocked for customer release** (agent-relay 0.3.1, audited
-2026-11-03).
+Status: **blocked for customer release** (agent-relay 0.3.4, audited
+2026-11-03; images unchanged since 0.3.3).
 
 The machine-readable source of this audit is
 [`self-hosted/customer-images.yaml`](../self-hosted/customer-images.yaml); this
@@ -102,7 +102,7 @@ approved byte-for-byte third-party mirror.
 - `IMG-BLOCK-005` — **Sessions services**: the recorded digest predates the
   attested workflow (sessions-pipeline #172). Close with a rebuild that
   publishes an SBOM and signed provenance, and record the new digest.
-  Relaycast was closed in 0.3.3 by the attested 12.7.0 digest.
+  Relaycast was closed in agent-relay 0.3.3 by the attested 12.7.0 digest.
 
 Until these are closed, the umbrella chart is not customer-image ready even if
 it renders or the proof cluster is healthy.

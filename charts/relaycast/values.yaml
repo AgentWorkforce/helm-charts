@@ -180,8 +180,8 @@ secretKeys:
 #     RELAYCAST_RELAYAUTH_TOKEN_FILE).
 #   authority=self: Relaycast verifies ar_ tags against the local keyring
 #     mounted via secretKeys.credentialKeyring.
-# ar_ custody requires a >=12.3.x engine image — newer than this chart's
-# pinned default, so override image.digest with a >=12.3.x self-host build.
+# ar_ custody requires a >=12.3.x engine image. The pinned default (engine
+# 12.7.0) satisfies it; no image.digest override is needed.
 credentials:
   format: legacy
   authority: ""
