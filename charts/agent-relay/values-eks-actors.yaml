@@ -70,6 +70,10 @@ durable-actors:
     typescript:
       repository: ghcr.io/agentworkforce/durable-actors-typescript
       digest: b7118ed1377ccc20f0389d194dd589bcd4845394f72f91410cbaf0f62d4a2ed9
+    # images.python stays at upstream 0.14.6 (public): the fork does not build a
+    # Python host, and this stack runs TypeScript actors only (relaycast and
+    # relayfile). Python actors are not supported with storage.provider s3 until
+    # the fork publishes a matching Python host.
   serviceAccount:
     googleServiceAccount: ""
   sandbox:

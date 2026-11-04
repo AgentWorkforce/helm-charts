@@ -73,6 +73,11 @@ trap 'rm -f "$KUBECONFIG_FILE"' EXIT
 aws --region "$REGION" eks update-kubeconfig --name "$NAME" --kubeconfig "$KUBECONFIG_FILE" >/dev/null
 export KUBECONFIG="$KUBECONFIG_FILE"
 
+# owned <kind> <name>: the object carries OWNER_LABEL=owned (this script made it).
+owned() {
+  [[ "$(kubectl -n "$NS" get "$1" "$2" -o jsonpath="{.metadata.labels['agent-relay\.dev/eks-actors-proof']}" 2>/dev/null)" == owned ]]
+}
+
 ensure_secret() {
   local ns="$1" name="$2"; shift 2
   if kubectl -n "$ns" get secret "$name" >/dev/null 2>&1; then log "secret $ns/$name exists (kept, not owned)"; return; fi
@@ -128,6 +133,14 @@ cmd_prereqs() {
   ensure_secret "$NS" relayfile-actors --from-file=RELAYFILE_JWT_SECRET="$dir/RELAYFILE_JWT_SECRET" \
     --from-file=RELAYFILE_ACTORS_BROKER_TOKEN="$dir/RELAYFILE_ACTORS_BROKER_TOKEN"
   rm -rf "$dir"
+  # Never adopt a same-named Postgres someone else runs: apply would label it
+  # owned and uninstall would then delete it.
+  local kind
+  for kind in service statefulset; do
+    if kubectl -n "$NS" get "$kind" actors-pg >/dev/null 2>&1 && ! owned "$kind" actors-pg; then
+      echo "$NS $kind/actors-pg exists but was not created by this script: refusing to change it" >&2; exit 1
+    fi
+  done
   kubectl -n "$NS" apply -f - >/dev/null <<EOF
 apiVersion: v1
 kind: Service
@@ -170,7 +183,12 @@ EOF
 }
 
 cmd_prepull() {
-  local config="${1:?dockerconfigjson file}"
+  local config="${1:?dockerconfigjson file}" kind
+  for kind in secret/image-pull daemonset/image-prepull; do
+    if kubectl -n "$NS" get "$kind" >/dev/null 2>&1 && ! owned "${kind%%/*}" "${kind#*/}"; then
+      echo "$NS $kind exists but was not created by this script: refusing to change it" >&2; exit 1
+    fi
+  done
   kubectl -n "$NS" create secret generic image-pull --type=kubernetes.io/dockerconfigjson \
     --from-file=.dockerconfigjson="$config" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   kubectl -n "$NS" label secret image-pull "${OWNER_LABEL}=owned" --overwrite >/dev/null
