@@ -1456,8 +1456,13 @@ bundled MinIO at http://locker:9000 works with the default false.
 
 alleyoop.auth.historyOrigin renders RELAYHISTORY_ORIGIN on the ingest: the
 bare origin expected as the History assertion audience. It must be
-byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Unset, nothing is
-rendered (the services default applies).
+byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Set, it is also
+what turns on verification of courier assertions with the interim bearer
+off; this needs a 96bulls-services image built from sessions-pipeline
+887a844 or later on both alleyoop.image.digest and worker.image.digest
+(older images refuse every upload unless the interim bearer is on).
+Unset, nothing is rendered and, outside environment=local, the ingest
+refuses every courier upload.
 
 - Default: `unset`
 - Choices: `unset`; `origin`
@@ -1475,10 +1480,14 @@ rendered (the services default applies).
 
 alleyoop.auth.allowInterimRelayAuthBearer renders
 ALLOW_INTERIM_RELAYAUTH_BEARER on the ingest. false (default) keeps the
-ingest fail-closed: couriers must present origin-bound migration
-assertions. true accepts legacy RelayAuth bearer tokens and is allowed
-only with environment=local; any other environment, a non-boolean value,
-or setting the variable through extraEnv or ingest.env fails the render.
+ingest fail-closed: with auth.historyOrigin set, couriers present
+RelayAuth assertions minted for exactly that origin (RS256 against the
+configured JWKS, auth.jwksUrl or auth.localJwks, issuer auth.issuer,
+the dedicated History assertion class; services image requirement under
+opt.alleyoop.history-origin), and without it every bearer is refused. true accepts any RelayAuth-signed bearer, including
+the legacy shared audience, and is allowed only with environment=local;
+any other environment, a non-boolean value, or setting the variable
+through extraEnv or ingest.env fails the render.
 
 - Default: `false`
 - Choices: `false`; `true`: environment=local only
