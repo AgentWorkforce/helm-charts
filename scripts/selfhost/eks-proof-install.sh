@@ -69,25 +69,21 @@ STATE_DIR="${EKS_PROOF_STATE_DIR:-$ROOT/.eks-proof}"
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 
 KUBECONFIG_FILE="$(mktemp)"
-# Secret material is generated into SECRET_TMP (mode 0700); the EXIT trap
-# removes it even when a kubectl call fails part-way.
+# Secret material is generated into SECRET_TMP or WORK_TMP (both mode 0700);
+# the EXIT trap removes them even when a kubectl call fails part-way.
+WORK_TMP="$(mktemp -d)"; chmod 700 "$WORK_TMP"
 SECRET_TMP=""
-trap 'rm -f "$KUBECONFIG_FILE"; [[ -n "$SECRET_TMP" ]] && rm -rf "$SECRET_TMP"' EXIT
+trap 'rm -f "$KUBECONFIG_FILE"; rm -rf "$WORK_TMP"; [[ -n "$SECRET_TMP" ]] && rm -rf "$SECRET_TMP"' EXIT
 aws --region "$REGION" eks update-kubeconfig --name "$NAME" --kubeconfig "$KUBECONFIG_FILE" >/dev/null
 export KUBECONFIG="$KUBECONFIG_FILE"
 mkdir -p "$STATE_DIR"
 
 # patch_secret_key <key> <value>: add one key to $SECRET through a 0600 patch
-# file, so the value never appears in a process's argument list.
+# file in WORK_TMP (removed by the EXIT trap if the patch fails), so the value
+# never appears in a process's argument list.
 patch_secret_key() {
-  local f; f="$(mktemp)"; chmod 600 "$f"
-  python3 -c 'import json, sys; json.dump({"stringData": {sys.argv[1]: sys.stdin.read()}}, open(sys.argv[2], "w"))' "$1" "$f" <<<"$2"
-  python3 - "$f" <<'PYX'
-import json, sys
-d = json.load(open(sys.argv[1]))
-d["stringData"] = {k: v.rstrip("\n") for k, v in d["stringData"].items()}
-json.dump(d, open(sys.argv[1], "w"))
-PYX
+  local f="$WORK_TMP/patch-$1.json"
+  (umask 077; python3 -c 'import json, sys; json.dump({"stringData": {sys.argv[1]: sys.stdin.read().rstrip("\n")}}, open(sys.argv[2], "w"))' "$1" "$f" <<<"$2")
   kubectl -n "$NS" patch secret "$SECRET" --type merge --patch-file "$f" >/dev/null
   rm -f "$f"
 }

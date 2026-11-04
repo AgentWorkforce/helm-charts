@@ -66,6 +66,8 @@ cert_arn() {
     for h in "${HOSTS[@]}"; do [[ "$names" == *",$h,"* ]] || ok=false; done
     $ok && { echo "$arn"; return 0; }
   done
+  # None found: empty output, success (callers assign it under set -e).
+  return 0
 }
 
 cmd_cert_request() {
