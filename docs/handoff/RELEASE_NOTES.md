@@ -38,9 +38,87 @@ components, off by default. Billing, hosted (Nango) provider integrations and
 hosted fleet are out of scope; operator-configured integration OAuth apps
 (relay-cloud-api `integrations`, 0.2.3, in agent-relay 0.3.8) are a preview.
 
-## agent-relay 0.3.9 (unreleased): first boot, sign-in and invites
+## agent-relay 0.3.10 (2026-11-04): current images, every pin public
 
-To be published from the `agent-relay-0.3.9` tag (not tagged yet). It
+Published from the `agent-relay-0.3.10` tag
+(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.10). It
+supersedes the never-tagged 0.3.7, 0.3.8 and 0.3.9 and includes their changes
+(below), so it covers everything since 0.3.6. The leaf charts are unchanged
+from 0.3.9 (relay-cloud-api 0.2.4, relay-dashboard 0.1.3, relayhistory 0.1.1,
+sessions-pipeline 0.6.0); only `values-gcp.yaml` moves.
+
+**Images.** Every image `values-gcp.yaml` renders is now a public GHCR
+release digest, with linux/amd64 and linux/arm64 pullable anonymously. The two
+REQUIRED OVERRIDE zero digests (RelayHistory, Sessions services) are gone.
+
+| Component | Image | Source |
+|---|---|---|
+| Control-plane API | `ghcr.io/agentworkforce/selfhost-api@sha256:95c7877741054dc2f1cafa26be3faa9bfe4660ed85d637aef4524daa10481963` (0.3.0) | relaycontrol `9b80b04` (#7-#13) |
+| Dashboard | @@DASH_ROW@@ |
+| RelayHistory | `ghcr.io/agentworkforce/relayhistory@sha256:d3166bb14e1d6043426a4dd8cc05408b94574c8d79ad5fd6e789e0de00ab371b` | relayhistory-cloud `53c3333` |
+| Sessions services (worker, alleyoop) | `ghcr.io/agentworkforce/96bulls-services@sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9` | sessions-pipeline `f1c2672` |
+| Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e` (unchanged) | relaycast `bf713d86` (engine 12.7.0) |
+| RelayAuth | `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288` (unchanged) | relayauth `784582e` |
+| Sessions wait-for-role | `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9…` (unchanged) | upstream `4c2710a` |
+
+Mirror each one by digest into your registry, as before (image supply-chain
+guide).
+
+What the new images bring, in one place:
+
+- **Dashboard redesign.** The self-host dashboard now has the hosted Cloud
+  look and feel (relay-dashboard #83), the faceted sessions sidebar and
+  customer-profile branding (#84, #86), and Settings pages that match hosted:
+  Connections with Coding agents (#85, #89, #90), the Agent Relay Desktop
+  link from the customer profile (#88) and Members with email invites (#92).
+  @@DASH_91@@
+- **First-boot bootstrap, OIDC / email sign-in and invites** (relaycontrol
+  #13, chart values from 0.3.9, below). The pinned images include it, so no
+  digest override is needed any more.
+- **Coding-agent credentials and device logins** (relaycontrol #7, #10, #11).
+  Workspace model-provider credentials with sandbox and model selection;
+  Codex (ChatGPT) and Grok subscription logins, envelope-encrypted and mounted
+  per run. Daytona is no longer offered. The envelopes are stored in Postgres
+  unless flows storage is `gcs` (then the same bucket).
+- **Desktop sign-in origin** (relaycontrol #9): sign-in answers name the
+  site the request arrived on, so a custom-origin Desktop signs in to your
+  host.
+- **Integration OAuth apps** (relaycontrol #12, chart values from 0.3.8,
+  below).
+- **Origin-bound pipeline auth.** The Sessions services image verifies the
+  courier's origin-bound RelayAuth History assertion (sessions-pipeline
+  #204), so session ingest works with the interim RelayAuth bearer off, as
+  the customer profile ships it. Keep `alleyoop.auth.historyOrigin` equal to
+  `relayhistory.relayauth.historyOrigin` (the chart refuses a mismatch).
+- **RelayHistory public image** from its reviewed container workflow.
+
+**Upgrade step: HoopDb roles (required).** The new Sessions services image
+checks roles that the sessions-pipeline 0.6.0 chart does not create in the
+customer profile (`roleBootstrap: false`). Without them its migrate Job fails
+with `42501 role check failed bootstrap:session_token_verifier`. Before you
+upgrade, run the three bootstrap scripts shipped in the image, in order, as a
+privileged HoopDb user (the Cloud SQL admin user, or the CNPG superuser):
+
+```bash
+IMG=ghcr.io/agentworkforce/96bulls-services@sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9
+for f in session_directory_search_worker session_token_verifier session_ingest_roles; do
+  docker run --rm --entrypoint cat "$IMG" "/app/supabase/bootstrap/$f.sql" \
+    | psql "$HOOPDB_ADMIN_URL" -X -v ON_ERROR_STOP=1
+done
+```
+
+The scripts are idempotent. `scripts/selfhost/eks-proof-install.sh
+hoopdb-roles` does the same in-cluster on EKS.
+
+Proof: the EKS proof passed all 15 end-to-end cases with services `070fe6fd`,
+RelayHistory `d3166bb1` and the interim bearer off. The GKE proof ran the same
+API and dashboard revisions from private builds. Renders with your own
+`image.repository`/`image.digest` overrides are unchanged apart from the
+`helm.sh/chart` labels.
+
+## agent-relay 0.3.9 (never tagged; ships in 0.3.10): first boot, sign-in and invites
+
+Never tagged; it ships in 0.3.10 (above). It
 supersedes the never-tagged 0.3.8 (and 0.3.7) and includes their changes. It ships with
 relay-cloud-api 0.2.4.
 
@@ -68,20 +146,14 @@ Requirements:
 - a selfhost-api image from relaycontrol #13 or later;
 - a dashboard image from relay-dashboard #92 or later, for the invite UI.
 
-The `relay-cloud-api` and `relay-dashboard` digests pinned in `values-gcp.yaml`
-predate both. Until the pins move, copy images built from those revisions (or
-later) into a registry your cluster can pull from, as for every other image
-(see the image supply-chain guide), and override both `image.repository` and
-`image.digest` for `relay-cloud-api` and `relay-dashboard`. Otherwise the new values render but the API ignores
-them and Members has no invite UI.
+0.3.10 pins images that include both.
 
 With none of these values set, renders are byte-identical apart from the
 `helm.sh/chart` labels.
 
-## agent-relay 0.3.8 (2026-11-04): integration OAuth apps
+## agent-relay 0.3.8 (never tagged; ships in 0.3.10): integration OAuth apps
 
-To be published from the `agent-relay-0.3.8` tag (not tagged yet). 0.3.7 was
-never tagged; its changes ship here (below). relay-cloud-api 0.2.3 adds
+Never tagged; it ships in 0.3.10. 0.3.7 was also never tagged; its changes ship here (below). relay-cloud-api 0.2.3 adds
 `integrations.<provider>.existingSecret`: the customer's own OAuth app per
 integration (GitHub, Slack, Linear, Notion, ...), read from an existing
 Secret (client ID as `SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID`, client secret
