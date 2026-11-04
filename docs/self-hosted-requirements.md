@@ -669,7 +669,7 @@ chart `relaycast` · values [`ci/durable-actors-values.yaml`](../charts/relaycas
 
 | | requirement | provided by | maps to | verify |
 | --- | --- | --- | --- | --- |
-| shipped | [Relaycast actor-mode Secrets (gateway invocation key, file signing, actor env, admin key)](#req-relaycast-durable-actors-secrets) | operator | values `runtime.durableActors.fileSigningSecretKey`, `runtime.durableActors.invocationSecret.*`, `runtime.durableActors.adminKeySecret.*`, `runtime.durableActors.actorEnvSecrets`, `runtime.durableActors.devRuntime.secretKey`, `runtime.durableActors.deployer.*`; env `DURABLE_ACTORS_SECRET`, `RELAYCAST_FILE_SIGNING_SECRET`, `DURABLE_ACTORS_ARTIFACT_BUCKET`, `DURABLE_ACTORS_SECRET_REFS`, `DURABLE_ACTORS_ORGANIZATION_ID`; Secret `<existingSecret>` keys `file-signing-secret`, `credential-keyring`; Secret `<runtime.durableActors.invocationSecret.name>` keys `durable-actors-invoke-key`; Secret `actors-credentials` keys `api-key`; Secret `<runtime.durableActors.actorEnvSecrets[], e.g. relaycast-actor-env, in the sandbox namespace>` keys `RELAYCAST_PUBLIC_URL`, `RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_INTERNAL_SECRET` (label terse.ai/customer-secret=true; keys become actor env); Secret `<existingSecret, devRuntime only>` keys `durable-actors-dev-secret` | helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes |
+| shipped | [Relaycast actor-mode Secrets (gateway invocation key, file signing, actor env, admin key)](#req-relaycast-durable-actors-secrets) | operator | values `runtime.durableActors.fileSigningSecretKey`, `runtime.durableActors.invocationSecret.*`, `runtime.durableActors.adminKeySecret.*`, `runtime.durableActors.actorEnvSecrets`, `runtime.durableActors.devRuntime.secretKey`, `runtime.durableActors.deployer.*`, `secretKeys.workspaceBootstrapSecret`; env `DURABLE_ACTORS_SECRET`, `RELAYCAST_FILE_SIGNING_SECRET`, `DURABLE_ACTORS_ARTIFACT_BUCKET`, `DURABLE_ACTORS_SECRET_REFS`, `DURABLE_ACTORS_ORGANIZATION_ID`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET`; Secret `<existingSecret>` keys `file-signing-secret`, `credential-keyring`, `<operator-chosen, no default>`; Secret `<runtime.durableActors.invocationSecret.name>` keys `durable-actors-invoke-key`; Secret `actors-credentials` keys `api-key`; Secret `<runtime.durableActors.actorEnvSecrets[], e.g. relaycast-actor-env, in the sandbox namespace>` keys `RELAYCAST_PUBLIC_URL`, `RELAYCAST_FILE_SIGNING_SECRET`, `RELAYCAST_INTERNAL_SECRET`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET`, `RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED` (label terse.ai/customer-secret=true; keys become actor env); Secret `<existingSecret, devRuntime only>` keys `durable-actors-dev-secret` | helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes; with secretKeys.workspaceBootstrapSecret, a keyed POST /internal/workspaces answers 201 and its replay 200 with the same workspace |
 
 **Options (choose)**
 
@@ -1376,14 +1376,14 @@ SANDBOX namespace, labelled terse.ai/customer-secret=true, and are passed as
 DURABLE_ACTORS_SECRET_REFS. devRuntime.secretKey is the dev sidecar's key.
 
 - Provided by: operator
-- Values: `runtime.durableActors.fileSigningSecretKey`, `runtime.durableActors.invocationSecret.*`, `runtime.durableActors.adminKeySecret.*`, `runtime.durableActors.actorEnvSecrets`, `runtime.durableActors.devRuntime.secretKey`, `runtime.durableActors.deployer.*`
-- Env: `DURABLE_ACTORS_SECRET`, `RELAYCAST_FILE_SIGNING_SECRET`, `DURABLE_ACTORS_ARTIFACT_BUCKET`, `DURABLE_ACTORS_SECRET_REFS`, `DURABLE_ACTORS_ORGANIZATION_ID`
-- Secret: `<existingSecret>` from `existingSecret` then `relaycast.existingSecret`; keys `file-signing-secret` from `runtime.durableActors.fileSigningSecretKey`; `credential-keyring` from `secretKeys.credentialKeyring`
+- Values: `runtime.durableActors.fileSigningSecretKey`, `runtime.durableActors.invocationSecret.*`, `runtime.durableActors.adminKeySecret.*`, `runtime.durableActors.actorEnvSecrets`, `runtime.durableActors.devRuntime.secretKey`, `runtime.durableActors.deployer.*`, `secretKeys.workspaceBootstrapSecret`
+- Env: `DURABLE_ACTORS_SECRET`, `RELAYCAST_FILE_SIGNING_SECRET`, `DURABLE_ACTORS_ARTIFACT_BUCKET`, `DURABLE_ACTORS_SECRET_REFS`, `DURABLE_ACTORS_ORGANIZATION_ID`, `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET`
+- Secret: `<existingSecret>` from `existingSecret` then `relaycast.existingSecret`; keys `file-signing-secret` from `runtime.durableActors.fileSigningSecretKey`; `credential-keyring` from `secretKeys.credentialKeyring`; `<operator-chosen, no default>` from `secretKeys.workspaceBootstrapSecret` (optional: keyed workspace creates (Idempotency-Key); RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET on the gateway, the same bytes as the actor env Secret's)
 - Secret: `<runtime.durableActors.invocationSecret.name>`; keys `durable-actors-invoke-key` from `runtime.durableActors.invocationSecret.key`
 - Secret: `actors-credentials` from `runtime.durableActors.adminKeySecret.name`; keys `api-key` from `runtime.durableActors.adminKeySecret.key`
-- Secret: `<runtime.durableActors.actorEnvSecrets[], e.g. relaycast-actor-env, in the sandbox namespace>`; keys `RELAYCAST_PUBLIC_URL`; `RELAYCAST_FILE_SIGNING_SECRET`; `RELAYCAST_INTERNAL_SECRET`. label terse.ai/customer-secret=true; keys become actor env
+- Secret: `<runtime.durableActors.actorEnvSecrets[], e.g. relaycast-actor-env, in the sandbox namespace>`; keys `RELAYCAST_PUBLIC_URL`; `RELAYCAST_FILE_SIGNING_SECRET`; `RELAYCAST_INTERNAL_SECRET`; `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET` (optional: with secretKeys.workspaceBootstrapSecret: the same bytes as that key); `RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED` (optional: true or false; equal to bootstrapProofRequired). label terse.ai/customer-secret=true; keys become actor env
 - Secret: `<existingSecret, devRuntime only>`; keys `durable-actors-dev-secret` from `runtime.durableActors.devRuntime.secretKey`
-- Verify: helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes
+- Verify: helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes; with secretKeys.workspaceBootstrapSecret, a keyed POST /internal/workspaces answers 201 and its replay 200 with the same workspace
 - Sources: [`charts/relaycast/templates/_actors.tpl:78`](../charts/relaycast/templates/_actors.tpl#L78), [`charts/relaycast/templates/_actors.tpl:206`](../charts/relaycast/templates/_actors.tpl#L206)
 
 #### req.relayfile.durable-actors-secrets
@@ -2263,7 +2263,7 @@ balancer in front of the controller terminates TLS. Every ingress blocks
 
 **Anonymous workspace creation** · shipped · chart `relaycast` · profiles relaycast
 
-Off by default; workspaces are created through the internal admin API. Refused with ingress. bootstrapProofRequired demands bootstrap-secret proof for anonymous keyed creates.
+Off by default; workspaces are created through the internal admin API. Refused with ingress. bootstrapProofRequired demands bootstrap-secret proof for anonymous keyed creates (with runtime.backend=durable-actors it also requires secretKeys.workspaceBootstrapSecret, and the actor env Secret must carry the same RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED).
 
 - Default: `false`
 - Choices: `false`; `true`: never with ingress
@@ -2678,7 +2678,7 @@ Rendered by the charts but not a requirement or an option: fixed by the chart or
 | `RELAYCAST_DB_PATH` | relaycast | fixed /data/relaycast.db on the data PVC |
 | `RELAYCAST_ENV` | relaycast | reserved name in the extraEnv guard; the environment is passed as --env (server.environment) |
 | `RELAYCAST_INTERNAL_SECRET` | relaycast | reserved prefix in the extraEnv guard; the Secret is mounted as a file |
-| `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET` | relaycast | reserved prefix in the extraEnv guard; the Secret is mounted as a file |
+| `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET` | relaycast | reserved prefix in the extraEnv guard; sqlite mounts the Secret as a file, durable-actors passes secretKeys.workspaceBootstrapSecret as this env var (req.relaycast.durable-actors-secrets) |
 | `RELAYCAST_RELAYAUTH` | relaycast | reserved prefix in the extraEnv guard; the RelayAuth remote tagger is wired through credentials.relayauth.url and secretKeys.relayauthToken |
 | `RELAYCAST_CREDENTIAL` | relaycast | reserved prefix in the extraEnv guard; the credential format and local keyring are wired through credentials.* and secretKeys.credentialKeyring |
 | `BACKUP_KEEP` | relaycast | backup CronJob; from backup.keep |

@@ -83,6 +83,14 @@ relaycast:
     # switching backends never rewrites a live secret. Must equal
     # RELAYCAST_INTERNAL_SECRET in the sandbox Secret relaycast-actor-env.
     internalSecret: relaycast-actors-internal-secret
+    # Keyed workspace creates (Idempotency-Key). The same bytes must be
+    # RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET in relaycast-actor-env.
+    workspaceBootstrapSecret: relaycast-actors-workspace-bootstrap-secret
+  # Must equal RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED in
+  # relaycast-actor-env. Only anonymous POST /v1/workspaces asks for the proof,
+  # and publicWorkspaceCreate stays false behind the cast edge, so this guards
+  # a later opt-in rather than changing today's paths.
+  bootstrapProofRequired: true
   serviceAccount:
     annotations:
       iam.gke.io/gcp-service-account: relaycast-files@agentrelay-96bulls-soc2-2610.iam.gserviceaccount.com

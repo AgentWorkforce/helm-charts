@@ -317,6 +317,12 @@ the same Secret instead of the two SQLite Relaycast keys above
   `RELAYCAST_INTERNAL_SECRET` in the sandbox Secret `relaycast-actor-env`)
 - `relaycast-file-signing-secret` (equal to `RELAYCAST_FILE_SIGNING_SECRET` in
   `relaycast-actor-env`)
+- `relaycast-actors-workspace-bootstrap-secret` (48 or more random characters,
+  no trailing newline; the same bytes as `RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET`
+  in `relaycast-actor-env`, which also carries
+  `RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED` equal to
+  `relaycast.bootstrapProofRequired`; see charts/relaycast/README.md, "Keyed
+  workspace creates on durable-actors")
 
 It also needs the Secrets `actors-credentials` (`postgres-url`,
 `jwt-signing-key`, `api-key`, `invoke-api-key`) and
