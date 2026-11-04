@@ -268,6 +268,44 @@ relay-cloud-api:
       - ipBlock: { cidr: 35.191.0.0/16 }
       - ipBlock: { cidr: 130.211.0.0/22 }
     allowAllEgress: true
+  # First boot and sign-in (relay-cloud-api README "Sign-in, bootstrap and
+  # invites"). With these set, the first start creates the organization (the
+  # admin email is its owner) and a Default workspace bound to a new Relaycast
+  # workspace; the admin signs in at https://<root host>/login and invites
+  # teammates from Settings > Members. No manual bootstrap step is needed.
+  # REQUIRED with bootstrap/auth/smtp: https://<gkeIngress.hosts.root>/ (the
+  # chart refuses any other host). Also override image.digest (above) and
+  # relay-dashboard.image.digest with images from relaycontrol #13 and
+  # relay-dashboard #92 or later: the pinned digests predate these features.
+  # dashboardUrl: https://dashboard.placeholder.company/
+  # bootstrap:
+  #   orgName: Acme
+  #   adminEmail: platform-admin@acme.com
+  # auth:
+  #   oidc:
+  #     # Google Workspace: an "Internal" OAuth client (Web application) with
+  #     # redirect URI https://<root host>/login/oidc/callback.
+  #     issuer: https://accounts.google.com
+  #     clientId: 1234567890-abc.apps.googleusercontent.com
+  #     allowedDomains: [acme.com]
+  #     displayName: Google Workspace
+  #   # Optional: verified emails in these domains join as member without an
+  #   # invite.
+  #   # autoJoinDomains: [acme.com]
+  #   # Optional email sign-in links (needs smtp).
+  #   # emailLink: { enabled: true }
+  # # Optional: email invites (otherwise owners copy the single-use link).
+  # smtp:
+  #   host: smtp.acme.com
+  #   port: 587
+  #   username: relay@acme.com
+  #   from: Agent Relay <relay@acme.com>
+  # secretKeys:
+  #   # Same key relaycast.secretKeys.internalSecret names (bootstrap creates
+  #   # the workspace's Relaycast workspace with it).
+  #   relaycastInternalSecret: relaycast-internal-secret
+  #   oidcClientSecret: oidc-client-secret
+  #   smtpPassword: smtp-password
 
 relay-dashboard:
   fullnameOverride: relay-dashboard

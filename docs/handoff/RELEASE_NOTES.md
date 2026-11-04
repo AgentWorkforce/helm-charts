@@ -38,6 +38,46 @@ components, off by default. Billing, hosted (Nango) provider integrations and
 hosted fleet are out of scope; operator-configured integration OAuth apps
 (relay-cloud-api `integrations`, 0.2.3, in agent-relay 0.3.8) are a preview.
 
+## agent-relay 0.3.9 (unreleased): first boot, sign-in and invites
+
+To be published from the `agent-relay-0.3.9` tag (not tagged yet). It
+supersedes the never-tagged 0.3.8 (and 0.3.7) and includes their changes. It ships with
+relay-cloud-api 0.2.4.
+
+- **First-boot bootstrap.** Set `relay-cloud-api.bootstrap.{orgName,adminEmail}`
+  together with `secretKeys.relaycastInternalSecret` and, outside single-host
+  mode, `dashboardUrl`. On
+  first start the API:
+  - creates the organization;
+  - makes the admin email its owner;
+  - creates a `Default` workspace bound to a new Relaycast workspace.
+
+  It is idempotent, so it is safe on an existing install.
+- **Sign-in.** `auth.oidc` adds OpenID Connect with PKCE (Google Workspace,
+  Okta, Entra ID, Keycloak). The client secret goes in
+  `secretKeys.oidcClientSecret`. Optional `auth.emailLink` sends single-use
+  email sign-in links and needs `smtp`. The bootstrap token remains the
+  operator break-glass.
+- **Invites.** Owners and admins invite from Settings → Members:
+  - links are single use and expire after `auth.inviteTtlHours`;
+  - they are emailed when `smtp` is set and can always be copied;
+  - `auth.autoJoinDomains` lets a domain join without invites.
+- `values-gcp.yaml` carries a commented example.
+
+Requirements:
+- a selfhost-api image from relaycontrol #13 or later;
+- a dashboard image from relay-dashboard #92 or later, for the invite UI.
+
+The `relay-cloud-api` and `relay-dashboard` digests pinned in `values-gcp.yaml`
+predate both. Until the pins move, copy images built from those revisions (or
+later) into a registry your cluster can pull from, as for every other image
+(see the image supply-chain guide), and override both `image.repository` and
+`image.digest` for `relay-cloud-api` and `relay-dashboard`. Otherwise the new values render but the API ignores
+them and Members has no invite UI.
+
+With none of these values set, renders are byte-identical apart from the
+`helm.sh/chart` labels.
+
 ## agent-relay 0.3.8 (2026-11-04): integration OAuth apps
 
 To be published from the `agent-relay-0.3.8` tag (not tagged yet). 0.3.7 was

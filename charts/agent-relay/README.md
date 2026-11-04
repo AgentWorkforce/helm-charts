@@ -68,11 +68,44 @@ The referenced Secret must provide these keys:
   `selfhost-encryption-key`
 - RelayAuth-issued relaycast credentials (optional, model B):
   `relaycast-credential-keyring` and `relaycast-relayauth-token`
+- Sign-in (optional; see "First boot and sign-in" below): `oidc-client-secret`
+  for OIDC, and `smtp-password` for SMTP with a username. The bootstrap reads
+  the existing `relaycast-internal-secret` key.
 
 `relayauth-api-key` and `relayauth-bootstrap-api-key` must contain the same
 value. `selfhost-bootstrap-token` must be at least 32 bytes.
 `selfhost-encryption-key` must encode exactly 32 bytes as either 64 hexadecimal
 characters or base64.
+
+### First boot and sign-in
+
+Without extra steps, a fresh install has no organization. It also has no way
+to sign in except the operator break-glass, where the bootstrap token approves
+a device code. Set the commented `relay-cloud-api` block in `values-gcp.yaml`
+to get a working team straight from `helm install`. This needs a selfhost-api
+image from relaycontrol #13 or later.
+
+- `relay-cloud-api.bootstrap.{orgName,adminEmail}`,
+  `relay-cloud-api.secretKeys.relaycastInternalSecret: relaycast-internal-secret`
+  and `relay-cloud-api.dashboardUrl: https://<root host>/`. On its first start
+  the API:
+  - creates the organization and makes the admin its owner;
+  - creates a `Default` workspace bound to a new Relaycast workspace.
+
+  This is idempotent and safe on an existing install.
+- `relay-cloud-api.auth.oidc.{issuer,clientId,allowedDomains}` plus
+  `secretKeys.oidcClientSecret`. Register
+  `https://<root host>/login/oidc/callback` with the identity provider:
+  - Google Workspace: an Internal Web-application OAuth client, issuer
+    `https://accounts.google.com`;
+  - Okta: `https://<org>.okta.com/oauth2/default`;
+  - Entra ID: `https://login.microsoftonline.com/<tenant>/v2.0`.
+- Optional `relay-cloud-api.smtp.*`: invite emails, and email sign-in links
+  with `auth.emailLink.enabled`.
+
+The admin signs in at `https://<root host>/login`. Owners and admins then
+invite teammates from Settings → Members. Invite links are single use and
+expiring. They are emailed when SMTP is set, and can always be copied.
 
 With `relaycast.credentials.authority=relayauth` (model B, see the commented
 `credentials` block in `values-gcp.yaml`), RelayAuth owns the `ar_` credential

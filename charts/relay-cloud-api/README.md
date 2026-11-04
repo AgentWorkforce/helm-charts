@@ -35,6 +35,13 @@ whatever the API would refuse at startup:
 | `secretKeys.internalToken` | `SELFHOST_INTERNAL_TOKEN_FILE` | Optional service bearer for `/internal/v1` (flows env delivery, telemetry issue reports). Never expose `/internal` publicly: when this is set and `ingress.enabled=true`, this chart routes `/internal` to a selector-less deny Service; the agent-relay GKE ingress denies it at the edge. |
 | `global.singleHost.host` | `SELFHOST_PUBLIC_URL` | Single-host mode (normally set on the agent-relay umbrella): `publicUrl` is derived as `https://<host>` and must be empty or equal it, and `ingress.enabled` must be `false` because the dashboard host routes `/cloud/api`, `/login` and `/api` here. |
 | `dashboardUrl` | `SELFHOST_DASHBOARD_URL` | Where OAuth callback pages and flow `runUrl`s point. Defaults to `publicUrl` + `/` in the API. |
+| `bootstrap.orgName`, `bootstrap.adminEmail` (+ optional `adminName`, `workspaceName`) | `SELFHOST_BOOTSTRAP_ORG_NAME`, `SELFHOST_BOOTSTRAP_ADMIN_EMAIL`, `SELFHOST_BOOTSTRAP_ADMIN_NAME`, `SELFHOST_BOOTSTRAP_WORKSPACE_NAME` | First-boot bootstrap (see "Sign-in, bootstrap and invites" below). `orgName` and `adminEmail` are set together; `adminName` and `workspaceName` are optional overrides. Requires `secretKeys.relaycastInternalSecret` and `dashboardUrl` (outside single-host mode). |
+| `secretKeys.relaycastInternalSecret` | `RELAYCAST_INTERNAL_SECRET_FILE` | Relaycast's internal admin secret, which is the same Secret key that `relaycast.secretKeys.internalSecret` names. The bootstrap creates the default workspace's Relaycast workspace with it. |
+| `auth.oidc.issuer`, `auth.oidc.clientId`, `secretKeys.oidcClientSecret` (+ `allowedDomains`, `displayName`, `scopes`, `redirectUrl`) | `SELFHOST_OIDC_ISSUER`, `SELFHOST_OIDC_CLIENT_ID`, `SELFHOST_OIDC_CLIENT_SECRET_FILE`, `SELFHOST_OIDC_ALLOWED_DOMAINS`, `SELFHOST_OIDC_DISPLAY_NAME`, `SELFHOST_OIDC_SCOPES`, `SELFHOST_OIDC_REDIRECT_URL` | OpenID Connect sign-in (authorization code with PKCE). The issuer must be https. `auth.oidc.allowHttpIssuer=true` (`SELFHOST_OIDC_ALLOW_HTTP_ISSUER`) also accepts http, and is for tests only. Register `<dashboard origin>/login/oidc/callback` with the IdP. |
+| `auth.emailLink.enabled` | `SELFHOST_EMAIL_LOGIN` | Email sign-in links. Requires `smtp.host`. |
+| `auth.autoJoinDomains` | `SELFHOST_AUTO_JOIN_DOMAINS` | Verified emails in these domains join as `member` without an invite. |
+| `auth.inviteTtlHours` | `SELFHOST_INVITE_TTL_HOURS` | Invite link lifetime, 1-720 hours. The default is 168. |
+| `smtp.host`, `smtp.port`, `smtp.security`, `smtp.username`, `smtp.from`, `secretKeys.smtpPassword` | `SELFHOST_SMTP_HOST`, `SELFHOST_SMTP_PORT`, `SELFHOST_SMTP_SECURITY`, `SELFHOST_SMTP_USERNAME`, `SELFHOST_EMAIL_FROM`, `SELFHOST_SMTP_PASSWORD_FILE` | SMTP for invite emails and sign-in links. `from` (and `dashboardUrl` outside single-host mode) is required with `host`. `username` and `secretKeys.smtpPassword` must be set together. |
 | `integrations.<provider>.existingSecret` (+ `clientIdKey`, `clientSecretKey`, `scopes`) | `SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID`, `SELFHOST_OAUTH_<PROVIDER>_CLIENT_SECRET_FILE`, `SELFHOST_OAUTH_<PROVIDER>_SCOPES` | The customer's own OAuth app per integration (operator configuration; users connect just in time from the CLI, flow onboarding and flow creation, with no settings page). `<PROVIDER>` is the provider id upper-cased with `-` mapped to `_` (`google-mail` → `GOOGLE_MAIL`). Client ID and secret come from the named Secret (keys default to `client-id` and `client-secret`, and must differ); the secret is mounted as a file. Inline `clientId`/`clientSecret` fields are refused. Render-time rules: provider ids are 1-40 lowercase letters, digits and inner `-` (alphanumeric at both ends); Secret keys use `A-Z a-z 0-9 . _ -`; an integration reading the main `existingSecret` cannot reuse any `secretKeys.*` key (so the migration credential `database-migrations-url` never reaches it). **Register `<publicUrl>/api/v1/integrations/oauth/callback` as the callback URL in each provider app.** A provider without an entry shows users "Your administrator needs to configure the <Provider> app". |
 | `flows.storage`, `flows.gcsBucket`, `flows.gcsPrefix` | `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX` | `postgres` (default) or `gcs` (Workload Identity; bucket required). |
 | `flows.workerRelaycastUrl` | `SELFHOST_FLOWS_WORKER_RELAYCAST_URL` | Optional Relaycast origin handed to workers. |
@@ -56,6 +63,43 @@ these hold: `networkPolicy.enabled=true`, `networkPolicy.allowAllEgress=false`,
 the effective level is not `off` (a registered install), and the transport is `https`. With NetworkPolicy
 disabled, or with `allowAllEgress=true`, egress is not restricted and no rule
 is rendered. The migration Job's NetworkPolicy never gets this rule.
+
+## Sign-in, bootstrap and invites
+
+This needs a selfhost-api image built from relaycontrol #13 or later. With
+these values set, an install needs no manual steps after `helm install`:
+
+1. **First boot.** Set `bootstrap.orgName`, `bootstrap.adminEmail`,
+   `secretKeys.relaycastInternalSecret` and `dashboardUrl`. On start, the API:
+   - creates the organization and makes the admin email its owner;
+   - creates a `Default` workspace bound to a new Relaycast workspace (an
+     `ar_ws_` key on durable actors), retrying until Relaycast answers.
+
+   The bootstrap is idempotent. An existing organization and workspace are
+   kept. A newly configured admin email is made an owner once, and is not
+   re-promoted after another owner changes it.
+2. **Sign-in.** Configure `auth.oidc` with Google Workspace, Okta, Microsoft
+   Entra ID, Keycloak or any OIDC provider. Register
+   `<dashboard origin>/login/oidc/callback` as the redirect URI, and store the
+   client secret under `secretKeys.oidcClientSecret`. The fallback is
+   `auth.emailLink.enabled` with `smtp`, which sends single-use sign-in links.
+   The admin signs in at `<dashboard>/login`.
+3. **Invites.** Owners and admins invite people by email from Settings →
+   Members. Invite links are single use and expire after
+   `auth.inviteTtlHours`. They are emailed when `smtp` is set, and can always
+   be copied. The invitee signs in with the invited email and joins with the
+   invited role. Use `auth.autoJoinDomains` to let a whole domain join as
+   members without invites.
+
+Roles: `owner` (everything, including managing owners), `admin` (invites
+admins and members, and manages them) and `member`.
+
+The bootstrap token (`secretKeys.bootstrapToken`) remains the operator
+break-glass. It approves the **Operator sign-in** code on `/login` for a
+member, and can create invites through the API.
+
+With `networkPolicy.allowAllEgress=false`, add `networkPolicy.additionalEgress`
+rules for the identity provider (HTTPS) and the SMTP server.
 
 The current runtime is deliberately one replica with `Recreate`: login/device
 rate limiting remains process-local. This is a GCP proof shape, not HA.

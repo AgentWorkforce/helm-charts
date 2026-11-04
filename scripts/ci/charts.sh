@@ -408,6 +408,42 @@ for chart in "${charts[@]}"; do
         ! grep -q 'export DATABASE_URL_FILE' <<<"$out" || err "$chart: obsolete migration DATABASE_URL_FILE adapter is still rendered"
         ! grep -Eq 'CLOUD_EDITION|NEXT_PUBLIC_APP_URL|OIDC_|AUTH_SESSION_SECRET|NEXT_CACHE' <<<"$out" \
           || err "$chart: full-Cloud/Next environment leaked into the selfhost API chart"
+        # bootstrap-signup: identity settings render to relaycontrol's env and
+        # their secrets only as mounted files.
+        idv=charts/relay-cloud-api/ci/identity-values.yaml
+        id_out=$(render "$chart" "$idv")
+        id_env=$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | .name + "=" + (.value // "")' <<<"$id_out")
+        for want in "SELFHOST_BOOTSTRAP_ORG_NAME=Acme" "SELFHOST_BOOTSTRAP_ADMIN_EMAIL=ops@acme.com" \
+          "SELFHOST_OIDC_ISSUER=https://accounts.google.com" "SELFHOST_OIDC_ALLOWED_DOMAINS=acme.com" \
+          "SELFHOST_OIDC_CLIENT_SECRET_FILE=/var/run/agent-relay/secrets/oidc-client-secret" \
+          "RELAYCAST_INTERNAL_SECRET_FILE=/var/run/agent-relay/secrets/relaycast-internal-secret" \
+          "SELFHOST_SMTP_PASSWORD_FILE=/var/run/agent-relay/secrets/smtp-password" "SELFHOST_SMTP_PORT=465" \
+          "SELFHOST_EMAIL_LOGIN=true" "SELFHOST_AUTO_JOIN_DOMAINS=acme.com" "SELFHOST_INVITE_TTL_HOURS=72"; do
+          grep -qxF "$want" <<<"$id_env" || err "$chart: identity values did not render $want"
+        done
+        [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.volumes[] | select(.name == "secrets") | .secret.items[].key' <<<"$id_out" | grep -cE '^(oidc-client-secret|smtp-password|relaycast-internal-secret)$')" = 3 ] \
+          || err "$chart: identity secrets must be projected into the secrets volume"
+        ! grep -Eq 'SELFHOST_BOOTSTRAP_(ORG|ADMIN|WORKSPACE)|SELFHOST_(OIDC|SMTP|EMAIL|AUTO_JOIN|INVITE)_|RELAYCAST_INTERNAL_SECRET' <<<"$out" \
+          || err "$chart: identity env must not render without identity values"
+        expect_render_failure "$chart" "$v" "bootstrap without admin" "bootstrap.orgName and bootstrap.adminEmail must be set together" --set bootstrap.orgName=Acme
+        expect_render_failure "$chart" "$v" "bootstrap with a bad admin email" "bootstrap.adminEmail must be an email address" --set bootstrap.orgName=Acme --set bootstrap.adminEmail=ops
+        expect_render_failure "$chart" "$v" "bootstrap without dashboardUrl" "dashboardUrl is required with bootstrap" --set bootstrap.orgName=Acme --set bootstrap.adminEmail=ops@acme.com --set secretKeys.relaycastInternalSecret=relaycast-internal-secret
+        expect_render_failure "$chart" "$v" "bootstrap without the Relaycast secret" "bootstrap.orgName requires secretKeys.relaycastInternalSecret" --set dashboardUrl=https://gcp-proof.agentrelay.com/ --set bootstrap.orgName=Acme --set bootstrap.adminEmail=ops@acme.com
+        expect_render_failure "$chart" "$v" "plaintext OIDC issuer" "auth.oidc.issuer must be an https URL" --set auth.oidc.issuer=http://dex:5556/dex --set auth.oidc.clientId=x --set secretKeys.oidcClientSecret=oidc-client-secret --set dashboardUrl=https://gcp-proof.agentrelay.com/
+        expect_render_failure "$chart" "$v" "OIDC without client secret" "auth.oidc.issuer requires secretKeys.oidcClientSecret" --set auth.oidc.issuer=https://accounts.google.com --set auth.oidc.clientId=x --set dashboardUrl=https://gcp-proof.agentrelay.com/
+        expect_render_failure "$chart" "$v" "OIDC without client id" "auth.oidc.clientId is required" --set auth.oidc.issuer=https://accounts.google.com --set secretKeys.oidcClientSecret=oidc-client-secret --set dashboardUrl=https://gcp-proof.agentrelay.com/
+        expect_render_failure "$chart" "$v" "OIDC settings without issuer" "auth.oidc.* settings need auth.oidc.issuer" --set auth.oidc.clientId=x
+        expect_render_failure "$chart" "$v" "bad allowed domain" "list email domains such as example.com" --set auth.oidc.issuer=https://accounts.google.com --set auth.oidc.clientId=x --set secretKeys.oidcClientSecret=oidc-client-secret --set-json 'auth.oidc.allowedDomains=["not a domain"]' --set dashboardUrl=https://gcp-proof.agentrelay.com/
+        expect_render_failure "$chart" "$v" "bad redirect URL" "auth.oidc.redirectUrl must be <origin>/login/oidc/callback" --set auth.oidc.issuer=https://accounts.google.com --set auth.oidc.clientId=x --set secretKeys.oidcClientSecret=oidc-client-secret --set auth.oidc.redirectUrl=https://relay.acme.com/callback --set dashboardUrl=https://gcp-proof.agentrelay.com/
+        expect_render_failure "$chart" "$v" "email links without SMTP" "auth.emailLink.enabled requires smtp.host" --set dashboardUrl=https://gcp-proof.agentrelay.com/ --set auth.emailLink.enabled=true
+        expect_render_failure "$chart" "$v" "SMTP without from" "smtp.from is required with smtp.host" --set dashboardUrl=https://gcp-proof.agentrelay.com/ --set smtp.host=smtp.acme.com
+        expect_render_failure "$chart" "$v" "SMTP user without password" "smtp.username and secretKeys.smtpPassword must be set together" --set dashboardUrl=https://gcp-proof.agentrelay.com/ --set smtp.host=smtp.acme.com --set smtp.from=relay@acme.com --set smtp.username=u
+        expect_render_failure "$chart" "$v" "SMTP port zero" "smtp.port must be 1-65535" --set dashboardUrl=https://gcp-proof.agentrelay.com/ --set smtp.host=smtp.acme.com --set smtp.from=relay@acme.com --set smtp.port=0
+        expect_render_failure "$chart" "$v" "SMTP without dashboardUrl" "dashboardUrl is required with bootstrap, auth.oidc, auth.emailLink or smtp" --set smtp.host=smtp.acme.com --set smtp.from=relay@acme.com
+        expect_render_failure "$chart" "$v" "bad invite TTL" "auth.inviteTtlHours must be an integer from 1 to 720" --set auth.inviteTtlHours=0
+        expect_render_failure "$chart" "$v" "identity secret reusing an API key" "both name Secret key" --set secretKeys.relaycastInternalSecret=selfhost-bootstrap-token --set bootstrap.orgName=Acme --set bootstrap.adminEmail=ops@acme.com --set dashboardUrl=https://gcp-proof.agentrelay.com/
+        [ -n "$(render "$chart" "$v" --set dashboardUrl=https://gcp-proof.agentrelay.com/ --set auth.oidc.issuer=http://dex:5556/dex --set auth.oidc.clientId=x --set secretKeys.oidcClientSecret=oidc-client-secret --set auth.oidc.allowHttpIssuer=true)" ] \
+          || err "$chart: allowHttpIssuer=true must accept an in-cluster http issuer"
         ;;
       relayhistory)
         v=charts/relayhistory/ci/default-values.yaml
@@ -454,6 +490,8 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing History image" "image.digest is required" --set relayhistory.image.digest=
         expect_render_failure "$chart" "$v" "missing API image" "image.digest is required" --set relay-cloud-api.image.digest=
         expect_render_failure "$chart" "$v" "missing dashboard image" "image.digest is required" --set relay-dashboard.image.digest=
+        expect_render_failure "$chart" "$v" "dashboardUrl off the root host" "relay-cloud-api.dashboardUrl must be on the dashboard host" --set relay-cloud-api.dashboardUrl=https://elsewhere.agentrelay.com/
+        [ -n "$(render "$chart" "$v" --set relay-cloud-api.dashboardUrl=https://gcp-proof.agentrelay.com:443/)" ] || err "$chart: dashboardUrl with an explicit :443 on the root host must render"
         expect_render_failure "$chart" "$v" "ar_ authority without relayauth" "relaycast.credentials.authority=relayauth requires components.relayauth=true" --set components.relayauth=false --set relaycast.credentials.format=ar --set relaycast.credentials.authority=relayauth --set relaycast.credentials.relayauth.url=http://relayauth:8787 --set relaycast.secretKeys.relayauthToken=relaycast-relayauth-token
         ;;
     esac

@@ -1,9 +1,11 @@
 # Release status: what is proven and what is preview
 
-Release: `agent-relay` chart 0.3.8, 2026-11-04: relay-cloud-api 0.2.3
-operator OAuth apps for just-in-time integration connects, plus the
-never-tagged 0.3.7 GKE proof-overlay patch (Desktop deep-link settings). It is
-not tagged yet; 0.3.6 is the latest published version (below). 0.3.6 was
+Release candidate: `agent-relay` chart 0.3.9 (not tagged yet): first-boot
+bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4). It
+includes the never-tagged 0.3.8 (relay-cloud-api 0.2.3 operator OAuth apps
+for just-in-time integration connects) and 0.3.7 (GKE proof-overlay patch
+with Desktop deep-link settings). 0.3.6 is the latest published version
+(below). 0.3.6 was
 published from the `agent-relay-0.3.6` tag by `release-agent-relay.yml`
 ([run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329),
 with a GitHub build-provenance attestation; pullable anonymously).
@@ -24,6 +26,7 @@ Versions of the umbrella chart (published, plus the untagged candidate):
 | 0.3.4 | `agent-relay-0.3.4` | Documentation patch of 0.3.3 (Relaycast `ar_` credentials guidance). Published by [run 41754926487](https://github.com/AgentWorkforce/helm-charts/actions/runs/41754926487). |
 | 0.3.6 | `agent-relay-0.3.6` | Opt-in single-host mode and optional dashboard `customerProfile` branding (relay-dashboard 0.1.2); 0.3.5 was never tagged. Published by [run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329). |
 | 0.3.8 | not tagged yet | relay-cloud-api 0.2.3 integration OAuth apps (`integrations.<provider>.existingSecret`) and the never-tagged 0.3.7 proof-overlay patch (Desktop deep links). |
+| 0.3.9 | not tagged yet | First-boot bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4); supersedes the never-tagged 0.3.8. |
 
 This release is for **review by a company evaluating a self-hosted Agent Relay
 on GCP**. It is a reviewable `portable-single` release that pins every
@@ -75,7 +78,7 @@ These gate items are open. None of them is claimed.
   `docs/operations/capacity-and-load-test.md` have not run. Alerts, dashboards
   and runbooks evidence are not produced. No SLO or capacity claim is made.
 - **Version compatibility** (server N and N-1 x Desktop current and previous): not
-  run (server N is 0.3.8, N-1 is 0.3.6).
+  run (server N is 0.3.9, N-1 is 0.3.6).
 - **Desktop**: the custom-origin Desktop (self-hosted sign-in) passes CI on
   macOS arm64/x64, Linux x64/arm64 and Windows (relay-desktop CI run
   41606660810), but it is not merged or released yet.
