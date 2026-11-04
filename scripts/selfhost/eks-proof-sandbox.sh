@@ -232,7 +232,14 @@ cmd_down() {
       aws_ eks delete-pod-identity-association --cluster-name "$NAME" --association-id "$assoc" >/dev/null
     done
     log "delete cluster $NAME"
-    aws_ eks delete-cluster --name "$NAME" >/dev/null
+    # Deleting the Pod Identity associations can leave a short-lived cluster
+    # update in progress, which refuses DeleteCluster (ResourceInUseException).
+    local try
+    for try in $(seq 1 20); do
+      aws_ eks delete-cluster --name "$NAME" >/dev/null 2>&1 && break
+      ((try == 20)) && { aws_ eks delete-cluster --name "$NAME" >/dev/null; }
+      sleep 30
+    done
     aws_ eks wait cluster-deleted --name "$NAME"
   fi
   if aws_ s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
