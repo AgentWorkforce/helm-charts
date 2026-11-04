@@ -368,33 +368,33 @@ images:
       - Deployment/relay-dashboard:dashboard
     current:
       repository: ghcr.io/agentworkforce/relay-dashboard
-      digest: sha256:bbeca872c7e204a02a17050db6ac6309c6d36a07bcd00e1da3a739923f990282
+      digest: sha256:2bae5798bdd7b6cc12efad20a4128b78d3eacf2eb1bc89e1881e869cccf27b9c
       chartStatus: shipped
     source:
       repository: https://github.com/AgentWorkforce/relay-dashboard
-      revision: b2134062c28c9526032b23a731aac4d681fe8689
+      revision: a52fd5cc7970b3d68d6c99b64f8f53367b7a6d4e
       path: Dockerfile
       reproducibleReference: true
       note: >-
-        relay-dashboard main after #78-#82. Static SPA built with
+        relay-dashboard main a52fd5c, after #83-#90 and #92 (hosted Cloud look, faceted sessions sidebar, customer-profile branding, Connections with Coding agents, Desktop link, Members with email invites). Static SPA built with
         DASHBOARD_BASE_PATH=/ and DASHBOARD_RUNTIME_CONFIG_URL=/runtime-config.js,
         served by unprivileged nginx on :8080. It talks only to the same-origin
         /cloud/api prefix (runtime.apiBasePath must stay /cloud/api).
     license:
       status: approved
       spdx: Apache-2.0
-      evidence: https://github.com/AgentWorkforce/relay-dashboard/blob/b2134062c28c9526032b23a731aac4d681fe8689/LICENSE
+      evidence: https://github.com/AgentWorkforce/relay-dashboard/blob/a52fd5cc7970b3d68d6c99b64f8f53367b7a6d4e/LICENSE
     platforms:
       expected: [linux/amd64, linux/arm64]
       verifiedFromRegistry: [linux/amd64, linux/arm64]
       status: verified
       verificationAccess: anonymous
     release:
-      workflow: https://github.com/AgentWorkforce/relay-dashboard/blob/b2134062c28c9526032b23a731aac4d681fe8689/.github/workflows/container.yml
-      run: https://github.com/AgentWorkforce/relay-dashboard/actions/runs/41697933750
+      workflow: https://github.com/AgentWorkforce/relay-dashboard/blob/a52fd5cc7970b3d68d6c99b64f8f53367b7a6d4e/.github/workflows/container.yml
+      run: https://github.com/AgentWorkforce/relay-dashboard/actions/runs/41805640570
       trigger: workflow_dispatch
       buildsCommittedRevision: true
-      publishedTags: [sha-b2134062c28c9526032b23a731aac4d681fe8689]
+      publishedTags: [sha-a52fd5cc7970b3d68d6c99b64f8f53367b7a6d4e]
       publishesSbom: true
       publishesProvenance: true
       provenanceMode: max-plus-github-attestation
