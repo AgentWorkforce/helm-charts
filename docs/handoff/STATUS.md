@@ -56,6 +56,12 @@ This archive is therefore labelled a development preview.
   (`docs/handoff/evidence/gke-durable-actors-preview.md`).
 - **Relayflows in-cluster** (`components.relayflows`, off by default): see
   `docs/self-hosted-relayflows.md`.
+- **Integration OAuth apps** (relay-cloud-api 0.2.3,
+  `integrations.<provider>.existingSecret`, none by default): the customer's
+  own OAuth app per integration, for just-in-time connects from the CLI and
+  flow pages. Not verified with a real provider app yet, and it needs a
+  selfhost-api image with operator OAuth apps (relaycontrol #12 or later),
+  which the pinned customer image predates.
 
 ## Not yet done; planned
 

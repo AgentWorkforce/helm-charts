@@ -45,7 +45,9 @@ spec:
             - { name: RELAYHISTORY_PUBLIC_URL, value: {{ .Values.services.relayhistoryPublicUrl | quote }} }
             {{- include "relay-cloud-api.runtimeEnv" . | nindent 12 }}
             {{- include "relay-cloud-api.secretEnv" . | nindent 12 }}
+            {{- if .Values.integrations }}
             {{- include "relay-cloud-api.integrationEnv" . | nindent 12 }}
+            {{- end }}
           volumeMounts:
             - { name: secrets, mountPath: /var/run/agent-relay/secrets, readOnly: true }
             {{- range $provider := keys (.Values.integrations | default dict) | sortAlpha }}

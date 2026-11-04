@@ -291,10 +291,17 @@ mounted file (_CLIENT_SECRET_FILE), optional _SCOPES. */ -}}
 {{- end -}}
 
 {{- define "relay-cloud-api.validateIntegrations" -}}
+{{- $allowed := list "existingSecret" "clientIdKey" "clientSecretKey" "scopes" -}}
 {{- range $provider, $app := (.Values.integrations | default dict) }}
-{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{0,40}$" $provider) }}{{ fail (printf "integrations.%s: provider ids are lowercase letters, digits and -" $provider) }}{{ end }}
+{{- if not (regexMatch "^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$" $provider) }}{{ fail (printf "integrations.%s: provider ids are lowercase letters, digits and inner -" $provider) }}{{ end }}
 {{- if not (kindIs "map" $app) }}{{ fail (printf "integrations.%s must be a map with existingSecret" $provider) }}{{ end }}
+{{- range $field, $_ := $app }}{{ if not (has $field $allowed) }}{{ fail (printf "integrations.%s.%s is not supported: client IDs and secrets come only from existingSecret (allowed: existingSecret, clientIdKey, clientSecretKey, scopes)" $provider $field) }}{{ end }}{{ end }}
 {{- if empty $app.existingSecret }}{{ fail (printf "integrations.%s.existingSecret is required; client IDs and secrets are never inline" $provider) }}{{ end }}
 {{- range $field := list "clientIdKey" "clientSecretKey" }}{{ with index $app $field }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString .)) }}{{ fail (printf "integrations.%s.%s must be a Kubernetes Secret data key" $provider $field) }}{{ end }}{{ end }}{{ end }}
+{{- $idKey := toString ($app.clientIdKey | default "client-id") }}
+{{- $secretKey := toString ($app.clientSecretKey | default "client-secret") }}
+{{- if eq $idKey $secretKey }}{{ fail (printf "integrations.%s.clientIdKey and clientSecretKey must name different Secret keys" $provider) }}{{ end }}
+{{- /* Never hand the API the migration (owner) credential through an integration reference. */ -}}
+{{- if and (eq (toString $app.existingSecret) (toString $.Values.existingSecret)) (or (eq $idKey (toString $.Values.secretKeys.databaseMigrationsUrl)) (eq $secretKey (toString $.Values.secretKeys.databaseMigrationsUrl))) }}{{ fail (printf "integrations.%s must not read secretKeys.databaseMigrationsUrl from existingSecret: the migration credential never reaches the API pod" $provider) }}{{ end }}
 {{- end }}
 {{- end -}}

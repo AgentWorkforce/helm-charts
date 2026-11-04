@@ -1690,8 +1690,17 @@ entries:
       flow creation. Register <publicUrl>/api/v1/integrations/oauth/callback as
       the callback URL in each provider app. A provider without an entry shows
       users "Your administrator needs to configure the <Provider> app".
+      Env per provider (<PROVIDER> = id upper-cased, - as _):
+      SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID, SELFHOST_OAUTH_<PROVIDER>_CLIENT_SECRET_FILE,
+      SELFHOST_OAUTH_<PROVIDER>_SCOPES. This needs a selfhost-api image with
+      operator OAuth apps (relaycontrol #12 or later).
     chart: relay-cloud-api
     values: [integrations]
+    secrets:
+      - name: <operator-chosen, integrations.<provider>.existingSecret>
+        keys:
+          - { key: client-id, optional: false }
+          - { key: client-secret, optional: false }
     profiles: [relay-cloud-api]
     status: shipped
     provided_by: operator
@@ -1699,7 +1708,7 @@ entries:
     choices:
       - { value: none }
       - { value: one entry per provider with existingSecret }
-    verify: helm template renders the client ID from secretKeyRef and mounts only the client secret, and fails on a missing existingSecret, an inline value or an invalid provider id
+    verify: helm template renders the client ID from secretKeyRef and mounts only the client secret, and fails on a missing existingSecret, an inline clientId/clientSecret (unsupported field), equal key names, the migration credential key, or an invalid provider id
     sources:
       - "charts/relay-cloud-api/values.yaml"
       - "charts/relay-cloud-api/templates/_helpers.tpl"

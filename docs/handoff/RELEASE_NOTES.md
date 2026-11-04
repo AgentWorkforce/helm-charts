@@ -34,8 +34,9 @@ See [`HANDOFF.md`](HANDOFF.md) for the full layout and verification steps.
 The charts cover Relaycast, RelayAuth, Sessions Pipeline, RelayHistory, the
 headless control-plane API (relaycontrol), Relay Dashboard, and custom-origin
 Desktop setup. Relayflows, durable actors and Relayfile are optional preview
-components, off by default. Billing, provider integrations and hosted fleet
-are out of scope.
+components, off by default. Billing, hosted (Nango) provider integrations and
+hosted fleet are out of scope; operator-configured integration OAuth apps
+(relay-cloud-api `integrations`, 0.3.8) are a preview.
 
 ## agent-relay 0.3.8 (2026-11-04): integration OAuth apps
 
