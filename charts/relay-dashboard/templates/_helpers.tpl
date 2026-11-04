@@ -41,7 +41,7 @@ also routes /api (flows workers and the integrations OAuth callback call
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP; expose the dashboard only through ingress" }}{{ end -}}
 {{- $single := include "relay-dashboard.singleHost" . -}}
 {{- if $single }}
-{{- if or (gt (len $single) 253) (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" $single)) }}{{ fail "global.singleHost.host must be a lowercase DNS hostname (no scheme, port or path; labels of 1-63 characters that start and end with a letter or digit)" }}{{ end -}}
+{{- if or (gt (len $single) 253) (regexMatch "(^|\\.)[0-9]+$" $single) (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" $single)) }}{{ fail "global.singleHost.host must be a lowercase DNS hostname (no scheme, port or path; labels of 1-63 characters that start and end with a letter or digit, not an IP address)" }}{{ end -}}
 {{- if and .Values.runtime.publicUrl (ne (trimSuffix "/" .Values.runtime.publicUrl) (printf "https://%s" $single)) }}{{ fail (printf "runtime.publicUrl is derived from global.singleHost.host (https://%s); leave it empty" $single) }}{{ end -}}
 {{- if and .Values.ingress.host (ne .Values.ingress.host $single) }}{{ fail (printf "ingress.host is derived from global.singleHost.host (%s); leave it empty" $single) }}{{ end -}}
 {{- $singleAppPath := trimSuffix "/" .Values.runtime.appPath -}}

@@ -691,7 +691,8 @@ expect_sh_failure "gkeIngress.hosts.root is global.singleHost.host" --set gkeIng
 expect_sh_failure "gkeIngress.hosts.cast is still required in single-host mode: relaycast cannot be served under a path prefix" --set gkeIngress.hosts.cast=
 expect_sh_failure "gkeIngress.hosts.history is still required in single-host mode: relayhistory cannot be served under a path prefix" --set gkeIngress.hosts.history=
 expect_sh_failure "global.singleHost.host and gkeIngress.hosts.cast/history must all be distinct" --set gkeIngress.hosts.cast=$sh_host
-for bad in https://$sh_host relay..gcp-proof.agentrelay.com relay.-gcp-proof.agentrelay.com Relay.gcp-proof.agentrelay.com; do
+long_label=$(printf 'a%.0s' $(seq 64))
+for bad in https://$sh_host relay..gcp-proof.agentrelay.com relay.-gcp-proof.agentrelay.com Relay.gcp-proof.agentrelay.com 127.0.0.1 "$long_label.agentrelay.com"; do
   expect_sh_failure "global.singleHost.host must be a lowercase DNS hostname" --set global.singleHost.host=$bad
 done
 expect_sh_failure "runtime.appPath must not be /api or under it" --set relay-dashboard.runtime.appPath=/api/dashboard
