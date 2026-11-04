@@ -29,8 +29,8 @@
 #     the EC2 access entry and AmazonEKSAutoNodePolicy in place, while the
 #     built-in pools accept the same role. Auto Mode instances are terminated
 #     with the cluster;
-#   - one S3 bucket and one Pod Identity role for the chart's object storage
-#     (Sessions Pipeline worker and Alleyoop, Relaycast fileStore);
+#   - one S3 bucket and one Pod Identity role for the Sessions Pipeline
+#     worker and Alleyoop;
 #   - Pod Identity associations for the chart's ServiceAccounts.
 #
 # This is a proof substrate, not a production reference: production should
@@ -57,11 +57,20 @@ STORAGE_ROLE="${NAME}-storage"
 TAG_KEY="pippen:sandbox"
 TAG_SPEC_TAGS="{Key=${TAG_KEY},Value=true},{Key=Name,Value=${NAME}}"
 # ServiceAccounts that get the storage role through Pod Identity.
+# (Relaycast runs SQLite on EBS in this profile and needs no bucket access.)
 POD_IDENTITY_SAS=(
   "${RELEASE}-worker"
   "${RELEASE}-alleyoop"
-  "relaycast"
 )
+
+# cluster_exists: 0 present, 1 absent (ResourceNotFoundException); any other
+# describe-cluster error stops the script instead of reading as "absent".
+cluster_exists() {
+  local err
+  if err="$(aws_ eks describe-cluster --name "$NAME" 2>&1 >/dev/null)"; then return 0; fi
+  [[ "$err" == *ResourceNotFoundException* ]] && return 1
+  echo "describe-cluster $NAME failed: $err" >&2; exit 1
+}
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 aws_() { aws --region "$REGION" "$@"; }
@@ -87,7 +96,7 @@ ensure_role() {
 }
 
 kubeconfig() {
-  KUBECONFIG_FILE="${KUBECONFIG_FILE:-$(mktemp)}"
+  KUBECONFIG_FILE="$(mktemp)"
   aws_ eks update-kubeconfig --name "$NAME" --kubeconfig "$KUBECONFIG_FILE" >/dev/null
   export KUBECONFIG="$KUBECONFIG_FILE"
 }
@@ -133,7 +142,8 @@ EOF
 }
 
 cmd_up() {
-  [[ -n "$API_CIDR" ]] || { echo "EKS_PROOF_API_CIDR=<operator egress>/32 is required" >&2; exit 2; }
+  [[ "$API_CIDR" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/32$ ]] ||
+    { echo "EKS_PROOF_API_CIDR=<operator egress IPv4>/32 is required (a single /32, not a range)" >&2; exit 2; }
   local vpc subnets="" igw rtb az i
   vpc="$(vpc_id)"
   if [[ -z "$vpc" ]]; then
@@ -161,6 +171,14 @@ cmd_up() {
     done
   fi
   subnets="$(aws_ ec2 describe-subnets --filters "Name=vpc-id,Values=${vpc}" --query 'Subnets[].SubnetId' --output text)"
+  # A VPC left by a failed earlier up may lack its gateway, route or subnets;
+  # refuse it rather than hand EKS a partial network.
+  local nsub igws
+  nsub="$(wc -w <<<"$subnets" | tr -d ' ')"
+  igws="$(aws_ ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${vpc}" --query 'length(InternetGateways)' --output text)"
+  if ((nsub < 2)) || [[ "$igws" != 1 ]]; then
+    echo "VPC $vpc is incomplete (subnets=$nsub internet_gateways=$igws): run down, then up" >&2; exit 1
+  fi
   log "vpc $vpc subnets $subnets"
 
   ensure_role "$CLUSTER_ROLE" eks.amazonaws.com \
@@ -174,13 +192,17 @@ cmd_up() {
 
   if ! aws_ s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
     log "create bucket $BUCKET"
-    aws_ s3api create-bucket --bucket "$BUCKET" --create-bucket-configuration "LocationConstraint=${REGION}" >/dev/null
+    if [[ "$REGION" == us-east-1 ]]; then
+      aws_ s3api create-bucket --bucket "$BUCKET" >/dev/null
+    else
+      aws_ s3api create-bucket --bucket "$BUCKET" --create-bucket-configuration "LocationConstraint=${REGION}" >/dev/null
+    fi
     aws_ s3api put-public-access-block --bucket "$BUCKET" \
       --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
   fi
   aws_ s3api put-bucket-tagging --bucket "$BUCKET" --tagging "TagSet=[{Key=${TAG_KEY},Value=true}]"
 
-  if ! aws_ eks describe-cluster --name "$NAME" >/dev/null 2>&1; then
+  if ! cluster_exists; then
     log "create EKS Auto Mode cluster $NAME ($K8S_VERSION)"
     local sn_csv; sn_csv="$(tr ' \t' ',,' <<<"$subnets" | sed 's/,*$//')"
     aws_ eks create-cluster --name "$NAME" --kubernetes-version "$K8S_VERSION" \
@@ -195,6 +217,25 @@ cmd_up() {
   fi
   log "waiting for cluster ACTIVE"
   aws_ eks wait cluster-active --name "$NAME"
+  # An existing cluster keeps its endpoint CIDRs: reconcile them to API_CIDR
+  # (the operator's egress may have changed since it was created).
+  local cidrs
+  cidrs="$(aws_ eks describe-cluster --name "$NAME" --query 'join(`,`, cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+  if [[ "$cidrs" != "$API_CIDR" ]]; then
+    log "public endpoint CIDRs $cidrs -> $API_CIDR"
+    local upd
+    upd="$(aws_ eks update-cluster-config --name "$NAME" \
+      --resources-vpc-config "endpointPublicAccess=true,endpointPrivateAccess=true,publicAccessCidrs=${API_CIDR}" \
+      --query update.id --output text)"
+    local st=""
+    for _ in $(seq 1 60); do
+      st="$(aws_ eks describe-update --name "$NAME" --update-id "$upd" --query update.status --output text)"
+      [[ "$st" == InProgress ]] || break
+      sleep 15
+    done
+    [[ "$st" == Successful ]] || { echo "endpoint update $upd: $st" >&2; exit 1; }
+    log "endpoint update $upd done"
+  fi
 
   local sa
   for sa in "${POD_IDENTITY_SAS[@]}"; do
@@ -214,14 +255,18 @@ cmd_up() {
 }
 
 cmd_status() {
-  aws_ eks describe-cluster --name "$NAME" \
-    --query 'cluster.{name:name,status:status,version:version,endpoint:endpoint,autoMode:computeConfig.enabled}' --output json 2>/dev/null || echo '{"cluster":"absent"}'
+  if cluster_exists; then
+    aws_ eks describe-cluster --name "$NAME" \
+      --query 'cluster.{name:name,status:status,version:version,endpoint:endpoint,autoMode:computeConfig.enabled}' --output json
+  else
+    echo '{"cluster":"absent"}'
+  fi
   printf 'vpc=%s bucket=%s\n' "$(vpc_id)" "$(aws_ s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1 && echo "$BUCKET" || echo absent)"
 }
 
 cmd_down() {
   local vpc assoc
-  if aws_ eks describe-cluster --name "$NAME" >/dev/null 2>&1; then
+  if cluster_exists; then
     # Load balancers and volumes made from Ingresses and PVCs go first, while
     # the controllers that own them still run.
     kubeconfig

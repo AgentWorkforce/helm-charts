@@ -34,7 +34,7 @@ Files:
 | GCS Locker bucket (`locker.provider: gcs`) | S3 bucket (`locker.provider: s3`, empty endpoint, `credentials.mode: podIdentity`) |
 | Cloud SQL (HoopDb, control API, RelayHistory) | HoopDb: the chart's in-cluster CloudNativePG cluster. Control API and RelayHistory: any PostgreSQL 17 (RelayHistory needs `vector` and `pg_trgm`); the proof used two more CNPG clusters. Production: RDS/Aurora PostgreSQL. |
 | Memorystore, Pub/Sub (GCS data-path env) | Not used: the services' S3 data path needs neither |
-| GCE load-balancer ranges in NetworkPolicy `ingressFrom` | The VPC CIDR (the ALB in IP target mode reaches pods from inside the VPC) |
+| GCE load-balancer ranges in NetworkPolicy `ingressFrom` | The ALB's subnet CIDRs (the ALB in IP target mode reaches pods from its subnets). The proof's ALB shares the cluster's public subnets, so it used the VPC CIDR, which also admits any other VPC client |
 | Artifact Registry mirrors | Public GHCR images by digest; no pull secret |
 
 ## DNS and TLS
@@ -130,7 +130,7 @@ delete API):
 EKS checks (run 3):
 
 ```
-EKS|PASS|eks.pod_identity|associations=relaycast agent-relay-alleyoop agent-relay-worker
+EKS|PASS|eks.pod_identity|associations=relaycast agent-relay-alleyoop agent-relay-worker   (relaycast no longer gets one: SQLite needs no bucket)
 EKS|PASS|eks.s3_locker_roundtrip|credentials=pod-identity bucket=pippen-sbx-eks-proof-361835732085 ... read_back=true
 EKS|PASS|eks.s3_locker_delete|key=e2e-eks-proof/1793780715739.txt
 EKS|PASS|eks.alb_targets|alb=k8s-agentrel-agentrel-a5e75ddcd6-28012270.us-west-2.elb.amazonaws.com healthy_target_groups=4
@@ -169,9 +169,13 @@ pippen sandbox down <agent>          # must report clean: true
 ```
 
 `EKS_PROOF_DOMAIN` (default `aws-proof.agentrelay.com`) names the domain.
-Outside Pippen, run the same scripts with your own AWS credentials and drop
-the conventions you do not need (the `pippen:sandbox` tags, the
-`/pippen/workload/` role path and the permissions boundary).
+Outside Pippen, run the same scripts with your own AWS credentials and set
+`PIPPEN_SANDBOX_ACCOUNT_ID` to your AWS account ID (the scripts read the
+account from it): `export PIPPEN_SANDBOX_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)`.
+`eks-proof-sandbox.sh` hard-codes the Pippen IAM conventions (the
+`pippen:sandbox` tags, the `/pippen/workload/` role path and the
+`pippen-agent-session-boundary` permissions boundary, which must exist);
+adapt `ROLE_PATH`, `BOUNDARY` and `TAG_KEY` for your account.
 
 ## Gaps and follow-ups
 

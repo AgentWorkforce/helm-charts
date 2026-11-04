@@ -98,6 +98,7 @@ s3_out=""
   'umask 077; cat > /tmp/e2e-eks-proof-s3.ts && cd /app && bun run /tmp/e2e-eks-proof-s3.ts; rm -f /tmp/e2e-eks-proof-s3.ts' \
   <"$HERE/e2e-eks-proof-s3.ts" 2>/dev/null)"
 while IFS='|' read -r _ result check detail; do eks "$result" "$check" "$detail"; done < <(grep '^EKS|' <<<"$s3_out")
+grep -q '^EKS|PASS|eks.s3_locker_delete|' <<<"$s3_out" || grep -q '^EKS|FAIL|eks.s3_locker_delete|' <<<"$s3_out" || eks FAIL eks.s3_locker_delete "no result from the probe"
 grep -q '^EKS|PASS|eks.s3_locker_roundtrip|' <<<"$s3_out" || eks FAIL eks.s3_locker_roundtrip "no PASS from the probe (pod=${alleyoop:-none} bucket=$BUCKET)"
 
 unhealthy=""
@@ -129,6 +130,8 @@ done
 
 # TLS from the public internet: each host resolves to the ALB, the
 # certificate verifies against the system trust store, and port 80 redirects.
+# The ALB's current addresses: the HTTPS connection must land on one of them.
+alb_ips=" $(python3 -c 'import socket, sys; print(" ".join(sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1], 443, socket.AF_INET)})))' "$ALB" 2>/dev/null) "
 for h in "$DOMAIN" "api.$DOMAIN" "cast.$DOMAIN" "history.$DOMAIN"; do
   tls="$(curl --disable -sS -o /dev/null --max-time 20 -w '%{http_code} %{ssl_verify_result} %{remote_ip}' "https://$h/healthz" 2>&1)"
   redirect="$(curl --disable -sS -o /dev/null --max-time 20 -w '%{http_code} %{redirect_url}' "http://$h/" 2>&1)"
@@ -136,23 +139,24 @@ for h in "$DOMAIN" "api.$DOMAIN" "cast.$DOMAIN" "history.$DOMAIN"; do
   read -r tls_code tls_verify tls_ip <<<"$tls"
   read -r r_code r_url <<<"$redirect"
   label="${h%.$DOMAIN}"; [[ "$h" == "$DOMAIN" ]] && label=dashboard
-  if [[ "$tls_verify" == 0 && "$tls_code" =~ ^[1-5][0-9][0-9]$ && "$r_code" == 301 && "$r_url" == https://$h* ]]; then
+  if [[ "$tls_verify" == 0 && "$tls_code" =~ ^[1-4][0-9][0-9]$ && "$alb_ips" == *" $tls_ip "* && "$r_code" == 301 &&
+        ( "$r_url" == "https://$h/"* || "$r_url" == "https://$h:443/"* ) ]]; then
     eks PASS "eks.tls.$label" "host=$h verify=ok https_status=$tls_code ip=$tls_ip http_redirect=$r_code issuer=\"$issuer\""
   else
-    eks FAIL "eks.tls.$label" "host=$h tls=\"$tls\" redirect=\"$redirect\" issuer=\"$issuer\""
+    eks FAIL "eks.tls.$label" "host=$h tls=\"$tls\" alb_ips=\"${alb_ips# }\" redirect=\"$redirect\" issuer=\"$issuer\""
   fi
 done
 
+# All three expected CNPG clusters must exist and be healthy.
 cnpg="$("${K[@]}" get cluster.postgresql.cnpg.io -o jsonpath='{range .items[*]}{.metadata.name}={.status.phase}{";"}{end}' 2>/dev/null)"
-cnpg_ok=false
-if [[ -n "$cnpg" ]]; then
-  cnpg_ok=true
-  IFS=';' read -r -a cnpg_items <<<"$cnpg"
-  for item in "${cnpg_items[@]}"; do
-    [[ -z "$item" || "${item#*=}" == "Cluster in healthy state" ]] || cnpg_ok=false
-  done
-fi
-$cnpg_ok && eks PASS eks.cnpg "${cnpg%;}" || eks FAIL eks.cnpg "${cnpg%;}"
+cnpg_ok=true
+cnpg_detail=""
+for want in control-api-pg hoopdb relayhistory-pg; do
+  phase="$(tr ';' '\n' <<<"$cnpg" | sed -n "s/^${want}=//p")"
+  cnpg_detail+="${want}=${phase:-missing};"
+  [[ "$phase" == "Cluster in healthy state" ]] || cnpg_ok=false
+done
+$cnpg_ok && eks PASS eks.cnpg "${cnpg_detail%;}" || eks FAIL eks.cnpg "${cnpg_detail%;}"
 
 if ((EKS_FAILS)); then
   printf 'EKS_RESULT=FAIL\n'

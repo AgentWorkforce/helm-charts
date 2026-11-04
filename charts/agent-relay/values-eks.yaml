@@ -66,7 +66,12 @@ relaycast:
   networkPolicy:
     enabled: true
     # Same-namespace callers plus the ALB, which reaches pods in IP target
-    # mode from inside the VPC. REQUIRED OVERRIDE: your VPC CIDR.
+    # mode from its subnets. REQUIRED OVERRIDE: the CIDRs of the subnets the
+    # ALB runs in (the proof's ALB shares the cluster's two public subnets,
+    # so it used the VPC CIDR). Admitting the whole VPC lets any VPC client
+    # reach the pods directly, past the ALB's host and path denials, where
+    # security groups allow it; prefer the ALB subnets in production. The
+    # same applies to every ipBlock below.
     ingressFrom:
       - podSelector: {}
       - ipBlock: { cidr: 10.0.0.0/16 }

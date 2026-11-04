@@ -24,10 +24,13 @@
 #
 # Every Cloudflare record this script creates is a name under the proof
 # domain (never the parent's own records), unproxied (TLS is the ACM
-# certificate on the ALB, end to end), carries a comment naming the proof, and
-# has its id appended to $STATE_DIR/cloudflare-records.txt. cf-remove deletes
-# exactly those ids and then checks that nothing is left under the proof
-# domain. The token is read from the environment and never printed.
+# certificate on the ALB, end to end), carries an ownership comment, and has
+# its id appended to $STATE_DIR/cloudflare-records.txt. Existing records
+# without that comment are never adopted. cf-remove deletes exactly the
+# recorded ids (keeping any that failed for a retry) and then checks that
+# nothing is left under the proof domain. Only a certificate tagged
+# pippen:sandbox=true that covers all four hosts is reused or deleted. The
+# token is read from the environment, passed to curl on a pipe, never printed.
 
 set -euo pipefail
 
@@ -48,9 +51,21 @@ mkdir -p "$STATE_DIR"
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 aws_() { aws --region "$REGION" "$@"; }
 
+# cert_arn: an existing certificate this proof owns: tagged pippen:sandbox=true
+# and covering every proof host. Anything else is never adopted (nor deleted).
 cert_arn() {
-  aws_ acm list-certificates --certificate-statuses PENDING_VALIDATION ISSUED \
-    --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn | [0]" --output text | sed 's/^None$//'
+  local arn names tag h ok
+  for arn in $(aws_ acm list-certificates --certificate-statuses PENDING_VALIDATION ISSUED \
+      --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn" --output text); do
+    tag="$(aws_ acm list-tags-for-certificate --certificate-arn "$arn" \
+      --query "Tags[?Key=='${TAG_KEY}'].Value | [0]" --output text 2>/dev/null)"
+    [[ "$tag" == true ]] || continue
+    names=",$(aws_ acm describe-certificate --certificate-arn "$arn" \
+      --query 'join(`,`, Certificate.SubjectAlternativeNames)' --output text),"
+    ok=true
+    for h in "${HOSTS[@]}"; do [[ "$names" == *",$h,"* ]] || ok=false; done
+    $ok && { echo "$arn"; return 0; }
+  done
 }
 
 cmd_cert_request() {
@@ -105,6 +120,8 @@ cmd_cert_delete() {
   local arn
   arn="$(cat "$STATE_DIR/acm-cert-arn" 2>/dev/null || cert_arn)"
   [[ -n "$arn" ]] || { log "no certificate"; return 0; }
+  [[ "$(aws_ acm list-tags-for-certificate --certificate-arn "$arn" --query "Tags[?Key=='${TAG_KEY}'].Value | [0]" --output text 2>/dev/null)" == true ]] ||
+    { log "refusing to delete $arn: not tagged ${TAG_KEY}=true"; exit 1; }
   aws_ acm describe-certificate --certificate-arn "$arn" >/dev/null 2>&1 || { log "certificate already gone"; return 0; }
   log "delete ACM certificate $arn"
   # In use until the ALB is gone; retry for a few minutes.
@@ -119,30 +136,40 @@ cmd_cert_delete() {
 
 cf() { # method path [json]
   : "${CF_API_TOKEN:?CF_API_TOKEN (Cloudflare DNS edit token for the parent zone) is required}"
-  curl -fsS -X "$1" -H "Authorization: Bearer ${CF_API_TOKEN}" -H 'content-type: application/json' \
-    ${3:+--data "$3"} "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}$2"
+  # The token goes through a curl config on a pipe, never the argument list.
+  curl -fsS -X "$1" --config <(printf 'header = "Authorization: Bearer %s"\n' "$CF_API_TOKEN") \
+    -H 'content-type: application/json' ${3:+--data "$3"} "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}$2"
 }
 
-# cf_cname <name> <target>: create or update one unproxied CNAME under the
-# proof domain and record its id.
+# cf_cname <name> <target>: create one unproxied CNAME under the proof domain
+# and record its id. A record that already exists is updated only when this
+# proof owns it (its comment carries OWNER_MARK); anything else is refused, so
+# cf-remove never deletes a record the proof did not create.
+OWNER_MARK="${NAME} EKS proof (remove at teardown)"
 cf_cname() {
-  local name="$1" target="$2" id body
+  local name="$1" target="$2" id owned body
   [[ "$name" == "$DOMAIN" || "$name" == *".$DOMAIN" ]] || { log "refusing $name: not under $DOMAIN"; exit 1; }
-  body="{\"type\":\"CNAME\",\"name\":\"${name}\",\"content\":\"${target}\",\"ttl\":300,\"proxied\":false,\"comment\":\"${NAME} EKS proof (remove at teardown)\"}"
-  id="$(cf GET "/dns_records?name=${name}&per_page=100" | python3 -c '
+  body="{\"type\":\"CNAME\",\"name\":\"${name}\",\"content\":\"${target}\",\"ttl\":300,\"proxied\":false,\"comment\":\"${OWNER_MARK}\"}"
+  read -r id owned < <(cf GET "/dns_records?name=${name}&per_page=100" | python3 -c '
 import json, sys
+mark = sys.argv[1]
 recs = json.load(sys.stdin)["result"]
-bad = [r for r in recs if r["type"] != "CNAME"]
-if bad:
-    sys.exit("existing non-CNAME record at this name")
-print(recs[0]["id"] if recs else "")')"
-  if [[ -n "$id" ]]; then
-    cf PUT "/dns_records/$id" "$body" >/dev/null
-    log "updated CNAME $name -> $target (id $id)"
-  else
-    id="$(cf POST /dns_records "$body" | python3 -c 'import json, sys; print(json.load(sys.stdin)["result"]["id"])')"
-    log "added CNAME $name -> $target (id $id)"
-  fi
+if not recs:
+    print("- -")
+elif len(recs) == 1 and recs[0]["type"] == "CNAME":
+    print(recs[0]["id"], "yes" if recs[0].get("comment") == mark else "no")
+else:
+    print("- conflict")' "$OWNER_MARK")
+  case "$owned" in
+    yes)
+      cf PUT "/dns_records/$id" "$body" >/dev/null
+      log "updated proof-owned CNAME $name -> $target (id $id)" ;;
+    -)
+      id="$(cf POST /dns_records "$body" | python3 -c 'import json, sys; print(json.load(sys.stdin)["result"]["id"])')"
+      log "added CNAME $name -> $target (id $id)" ;;
+    *)
+      log "refusing $name: a record not created by this proof already exists there"; exit 1 ;;
+  esac
   grep -q "^$id " "$RECORDS" 2>/dev/null || printf '%s CNAME %s\n' "$id" "$name" >> "$RECORDS"
 }
 
@@ -159,12 +186,18 @@ cmd_cf_hosts() {
 }
 
 cmd_cf_remove() {
-  local id rest
+  local id rest left=""
   if [[ -f "$RECORDS" ]]; then
     while read -r id rest; do
       [[ -z "$id" ]] && continue
-      cf DELETE "/dns_records/$id" >/dev/null && log "deleted Cloudflare record $id ($rest)"
+      if cf DELETE "/dns_records/$id" >/dev/null; then
+        log "deleted Cloudflare record $id ($rest)"
+      else
+        log "could not delete $id ($rest); kept for a retry"
+        left+="$id $rest"$'\n'
+      fi
     done < "$RECORDS"
+    if [[ -n "$left" ]]; then printf '%s' "$left" > "$RECORDS"; exit 1; fi
     rm -f "$RECORDS"
   fi
   # Nothing left under the proof domain (the parent's own records are not listed).

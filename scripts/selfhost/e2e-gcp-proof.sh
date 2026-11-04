@@ -191,12 +191,13 @@ done
 [[ -n "$CONTEXT" ]] || die_usage "--context is required"
 [[ "$EDGE" == gke || "$EDGE" == alb ]] || die_usage "--edge must be gke or alb"
 for origin in "$DASHBOARD_ORIGIN" "$API_ORIGIN" "$CAST_ORIGIN" "$HISTORY_ORIGIN"; do
-  [[ -z "$origin" || "$origin" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die_usage "origins must be http(s)://host[:port] with no path"
+  # https only: authenticated checks send bearer tokens to these origins.
+  [[ -z "$origin" || "$origin" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die_usage "origins must be https://host[:port] with no path"
 done
 [[ -z "$RELAYAUTH_URL" || "$RELAYAUTH_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die_usage "--relayauth-url must be http(s)://host[:port]"
 if [[ "$EDGE" == alb ]]; then
-  [[ -n "$DASHBOARD_ORIGIN" && -n "$API_ORIGIN" && -n "$CAST_ORIGIN" ]] ||
-    die_usage "--edge alb needs --dashboard-origin, --api-origin and --cast-origin"
+  [[ -n "$DASHBOARD_ORIGIN" && -n "$API_ORIGIN" && -n "$CAST_ORIGIN" && -n "$HISTORY_ORIGIN" ]] ||
+    die_usage "--edge alb needs --dashboard-origin, --api-origin, --cast-origin and --history-origin"
 fi
 [[ -n "$NAMESPACE" && -n "$BULLS_NAMESPACE" && -n "$SECRET_NAME" ]] || die_usage "namespace and secret options must not be empty"
 [[ "$CERT_WAIT" =~ ^[0-9]+$ ]] || die_usage "--cert-wait must be a non-negative integer"
@@ -459,9 +460,8 @@ printf 'E2E_BASE_DOMAIN=%s\n' "$BASE_DOMAIN"
 : "${API_ORIGIN:=https://api.$BASE_DOMAIN}"
 : "${CAST_ORIGIN:=https://cast.$BASE_DOMAIN}"
 : "${HISTORY_ORIGIN:=https://history.$BASE_DOMAIN}"
-# curl --proto for public requests: https only, unless an origin is http.
+# curl --proto for public requests: https only.
 PUBLIC_PROTO='=https'
-[[ "$DASHBOARD_ORIGIN$API_ORIGIN$CAST_ORIGIN$HISTORY_ORIGIN" == *http://* ]] && PUBLIC_PROTO='=http,https'
 printf 'E2E_EDGE=%s\nE2E_ORIGINS=dashboard=%s api=%s cast=%s history=%s\n' "$EDGE" \
   "$DASHBOARD_ORIGIN" "$API_ORIGIN" "$CAST_ORIGIN" "$HISTORY_ORIGIN"
 # Relaycast runs either as the SQLite server or as the durable-actors gateway

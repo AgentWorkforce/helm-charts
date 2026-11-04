@@ -61,6 +61,7 @@ HISTORY_DIGEST="${EKS_PROOF_HISTORY_DIGEST:-sha256:d3166bb14e1d6043426a4dd8cc054
 INTERIM_BEARER="${EKS_PROOF_INTERIM_BEARER:-false}"
 # Run hoopdb-roles during install (needed for the default services image).
 HOOPDB_ROLES="${EKS_PROOF_HOOPDB_ROLES:-true}"
+INGRESS="${EKS_ALB_INGRESS_NAME:-agent-relay}"
 CNPG_CHART_VERSION="${EKS_PROOF_CNPG_CHART_VERSION:-0.26.1}"
 PG_IMAGE="ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3"
 STATE_DIR="${EKS_PROOF_STATE_DIR:-$ROOT/.eks-proof}"
@@ -68,10 +69,28 @@ STATE_DIR="${EKS_PROOF_STATE_DIR:-$ROOT/.eks-proof}"
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 
 KUBECONFIG_FILE="$(mktemp)"
-trap 'rm -f "$KUBECONFIG_FILE"' EXIT
+# Secret material is generated into SECRET_TMP (mode 0700); the EXIT trap
+# removes it even when a kubectl call fails part-way.
+SECRET_TMP=""
+trap 'rm -f "$KUBECONFIG_FILE"; [[ -n "$SECRET_TMP" ]] && rm -rf "$SECRET_TMP"' EXIT
 aws --region "$REGION" eks update-kubeconfig --name "$NAME" --kubeconfig "$KUBECONFIG_FILE" >/dev/null
 export KUBECONFIG="$KUBECONFIG_FILE"
 mkdir -p "$STATE_DIR"
+
+# patch_secret_key <key> <value>: add one key to $SECRET through a 0600 patch
+# file, so the value never appears in a process's argument list.
+patch_secret_key() {
+  local f; f="$(mktemp)"; chmod 600 "$f"
+  python3 -c 'import json, sys; json.dump({"stringData": {sys.argv[1]: sys.stdin.read()}}, open(sys.argv[2], "w"))' "$1" "$f" <<<"$2"
+  python3 - "$f" <<'PYX'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["stringData"] = {k: v.rstrip("\n") for k, v in d["stringData"].items()}
+json.dump(d, open(sys.argv[1], "w"))
+PYX
+  kubectl -n "$NS" patch secret "$SECRET" --type merge --patch-file "$f" >/dev/null
+  rm -f "$f"
+}
 
 cmd_prereqs() {
   kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -81,7 +100,15 @@ cmd_prereqs() {
 
   if ! kubectl -n "$NS" get secret "$SECRET" >/dev/null 2>&1; then
     log "generate Secret $SECRET (values never printed)"
-    local d; d="$(mktemp -d)"; chmod 700 "$d"
+    local d; d="$(mktemp -d)"; chmod 700 "$d"; SECRET_TMP="$d"
+    # A failed earlier run can leave the runtime-role Secrets without the
+    # umbrella Secret: reuse their passwords so the URLs match what CNPG has.
+    local rs
+    for rs in control-api-runtime relayhistory-runtime; do
+      if kubectl -n "$NS" get secret "$rs" >/dev/null 2>&1; then
+        (umask 077; kubectl -n "$NS" get secret "$rs" -o jsonpath='{.data.password}' | base64 -d > "$d/$rs-password")
+      fi
+    done
     (
       umask 077; cd "$d"
       openssl rand -hex 32 > relaycast-internal-secret
@@ -93,8 +120,9 @@ cmd_prereqs() {
       openssl rand -hex 32 > selfhost-bootstrap-token
       openssl rand -hex 32 > selfhost-encryption-key
       printf 'eks1:%s' "$(openssl rand -hex 32)" > SUMMARY_MASTER_KEYS
-      openssl rand -hex 24 > control-api-runtime-password
-      openssl rand -hex 24 > relayhistory-runtime-password
+      # No trailing newline: CNPG and the URLs below must see the same bytes.
+      [[ -s control-api-runtime-password ]] || printf '%s' "$(openssl rand -hex 24)" > control-api-runtime-password
+      [[ -s relayhistory-runtime-password ]] || printf '%s' "$(openssl rand -hex 24)" > relayhistory-runtime-password
       printf 'postgresql://relayhistory_runtime:%s@relayhistory-pg-rw.%s.svc:5432/relayhistory?sslmode=disable' \
         "$(cat relayhistory-runtime-password)" "$NS" > DATABASE_URL
       # The control API database: the CNPG app user owns it and runs the
@@ -102,19 +130,19 @@ cmd_prereqs() {
       printf 'postgresql://control_api_runtime:%s@control-api-pg-rw.%s.svc:5432/control_api?sslmode=disable' \
         "$(cat control-api-runtime-password)" "$NS" > database-url
     )
-    kubectl -n "$NS" create secret generic control-api-runtime --type kubernetes.io/basic-auth \
-      --from-literal=username=control_api_runtime --from-file=password="$d/control-api-runtime-password" >/dev/null
-    kubectl -n "$NS" label secret control-api-runtime cnpg.io/reload=true >/dev/null
-    kubectl -n "$NS" create secret generic relayhistory-runtime --type kubernetes.io/basic-auth \
-      --from-literal=username=relayhistory_runtime --from-file=password="$d/relayhistory-runtime-password" >/dev/null
-    kubectl -n "$NS" label secret relayhistory-runtime cnpg.io/reload=true >/dev/null
+    for rs in control-api-runtime relayhistory-runtime; do
+      kubectl -n "$NS" create secret generic "$rs" --type kubernetes.io/basic-auth \
+        --from-literal=username="${rs//-/_}" --from-file=password="$d/$rs-password" \
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+      kubectl -n "$NS" label --overwrite secret "$rs" cnpg.io/reload=true >/dev/null
+    done
     kubectl -n "$NS" create secret generic "$SECRET" \
       --from-file="$d/relaycast-internal-secret" --from-file="$d/relaycast-workspace-bootstrap-secret" \
       --from-file="$d/relayauth-internal-secret" --from-file="$d/relayauth-signing-key.pem" \
       --from-file="$d/relayauth-bootstrap-api-key" --from-file="$d/relayauth-api-key" \
       --from-file="$d/selfhost-bootstrap-token" --from-file="$d/selfhost-encryption-key" \
       --from-file="$d/SUMMARY_MASTER_KEYS" --from-file="$d/database-url" --from-file="$d/DATABASE_URL" >/dev/null
-    rm -rf "$d"
+    rm -rf "$d"; SECRET_TMP=""
   fi
 
   log "CNPG cluster control-api-pg"
@@ -177,16 +205,14 @@ EOF
   if ! kubectl -n "$NS" get secret "$SECRET" -o jsonpath='{.data.database-migrations-url}' | grep -q .; then
     local uri
     uri="$(kubectl -n "$NS" get secret control-api-pg-app -o jsonpath='{.data.uri}' | base64 -d)"
-    kubectl -n "$NS" patch secret "$SECRET" --type merge \
-      -p "{\"stringData\":{\"database-migrations-url\":\"${uri}?sslmode=disable\"}}" >/dev/null
+    patch_secret_key database-migrations-url "${uri}?sslmode=disable"
     unset uri
   fi
   # DATABASE_MIGRATIONS_URL = the relayhistory owner (CNPG app user).
   if ! kubectl -n "$NS" get secret "$SECRET" -o jsonpath='{.data.DATABASE_MIGRATIONS_URL}' | grep -q .; then
     local huri
     huri="$(kubectl -n "$NS" get secret relayhistory-pg-app -o jsonpath='{.data.uri}' | base64 -d)"
-    kubectl -n "$NS" patch secret "$SECRET" --type merge \
-      -p "{\"stringData\":{\"DATABASE_MIGRATIONS_URL\":\"${huri}?sslmode=disable\"}}" >/dev/null
+    patch_secret_key DATABASE_MIGRATIONS_URL "${huri}?sslmode=disable"
     unset huri
   fi
   log "prereqs ready"
@@ -298,11 +324,11 @@ cmd_install() {
   log "waiting for the ALB hostname"
   local alb=""
   for _ in $(seq 1 60); do
-    alb="$(kubectl -n "$NS" get ingress agent-relay -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+    alb="$(kubectl -n "$NS" get ingress "$INGRESS" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
     [[ -n "$alb" ]] && break
     sleep 10
   done
-  [[ -n "$alb" ]] || { log "the ALB hostname did not appear"; kubectl -n "$NS" describe ingress agent-relay | tail -20; exit 1; }
+  [[ -n "$alb" ]] || { log "the ALB hostname did not appear"; kubectl -n "$NS" describe ingress "$INGRESS" | tail -20; exit 1; }
   log "ALB $alb"
   cmd_status
 }
@@ -338,11 +364,14 @@ JS
 cmd_hoopdb_roles() {
   local f pod="hoopdb-roles-$$"
   kubectl -n "$NS" wait cluster/hoopdb --for=condition=Ready --timeout=15m >/dev/null
+  # The current primary, not hoopdb-1: CNPG may have failed over.
+  local primary; primary="$(kubectl -n "$NS" get cluster/hoopdb -o jsonpath='{.status.currentPrimary}')"
+  [[ -n "$primary" ]] || { log "hoopdb has no current primary"; exit 1; }
   for f in session_directory_search_worker session_token_verifier session_ingest_roles; do
     log "HoopDb bootstrap $f.sql (services ${SERVICES_DIGEST:0:19}...) as the CNPG superuser"
     kubectl -n "$NS" run "$pod" --rm -i --quiet --restart=Never --pod-running-timeout=10m --image="${SERVICES_REPO}@${SERVICES_DIGEST}" \
       --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"c","image":"'"${SERVICES_REPO}@${SERVICES_DIGEST}"'","command":["cat","/app/supabase/bootstrap/'"$f"'.sql"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}' |
-      kubectl -n "$NS" exec -i hoopdb-1 -c postgres -- psql -X -q -v ON_ERROR_STOP=1 -d hoopdb
+      kubectl -n "$NS" exec -i "$primary" -c postgres -- psql -X -q -v ON_ERROR_STOP=1 -d hoopdb
   done
 }
 
