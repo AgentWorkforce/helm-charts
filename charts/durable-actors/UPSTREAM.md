@@ -88,9 +88,16 @@ Patches to upstream files (report upstream; drop when fixed there):
     Workload Identity annotation is rendered only for GCS or when set. They need a
     control-plane image built from durable-actors `selfhost/aws-s3`
     (`DURABLE_ACTORS_STORAGE_PROVIDER`, `DURABLE_ACTORS_S3_*`,
-    `DURABLE_ACTORS_SANDBOX_*`); upstream 0.14.6 ignores them. Defaults render
-    byte-identical to upstream. Upstream proposal: TerseAI/durable-actors PRs
-    (see relay-briefs actors-aws.md).
+    `DURABLE_ACTORS_SANDBOX_*`); upstream 0.14.6 ignores them. `storage.provider=s3`
+    requires `storage.s3.region` and, with the default `actorCredentials: assume-role`,
+    `storage.s3.actorRoleArn`; GCS keeps upstream's rules (no new required value).
+    Defaults render byte-identical to upstream apart from the `helm.sh/chart`
+    label (patch 11). Upstream proposal: TerseAI/durable-actors PRs (see
+    relay-briefs actors-aws.md).
+11. `Chart.yaml`: `version` is `0.14.6-awf.1` (upstream `0.14.6`), so a packaged
+    chart carrying patch 10 can never be mistaken for the upstream release.
+    `appVersion` stays `0.14.6`. Reset the suffix when re-vendoring a release
+    that contains these patches.
 
 ## Re-vendoring
 

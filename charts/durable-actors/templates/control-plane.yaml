@@ -117,8 +117,8 @@ spec:
             {{- end }}
             {{- with $.Values.storage.s3.endpoint }}
             - {name: DURABLE_ACTORS_S3_ENDPOINT, value: {{ . | quote }}}
-            - {name: DURABLE_ACTORS_S3_FORCE_PATH_STYLE, value: {{ $.Values.storage.s3.forcePathStyle | quote }}}
             {{- end }}
+            - {name: DURABLE_ACTORS_S3_FORCE_PATH_STYLE, value: {{ $.Values.storage.s3.forcePathStyle | toString | quote }}}
             {{- end }}
             {{- with $.Values.sandbox }}
             {{- if not (kindIs "invalid" .runtimeClassName) }}

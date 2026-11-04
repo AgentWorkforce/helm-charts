@@ -26,7 +26,7 @@
 {{- if .Values.storage.s3.actorRoleArn }}{{ fail "storage.s3.actorRoleArn applies only to storage.s3.actorCredentials=assume-role" }}{{ end -}}
 {{- else if empty .Values.storage.s3.actorRoleArn }}{{ fail "storage.s3.actorCredentials=assume-role requires storage.s3.actorRoleArn" }}{{ end -}}
 {{- if eq .Values.storage.mode "rapid" }}{{ fail "Rapid persistence requires storage.provider=gcs" }}{{ end -}}
-{{- else if empty .Values.serviceAccount.googleServiceAccount }}{{ fail "storage.provider=gcs requires serviceAccount.googleServiceAccount" }}{{ end -}}
+{{- end -}}
 {{- if .Values.ingress.enabled -}}
 {{- if or (empty .Values.ingress.className) (empty .Values.ingress.tlsSecret) }}{{ fail "ingress requires className and tlsSecret" }}{{ end -}}
 {{- end -}}

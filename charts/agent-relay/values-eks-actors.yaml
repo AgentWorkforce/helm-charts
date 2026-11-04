@@ -1,9 +1,13 @@
 # Durable-actors overlay for AWS EKS: Relaycast and Relayfile in actor mode on
-# TerseAI durable-actors with S3 storage. Apply on top of values-eks.yaml (or
-# on its own with the other components off, as the actors proof does):
+# TerseAI durable-actors with S3 storage. It is a standalone profile: it turns
+# every other component off, as the actors proof does (scripts/selfhost/
+# eks-actors-install.sh):
 #
 #   helm upgrade --install agent-relay charts/agent-relay -n agent-relay \
-#     -f values-eks.yaml -f values-eks-actors.yaml -f <your overrides>
+#     -f charts/agent-relay/values-eks-actors.yaml -f <your overrides>
+#
+# To run the actors next to the rest of the suite, set those components back to
+# true in your overrides and configure them (there is no EKS base profile yet).
 #
 # It needs a durable-actors control-plane image built from the AgentWorkforce
 # fork (S3 storage, AWS placement and sandbox scheduling; charts/durable-actors
@@ -14,6 +18,10 @@
 # Identity (EKS Pod Identity; IRSA works through serviceAccount annotations):
 # - <release>-durable-actors (control plane and pool manager): S3 Get/Put/List
 #   on the bucket, and sts:AssumeRole + sts:TagSession on storage.s3.actorRoleArn.
+# - In an account that forbids sts:AssumeRole (a Pippen sandbox), override
+#   storage.s3.actorCredentials: control-plane and leave actorRoleArn empty
+#   (eks-actors-install.sh does this): actor hosts then share the control
+#   plane's S3 credentials, isolated by prefix only. First-party actors only.
 # - storage.s3.actorRoleArn: trusted by the control-plane role, S3 Get/Put on
 #   <bucket>/durable-actors/v3/* and ListBucket. The control plane narrows it per
 #   actor with an inline session policy; actor hosts get nothing else.
@@ -29,6 +37,13 @@
 # code, add a gVisor RuntimeClass and set sandbox.runtimeClassName: gvisor
 # (docs: relay-briefs actors-aws-design.md, section c).
 components:
+  relaycast: true
+  relayauth: false
+  sessionsPipeline: false
+  relayhistory: false
+  cloudApi: false
+  dashboard: false
+  relayflows: false
   durableActors: true
   relayfile: true
 
@@ -67,6 +82,11 @@ durable-actors:
     maxStarting: 4
 
 relaycast:
+  # Holds internal-secret, credential-keyring and file-signing-secret
+  # (docs/self-hosted-durable-actors.md); credentials.authority self needs the keyring.
+  existingSecret: <relaycast Secret, e.g. relaycast-secrets>
+  secretKeys:
+    credentialKeyring: credential-keyring
   credentials:
     format: ar
     authority: self

@@ -210,8 +210,8 @@ app.kubernetes.io/component: session-broker
 {{- with $store.s3.endpoint }}
 - name: DURABLE_ACTORS_S3_ENDPOINT
   value: {{ . | quote }}
-- name: DURABLE_ACTORS_S3_FORCE_PATH_STYLE
-  value: {{ $store.s3.forcePathStyle | toString | quote }}
 {{- end }}
+- name: DURABLE_ACTORS_S3_FORCE_PATH_STYLE
+  value: {{ $store.s3.forcePathStyle | default false | toString | quote }}
 {{- end }}
 {{- end }}
