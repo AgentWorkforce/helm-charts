@@ -44,7 +44,6 @@ REGION="${AWS_REGION:-us-west-2}"
 NAME="${EKS_ACTORS_NAME:-pippen-sbx-actors-proof}"
 NS="${EKS_ACTORS_NAMESPACE:-agent-relay}"
 RELEASE="${EKS_ACTORS_RELEASE:-agent-relay}"
-SANDBOX_NS="${NS}-${RELEASE}"
 CHART_DIR="${EKS_ACTORS_CHART_DIR:?path to charts/agent-relay}"
 VALUES="${EKS_ACTORS_VALUES:-}"
 # postgres:16.10-bookworm, pinned by index digest so a restart runs the same image.
@@ -55,6 +54,18 @@ ACTOR_CREDENTIALS="${EKS_ACTORS_ACTOR_CREDENTIALS:-control-plane}"
 HELM_SET=(--set "durable-actors.storage.s3.actorCredentials=${ACTOR_CREDENTIALS}")
 [[ "$ACTOR_CREDENTIALS" == control-plane ]] && HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=")
 
+render() {
+  helm template "$RELEASE" "$CHART_DIR" -n "$NS" -f "$CHART_DIR/values-eks-actors.yaml" ${VALUES:+-f "$VALUES"} "${HELM_SET[@]}"
+}
+# The actor sandbox namespace exactly as the chart computes it
+# (durable-actors.sandboxNamespace, or <ns>-<release> shortened to 63 characters).
+sandbox_ns() {
+  local ns
+  ns="$(render | grep -oE 'name: DURABLE_ACTORS_GKE_NAMESPACE, value: "[^"]+"' | head -1 | sed -E 's/.*value: "([^"]+)"/\1/')"
+  [[ -n "$ns" ]] || { echo "could not derive the sandbox namespace from the chart render" >&2; exit 1; }
+  printf '%s' "$ns"
+}
+
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 
 KUBECONFIG_FILE="$(mktemp)"
@@ -64,8 +75,10 @@ export KUBECONFIG="$KUBECONFIG_FILE"
 
 ensure_secret() {
   local ns="$1" name="$2"; shift 2
-  if kubectl -n "$ns" get secret "$name" >/dev/null 2>&1; then log "secret $ns/$name exists"; return; fi
+  if kubectl -n "$ns" get secret "$name" >/dev/null 2>&1; then log "secret $ns/$name exists (kept, not owned)"; return; fi
   kubectl -n "$ns" create secret generic "$name" "$@" >/dev/null
+  # Marks it as this script's, so uninstall removes only what the script made.
+  kubectl -n "$ns" label secret "$name" "${OWNER_LABEL}=owned" >/dev/null
   log "secret $ns/$name created"
 }
 
@@ -118,14 +131,14 @@ cmd_prereqs() {
   kubectl -n "$NS" apply -f - >/dev/null <<EOF
 apiVersion: v1
 kind: Service
-metadata: {name: actors-pg}
+metadata: {name: actors-pg, labels: {${OWNER_LABEL}: owned}}
 spec:
   selector: {app: actors-pg}
   ports: [{port: 5432, targetPort: 5432}]
 ---
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: {name: actors-pg}
+metadata: {name: actors-pg, labels: {${OWNER_LABEL}: owned}}
 spec:
   serviceName: actors-pg
   replicas: 1
@@ -160,8 +173,8 @@ cmd_prepull() {
   local config="${1:?dockerconfigjson file}"
   kubectl -n "$NS" create secret generic image-pull --type=kubernetes.io/dockerconfigjson \
     --from-file=.dockerconfigjson="$config" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  local images; images="$(helm template "$RELEASE" "$CHART_DIR" -n "$NS" \
-    -f "$CHART_DIR/values-eks-actors.yaml" ${VALUES:+-f "$VALUES"} "${HELM_SET[@]}" \
+  kubectl -n "$NS" label secret image-pull "${OWNER_LABEL}=owned" --overwrite >/dev/null
+  local images; images="$(render \
     | grep -oE '(image|value): "?[a-z0-9.-]+\.[a-z]+/[^" ]+@sha256:[0-9a-f]{64}' \
     | sed -E 's/^(image|value): "?//' | sort -u)"
   local init="" i=0
@@ -172,7 +185,7 @@ cmd_prepull() {
   kubectl -n "$NS" apply -f - >/dev/null <<EOF
 apiVersion: apps/v1
 kind: DaemonSet
-metadata: {name: image-prepull}
+metadata: {name: image-prepull, labels: {${OWNER_LABEL}: owned}}
 spec:
   selector: {matchLabels: {app: image-prepull}}
   template:
@@ -207,6 +220,7 @@ cmd_install() {
 # Only a Secret this script made (OWNER_LABEL=owned) is ever marked for actor
 # code; a pre-existing one is refused, so nothing foreign reaches the actors.
 cmd_actor_env() {
+  local SANDBOX_NS; SANDBOX_NS="$(sandbox_ns)"
   if kubectl -n "$SANDBOX_NS" get secret relaycast-actor-env >/dev/null 2>&1; then
     if [[ "$(kubectl -n "$SANDBOX_NS" get secret relaycast-actor-env -o jsonpath="{.metadata.labels['agent-relay\.dev/eks-actors-proof']}")" != owned ]]; then
       echo "$SANDBOX_NS/relaycast-actor-env exists but was not created by this script: delete it or label it ${OWNER_LABEL}=owned after checking its keys" >&2
@@ -231,12 +245,14 @@ cmd_actor_env() {
 }
 
 cmd_status() {
+  local SANDBOX_NS; SANDBOX_NS="$(sandbox_ns)"
   kubectl -n "$NS" get pods -o wide
   kubectl -n "$SANDBOX_NS" get pods -o wide 2>/dev/null || true
   helm -n "$NS" status "$RELEASE" 2>/dev/null | head -8 || true
 }
 
 cmd_uninstall() {
+  local SANDBOX_NS; SANDBOX_NS="$(sandbox_ns)"
   helm -n "$NS" uninstall "$RELEASE" --wait 2>/dev/null || true
   # The release's own sandbox namespace (the durable-actors chart names it <ns>-<release>).
   kubectl delete namespace "$SANDBOX_NS" --wait=true --ignore-not-found >/dev/null
@@ -245,10 +261,9 @@ cmd_uninstall() {
     log "release, sandbox namespace and owned namespace $NS deleted"
     return
   fi
-  # A namespace this script did not create: remove only what prereqs/prepull made.
-  kubectl -n "$NS" delete statefulset/actors-pg service/actors-pg daemonset/image-prepull --ignore-not-found --wait=true >/dev/null
-  kubectl -n "$NS" delete secret actors-pg actors-credentials relaycast-durable-actors-invoke relaycast-secrets \
-    relayfile-actors image-pull --ignore-not-found >/dev/null
+  # A namespace this script did not create: remove only objects it labelled as
+  # its own (Secrets it created, Postgres); pre-existing Secrets stay.
+  kubectl -n "$NS" delete statefulset,service,daemonset,secret -l "${OWNER_LABEL}=owned" --ignore-not-found --wait=true >/dev/null
   log "release, sandbox namespace and this proof's objects in $NS deleted (namespace kept: not created by this script)"
 }
 
