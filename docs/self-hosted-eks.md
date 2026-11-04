@@ -107,6 +107,14 @@ messaging, Relayflows on a worker, the dashboard, RelayAuth, HoopDb migrations
 on CNPG, Pod Identity to S3 and the ALB edge work on EKS. Everything that needs
 RelayHistory, and the courier push, does not yet.
 
+Teardown (2026-11-04 03:50-04:05Z): `eks-proof-install.sh uninstall` (Ingresses
+and ALBs, release, CNPG clusters, PVCs/EBS, operator, namespaces), then
+`eks-proof-sandbox.sh down` (cluster, bucket, VPC, roles), then
+`pippen sandbox down aws-proof`: `"clean": true`, no failures (it deleted only
+the session role). Direct checks before the sweep found no instances, volumes,
+load balancers, target groups, ENIs, non-default security groups, clusters,
+workload roles or proof buckets.
+
 ## Reproduce
 
 Inside a Pippen sandbox lease (`pippen sandbox up <agent>`), from this repo:
