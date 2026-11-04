@@ -28,6 +28,12 @@
 # 15, on by default) deletes the Relaycast workspaces, revokes the device
 # tokens, and removes the flow, worker, Pod and Secret; the control plane has
 # no workspace delete API, so the two e2e-<marker>-a/b workspaces remain.
+#
+# The public edge defaults to the GKE layout (--edge gke: hosts <base>,
+# api.<base>, cast.<base>, history.<base> behind a ManagedCertificate). On
+# EKS (--edge alb, used by e2e-eks-proof.sh) the origins are given
+# explicitly, may be plain http (an ALB hostname with no custom domain), and
+# readiness is the dashboard origin answering instead of the certificate.
 
 set -uo pipefail
 
@@ -61,6 +67,12 @@ AGENT_RELAY_VERSION="12.4.1"
 WORKER_POD=""
 WORKER_SECRET=""
 VERIFY_PUBLIC="$HERE/../../.agents/skills/setting-up-self-hosted-agent-relay-gcp/scripts/verify-public.sh"
+EDGE=gke
+DASHBOARD_ORIGIN=""
+API_ORIGIN=""
+CAST_ORIGIN=""
+HISTORY_ORIGIN=""
+RELAYAUTH_URL=""
 
 usage() {
   cat <<'EOF'
@@ -80,6 +92,16 @@ Options:
                               (required; e.g. the release's existingSecret)
       --base-domain DOMAIN    public base domain (default: derived from the
                               relay-cloud-api SELFHOST_PUBLIC_URL)
+      --edge gke|alb          public edge layout (default gke). alb: origins from
+                              the --*-origin options, http allowed, readiness =
+                              the dashboard origin answering (no ManagedCertificate)
+      --dashboard-origin URL  public dashboard origin (default https://<base-domain>)
+      --api-origin URL        public api origin (default https://api.<base-domain>)
+      --cast-origin URL       public Relaycast origin (default https://cast.<base-domain>)
+      --history-origin URL    public RelayHistory origin (default https://history.<base-domain>)
+      --relayauth-url URL     in-cluster RelayAuth URL for the driver (default: the
+                              driver's http://relayauth.relayauth.svc:8787, the GKE
+                              proof's separate namespace)
       --skip-restart          do not restart relayhistory/relaycast (case 6 SKIP)
       --skip-sessions-pipeline
                               skip the Sessions Pipeline (case 8 SKIP;
@@ -128,7 +150,7 @@ need_value() {
 
 while (($#)); do
   case "$1" in
-    --context|-n|--namespace|--sessions-namespace|--bulls-namespace|--secret|--base-domain|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap|--relaycast-secret-key|--relaycast-create-timeout)
+    --context|-n|--namespace|--sessions-namespace|--bulls-namespace|--secret|--base-domain|--edge|--dashboard-origin|--api-origin|--cast-origin|--history-origin|--relayauth-url|--cert-wait|--pipeline-timeout|--edge-wait|--worker-wait|--worker-image|--agent-relay-version|--allow-known-gap|--relaycast-secret-key|--relaycast-create-timeout)
       need_value "$1" "$#" ;;
   esac
   case "$1" in
@@ -137,6 +159,12 @@ while (($#)); do
     --sessions-namespace|--bulls-namespace) BULLS_NAMESPACE="$2"; shift 2 ;;
     --secret) SECRET_NAME="$2"; shift 2 ;;
     --base-domain) BASE_DOMAIN="$2"; shift 2 ;;
+    --edge) EDGE="$2"; shift 2 ;;
+    --dashboard-origin) DASHBOARD_ORIGIN="${2%/}"; shift 2 ;;
+    --api-origin) API_ORIGIN="${2%/}"; shift 2 ;;
+    --cast-origin) CAST_ORIGIN="${2%/}"; shift 2 ;;
+    --history-origin) HISTORY_ORIGIN="${2%/}"; shift 2 ;;
+    --relayauth-url) RELAYAUTH_URL="${2%/}"; shift 2 ;;
     --skip-restart) SKIP_RESTART=true; shift ;;
     --skip-sessions-pipeline|--skip-96bulls) SKIP_SESSIONS_PIPELINE=true; shift ;;
     --skip-public) SKIP_PUBLIC=true; shift ;;
@@ -161,6 +189,16 @@ while (($#)); do
 done
 
 [[ -n "$CONTEXT" ]] || die_usage "--context is required"
+[[ "$EDGE" == gke || "$EDGE" == alb ]] || die_usage "--edge must be gke or alb"
+for origin in "$DASHBOARD_ORIGIN" "$API_ORIGIN" "$CAST_ORIGIN" "$HISTORY_ORIGIN"; do
+  # https only: authenticated checks send bearer tokens to these origins.
+  [[ -z "$origin" || "$origin" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die_usage "origins must be https://host[:port] with no path"
+done
+[[ -z "$RELAYAUTH_URL" || "$RELAYAUTH_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || die_usage "--relayauth-url must be http(s)://host[:port]"
+if [[ "$EDGE" == alb ]]; then
+  [[ -n "$DASHBOARD_ORIGIN" && -n "$API_ORIGIN" && -n "$CAST_ORIGIN" && -n "$HISTORY_ORIGIN" ]] ||
+    die_usage "--edge alb needs --dashboard-origin, --api-origin, --cast-origin and --history-origin"
+fi
 [[ -n "$NAMESPACE" && -n "$BULLS_NAMESPACE" && -n "$SECRET_NAME" ]] || die_usage "namespace and secret options must not be empty"
 [[ "$CERT_WAIT" =~ ^[0-9]+$ ]] || die_usage "--cert-wait must be a non-negative integer"
 [[ "$PIPELINE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || die_usage "--pipeline-timeout must be a positive integer"
@@ -325,7 +363,9 @@ run_phase() {
     emit FAIL "$phase.driver" "relay-cloud-api pod unavailable"
     return 1
   fi
-  phase_input | "${KN[@]}" exec -i "$API_POD" -- node /tmp/e2e-gcp-proof-driver.mjs "$phase" >"$out" 2>/dev/null
+  local driver_env=()
+  [[ -n "$RELAYAUTH_URL" ]] && driver_env=(env "E2E_RELAYAUTH_URL=$RELAYAUTH_URL")
+  phase_input | "${KN[@]}" exec -i "$API_POD" -- ${driver_env[@]+"${driver_env[@]}"} node /tmp/e2e-gcp-proof-driver.mjs "$phase" >"$out" 2>/dev/null
   consume_phase_output "$phase" "$out" $?
 }
 
@@ -333,7 +373,7 @@ run_phase() {
 # origin, so the calls cross the GCE edge exactly as the SPA's do.
 run_public_phase() {
   local phase="$1" out="$WORK/out.json"
-  phase_input | E2E_API_URL="https://$BASE_DOMAIN" node "$DRIVER" "$phase" >"$out" 2>/dev/null
+  phase_input | E2E_API_URL="$DASHBOARD_ORIGIN" node "$DRIVER" "$phase" >"$out" 2>/dev/null
   consume_phase_output "$phase" "$out" $?
 }
 
@@ -412,7 +452,18 @@ if [[ -z "$BASE_DOMAIN" ]]; then
   host="${api_url#https://}"
   BASE_DOMAIN="${host#api.}"
 fi
+if [[ -z "$BASE_DOMAIN" && "$EDGE" == alb ]]; then
+  BASE_DOMAIN="${DASHBOARD_ORIGIN#*://}"
+fi
 printf 'E2E_BASE_DOMAIN=%s\n' "$BASE_DOMAIN"
+: "${DASHBOARD_ORIGIN:=https://$BASE_DOMAIN}"
+: "${API_ORIGIN:=https://api.$BASE_DOMAIN}"
+: "${CAST_ORIGIN:=https://cast.$BASE_DOMAIN}"
+: "${HISTORY_ORIGIN:=https://history.$BASE_DOMAIN}"
+# curl --proto for public requests: https only.
+PUBLIC_PROTO='=https'
+printf 'E2E_EDGE=%s\nE2E_ORIGINS=dashboard=%s api=%s cast=%s history=%s\n' "$EDGE" \
+  "$DASHBOARD_ORIGIN" "$API_ORIGIN" "$CAST_ORIGIN" "$HISTORY_ORIGIN"
 # Relaycast runs either as the SQLite server or as the durable-actors gateway
 # (same Service, same /internal/workspaces contract, different secret, and an
 # actor-mode create that can take ~100s). The mode is read from the relaycast
@@ -460,6 +511,12 @@ printf 'E2E_RELAYCAST_MODE=%s\nE2E_RELAYCAST_SECRET_KEY=%s\n' "$RELAYCAST_MODE" 
 # Decided once, before any public request (case 11 runs before case 10), and
 # shared by every case that crosses the public edge (10, 11, 12, 14).
 cert_status() {
+  if [[ "$EDGE" == alb ]]; then
+    # No certificate on a plain ALB origin: ready once the dashboard answers.
+    [[ "$(curl --disable -s -o /dev/null --max-time 10 -w '%{http_code}' "$DASHBOARD_ORIGIN/" 2>/dev/null)" == 200 ]] &&
+      printf 'Active '
+    return 0
+  fi
   "${KN[@]}" get managedcertificate -o jsonpath='{range .items[*]}{.status.certificateStatus}{"\n"}{end}' 2>/dev/null |
     sort -u | tr '\n' ' '
 }
@@ -610,8 +667,12 @@ else
         emit FAIL pipeline.trace "verify returned no trace id; worker logs not checked"
       else
         for worker in hoopdb-indexer referee bob-costas; do
-          lines="$("${KB[@]}" logs "deploy/bulls96-worker-$worker" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$trace")"
-          leaks="$("${KB[@]}" logs "deploy/bulls96-worker-$worker" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$marker")"
+          # bulls96-worker-<w> in the GKE proof's own Sessions namespace,
+          # <release>-worker-<w> under the umbrella chart (EKS).
+          dep="$("${KB[@]}" get deploy -o name 2>/dev/null | grep -E -- "-worker-${worker}\$" | head -n 1)"
+          dep="${dep:-deploy/bulls96-worker-$worker}"
+          lines="$("${KB[@]}" logs "$dep" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$trace")"
+          leaks="$("${KB[@]}" logs "$dep" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$marker")"
           if ((lines > 0 && leaks == 0)); then
             emit PASS "pipeline.logs_$worker" "trace_lines=$lines marker_in_logs=0"
           else
@@ -650,8 +711,10 @@ elif ! $PUBLIC_READY; then
     case_skip "ManagedCertificate not Active"
   fi
 else
-  emit PASS public.certificate "status=Active waited=${PUBLIC_WAITED}s"
-  if [[ -x "$VERIFY_PUBLIC" || -f "$VERIFY_PUBLIC" ]]; then
+  emit PASS public.certificate "status=Active waited=${PUBLIC_WAITED}s edge=$EDGE"
+  if [[ "$EDGE" == alb ]]; then
+    emit SKIP public.verify_public "GKE-only (ManagedCertificate, FrontendConfig, static IP)"
+  elif [[ -x "$VERIFY_PUBLIC" || -f "$VERIFY_PUBLIC" ]]; then
     vp_out="$(BASE_DOMAIN="$BASE_DOMAIN" bash "$VERIFY_PUBLIC" 2>&1)"
     vp_rc=$?
     emit "$([[ $vp_rc -eq 0 ]] && echo PASS || echo FAIL)" public.verify_public \
@@ -680,31 +743,31 @@ PY
   ws_a="$(state_get a.workspaceId)"
   pub() { # check expected header-file url
     local code
-    code="$(curl --disable --silent --output /dev/null --max-time 20 --proto '=https' \
+    code="$(curl --disable --silent --output /dev/null --max-time 20 --proto "$PUBLIC_PROTO" \
       --write-out '%{http_code}' ${3:+--header "@$WORK/$3"} "$4" 2>/dev/null)"
     if [[ "$code" == "$2" ]]; then emit PASS "$1" "status=$code"; else emit FAIL "$1" "status=$code expected=$2"; fi
   }
-  pub public.api_whoami 200 h-api "https://api.$BASE_DOMAIN/api/v1/auth/whoami"
-  pub public.api_resolve 200 h-api "https://api.$BASE_DOMAIN/api/v1/workspaces/$ws_a/resolve"
-  pub public.dashboard_sessions 200 h-api "https://$BASE_DOMAIN/cloud/api/v1/workspaces/$ws_a/sessions"
-  pub public.dashboard_cross_tenant 404 h-api-b "https://$BASE_DOMAIN/cloud/api/v1/workspaces/$ws_a/sessions"
-  pub public.api_anonymous 401 "" "https://api.$BASE_DOMAIN/api/v1/auth/whoami"
-  pub public.cast_roster 200 h-cast "https://cast.$BASE_DOMAIN/v1/agents"
-  pub public.cast_agent 200 h-agent "https://cast.$BASE_DOMAIN/v1/agent"
-  pub public.cast_anonymous 401 "" "https://cast.$BASE_DOMAIN/v1/agents"
+  pub public.api_whoami 200 h-api "$API_ORIGIN/api/v1/auth/whoami"
+  pub public.api_resolve 200 h-api "$API_ORIGIN/api/v1/workspaces/$ws_a/resolve"
+  pub public.dashboard_sessions 200 h-api "$DASHBOARD_ORIGIN/cloud/api/v1/workspaces/$ws_a/sessions"
+  pub public.dashboard_cross_tenant 404 h-api-b "$DASHBOARD_ORIGIN/cloud/api/v1/workspaces/$ws_a/sessions"
+  pub public.api_anonymous 401 "" "$API_ORIGIN/api/v1/auth/whoami"
+  pub public.cast_roster 200 h-cast "$CAST_ORIGIN/v1/agents"
+  pub public.cast_agent 200 h-agent "$CAST_ORIGIN/v1/agent"
+  pub public.cast_anonymous 401 "" "$CAST_ORIGIN/v1/agents"
   code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' -X POST \
-    -H 'content-type: application/json' --data '{"name":"e2e-edge-probe"}' "https://cast.$BASE_DOMAIN/v1/workspaces")"
+    -H 'content-type: application/json' --data '{"name":"e2e-edge-probe"}' "$CAST_ORIGIN/v1/workspaces")"
   # The chart routes this path to a selector-less Service, so the Google edge
   # answers 502 (no backend) and the request never reaches Relaycast.
   [[ "$code" == 502 || "$code" == 404 || "$code" == 403 ]] && emit PASS public.cast_workspace_create_denied "status=$code edge_denied=true" ||
     emit FAIL public.cast_workspace_create_denied "status=$code"
-  code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' "https://cast.$BASE_DOMAIN/internal/capabilities")"
+  code="$(curl --disable -s -o /dev/null --max-time 20 -w '%{http_code}' "$CAST_ORIGIN/internal/capabilities")"
   # The chart routes this path to a selector-less Service, so the Google edge
   # answers 502 (no backend) and the request never reaches Relaycast.
   [[ "$code" == 502 || "$code" == 404 || "$code" == 403 ]] && emit PASS public.cast_internal_denied "status=$code edge_denied=true" ||
     emit FAIL public.cast_internal_denied "status=$code"
-  pub public.history_sessions 200 h-history "https://history.$BASE_DOMAIN/v1/sessions?workspace=$ws_a&limit=1"
-  pub public.history_anonymous 401 "" "https://history.$BASE_DOMAIN/v1/delivery/limits"
+  pub public.history_sessions 200 h-history "$HISTORY_ORIGIN/v1/sessions?workspace=$ws_a&limit=1"
+  pub public.history_anonymous 401 "" "$HISTORY_ORIGIN/v1/delivery/limits"
   rm -f "$WORK"/h-*
 fi
 case_end 10 "public: verify-public.sh and authenticated calls through the HTTPS edge"
@@ -740,8 +803,8 @@ if $BOOTSTRAPPED && has_capability admin && public_gate admin; then
   )
   edge_denied() { # path -> prints status; returns 0 when the edge denied it
     local body code
-    body="$(curl --disable --silent --path-as-is --location --max-redirs 3 --max-time 20 --proto '=https' \
-      --write-out '\n%{http_code}' "https://api.$BASE_DOMAIN$1" 2>/dev/null)"
+    body="$(curl --disable --silent --path-as-is --location --max-redirs 3 --max-time 20 --proto "$PUBLIC_PROTO" \
+      --write-out '\n%{http_code}' "$API_ORIGIN$1" 2>/dev/null)"
     code="${body##*$'\n'}"
     body="${body%$'\n'*}"
     printf '%s' "$code"
@@ -919,14 +982,14 @@ case_end 13 "flows: enrollment token, in-namespace worker Pod, deterministic run
 case_begin 14 "dashboard"
 if public_gate dashboard; then
   fetch() { # url file -> prints status
-    curl --disable --silent --max-time 20 --proto '=https' --output "$2" --write-out '%{http_code} %{content_type}' "$1" 2>/dev/null
+    curl --disable --silent --max-time 20 --proto "$PUBLIC_PROTO" --output "$2" --write-out '%{http_code} %{content_type}' "$1" 2>/dev/null
   }
-  index_meta="$(fetch "https://$BASE_DOMAIN/" "$WORK/index.html")"
-  config_meta="$(fetch "https://$BASE_DOMAIN/runtime-config.js" "$WORK/runtime-config.js")"
-  deep_meta="$(fetch "https://$BASE_DOMAIN/flows/runs/e2e-deep-link" "$WORK/deep.html")"
+  index_meta="$(fetch "$DASHBOARD_ORIGIN/" "$WORK/index.html")"
+  config_meta="$(fetch "$DASHBOARD_ORIGIN/runtime-config.js" "$WORK/runtime-config.js")"
+  deep_meta="$(fetch "$DASHBOARD_ORIGIN/flows/runs/e2e-deep-link" "$WORK/deep.html")"
   bundle="$(sed -n 's/.*<script type="module"[^>]* src="\(\/assets\/index-[A-Za-z0-9_-]*\.js\)".*/\1/p' "$WORK/index.html" | head -n 1)"
   bundle_meta=""
-  [[ -n "$bundle" ]] && bundle_meta="$(fetch "https://$BASE_DOMAIN$bundle" "$WORK/bundle.js")"
+  [[ -n "$bundle" ]] && bundle_meta="$(fetch "$DASHBOARD_ORIGIN$bundle" "$WORK/bundle.js")"
   dash_out="$(python3 - "$WORK" "$index_meta" "$config_meta" "$deep_meta" "$bundle" "$bundle_meta" <<'PY'
 import json, os, re, sys
 work, index_meta, config_meta, deep_meta, bundle, bundle_meta = sys.argv[1:7]
