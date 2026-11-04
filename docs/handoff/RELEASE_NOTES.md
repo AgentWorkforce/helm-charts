@@ -56,7 +56,7 @@ REQUIRED OVERRIDE zero digests (RelayHistory, Sessions services) are gone.
 | Component | Image | Source |
 |---|---|---|
 | Control-plane API | `ghcr.io/agentworkforce/selfhost-api@sha256:95c7877741054dc2f1cafa26be3faa9bfe4660ed85d637aef4524daa10481963` (0.3.0) | relaycontrol `9b80b04` (#7-#13) |
-| Dashboard | `ghcr.io/agentworkforce/relay-dashboard@sha256:2bae5798bdd7b6cc12efad20a4128b78d3eacf2eb1bc89e1881e869cccf27b9c` | relay-dashboard `a52fd5c` (#83-#90, #92) |
+| Dashboard | `ghcr.io/agentworkforce/relay-dashboard@sha256:c50005fcdd1fc5ab5ef3dac9b621db8e0c7e03480406bfe519743ae435d8f1ad` | relay-dashboard `e5003d0` (#83-#92) |
 | RelayHistory | `ghcr.io/agentworkforce/relayhistory@sha256:d3166bb14e1d6043426a4dd8cc05408b94574c8d79ad5fd6e789e0de00ab371b` | relayhistory-cloud `53c3333` |
 | Sessions services (worker, alleyoop) | `ghcr.io/agentworkforce/96bulls-services@sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9` | sessions-pipeline `f1c2672` |
 | Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e` (unchanged) | relaycast `bf713d86` (engine 12.7.0) |
@@ -73,8 +73,8 @@ What the new images bring, in one place:
   customer-profile branding (#84, #86), and Settings pages that match hosted:
   Connections with Coding agents (#85, #89, #90), the Agent Relay Desktop
   link from the customer profile (#88) and Members with email invites (#92).
-  Connections visual parity (relay-dashboard #91) did not make this
-  image; it ships in the next dashboard release.
+  Connections now matches hosted visually, and the Integrations tab is
+  gone (#91).
 - **First-boot bootstrap, OIDC / email sign-in and invites** (relaycontrol
   #13, chart values from 0.3.9, below). The pinned images include it, so no
   digest override is needed any more.
