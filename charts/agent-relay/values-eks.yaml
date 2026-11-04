@@ -1,0 +1,248 @@
+# Customer-neutral AWS EKS deployment template, derived from values-gcp.yaml
+# and proven on EKS Auto Mode in a Pippen sandbox (docs/self-hosted-eks.md).
+# It contains no credentials. Before deployment, replace every value marked
+# REQUIRED OVERRIDE and create the referenced Secret and AWS resources.
+#
+# Scope: the core suite without durable-actors (GKE-only: it needs GKE
+# Sandbox/gVisor and GCS). RelayHistory and Relayfile are off because no
+# release image is published for either (see docs/self-hosted-eks.md, "Gaps").
+#
+# AWS mapping of the GCP profile:
+#   GKE Ingress + ManagedCertificate  -> ALB Ingresses (scripts/selfhost/eks-alb-ingress.sh);
+#                                        EKS Auto Mode's built-in ALB controller
+#                                        or the AWS Load Balancer Controller
+#   GKE Workload Identity             -> EKS Pod Identity associations
+#   GCS Locker bucket                 -> S3 bucket (Locker provider s3)
+#   Cloud SQL                         -> RDS/Aurora PostgreSQL, or in-cluster
+#                                        CloudNativePG (HoopDb below)
+#   Memorystore / Pub/Sub             -> not used: the services' AWS data path
+#                                        needs neither
+components:
+  relaycast: true
+  relayauth: true
+  sessionsPipeline: true
+  # No release image yet (relayhistory-cloud #280 is held); see the gaps.
+  relayhistory: false
+  cloudApi: true
+  dashboard: true
+  relayflows: false
+  durableActors: false
+  relayfile: false
+
+global:
+  imageRegistry: ""
+  tenant:
+    # REQUIRED OVERRIDE: stable organization ID used to partition session data.
+    orgId: example-org
+
+gkeIngress:
+  enabled: false
+
+relaycast:
+  fullnameOverride: relaycast
+  image:
+    # Release image (public GHCR, relaycast main bf713d86, engine 12.7.0).
+    repository: ghcr.io/agentworkforce/relaycast-self-host
+    digest: sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e
+  # REQUIRED OVERRIDE: the public cast origin (https; your DNS name for the
+  # cast ALB with an ACM certificate). The charts refuse http public origins.
+  baseUrl: https://cast.placeholder.company
+  # REQUIRED OVERRIDE: existing Secret name; see the chart README for keys.
+  existingSecret: example-agent-relay-secrets
+  secretKeys:
+    internalSecret: relaycast-internal-secret
+    bootstrapSecret: relaycast-workspace-bootstrap-secret
+  # SQLite backend: one replica, database and uploaded files on an EBS PVC
+  # (the default StorageClass). The S3 fileStore exists only in the
+  # durable-actors backend, which is GKE-only today.
+  persistence:
+    enabled: true
+  service:
+    annotations:
+      alb.ingress.kubernetes.io/healthcheck-path: /health
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    # Same-namespace callers plus the ALB, which reaches pods in IP target
+    # mode from inside the VPC. REQUIRED OVERRIDE: your VPC CIDR.
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 10.0.0.0/16 }
+
+relayauth:
+  fullnameOverride: relayauth
+  image:
+    # Release image (public GHCR).
+    repository: ghcr.io/agentworkforce/relayauth
+    digest: sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288
+  baseUrl: http://relayauth:8787
+  issuer: http://relayauth:8787
+  # REQUIRED OVERRIDE: existing Secret name; see the chart README for keys.
+  existingSecret: example-agent-relay-secrets
+  secretKeys:
+    internalSecret: relayauth-internal-secret
+    signingKey: relayauth-signing-key.pem
+    bootstrapApiKey: relayauth-bootstrap-api-key
+  relaycast:
+    url: http://relaycast:8787
+  jwksIngress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+
+sessions-pipeline:
+  worker:
+    image:
+      # The services image is private on GHCR. Either mirror it to your ECR
+      # (the EKS node role then pulls with no pull secret) or reference
+      # ghcr.io/agentworkforce/96bulls-services with an imagePullSecret built
+      # from a read:packages token. REQUIRED OVERRIDE: repository and digest.
+      repository: 123456789012.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # REQUIRED OVERRIDE: existing Secret name; see the chart README for keys.
+    existingSecret: example-agent-relay-secrets
+    summaryEncryption:
+      existingSecret: example-agent-relay-secrets
+    # Session objects in S3 through EKS Pod Identity: create one IAM role
+    # (s3:ListBucket on the bucket, Get/Put/DeleteObject on its objects) and
+    # a Pod Identity association for the <release>-worker and
+    # <release>-alleyoop ServiceAccounts. EKS Auto Mode runs the Pod Identity
+    # Agent; on other clusters install the eks-pod-identity-agent add-on.
+    locker:
+      provider: s3
+      endpoint: ""
+      # REQUIRED OVERRIDE: customer-owned S3 bucket and its region.
+      bucket: example-agent-relay-sessions
+      region: us-west-2
+      credentials:
+        mode: podIdentity
+    lockerInit:
+      enabled: false
+    # HoopDb in-cluster on CloudNativePG (sessions-pipeline.hoopdb below):
+    # the chart wires the CNPG app Secret and runs the runtime-role and
+    # function-default Jobs. For RDS/Aurora set hoopdb.enabled=false, point
+    # worker.hoopdb / migrations.hoopdb at your Secret keys and use
+    # databaseMode selfhosted with roleBootstrap as in values-gcp.yaml.
+    migrations:
+      databaseMode: selfhosted
+      supabaseShim: true
+      runtimeRole: sessions_runtime
+      runtimeRoleLogin: true
+      functionBoundaryMode: global-default-revoke
+      waitForRole:
+        enabled: true
+        functionDefault: true
+  alleyoop:
+    image:
+      # Same services image repository and digest as worker.
+      repository: 123456789012.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    # REQUIRED OVERRIDE: existing Secret name; see the chart README for keys.
+    existingSecret: example-agent-relay-secrets
+    locker:
+      provider: s3
+      endpoint: ""
+      # REQUIRED OVERRIDE: same bucket and region as worker.locker.
+      bucket: example-agent-relay-sessions
+      region: us-west-2
+      credentials:
+        mode: podIdentity
+    # The ingest validates its RelayAuth/JWKS URLs: https, or (with this)
+    # plain http to an in-cluster Service FQDN only (<svc>.<ns>.svc).
+    allowInClusterHttp: true
+    auth:
+      # REQUIRED OVERRIDE: <release namespace> in the FQDN.
+      jwksUrl: http://relayauth.agent-relay.svc:8787/.well-known/jwks.json
+      # Must equal relayauth.issuer.
+      issuer: http://relayauth:8787
+      # REQUIRED OVERRIDE: the bare origin couriers use as the History
+      # assertion audience (byte-equal to RELAYAUTH_HISTORY_ORIGIN); it must
+      # equal relay-cloud-api.services.relayhistoryPublicUrl. Without it the
+      # ingest cannot accept a RelayAuth-signed courier push.
+      historyOrigin: https://history.placeholder.company
+  # CloudNativePG HoopDb. Needs the CNPG operator (cloudnative-pg chart) in
+  # the cluster first, and a default StorageClass (EBS gp3).
+  hoopdb:
+    enabled: true
+  runtimeRole:
+    bootstrapJob:
+      enabled: true
+  functionDefaultRevoke:
+    bootstrapJob:
+      enabled: true
+  privilegedSql:
+    sqlImage:
+      # Same services image repository and digest as worker.
+      repository: 123456789012.dkr.ecr.us-west-2.amazonaws.com/96bulls-services
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  locker:
+    enabled: false
+
+relay-cloud-api:
+  fullnameOverride: relay-cloud-api
+  image:
+    # Release image (public GHCR, relaycontrol 8e989a1).
+    repository: ghcr.io/agentworkforce/selfhost-api
+    digest: sha256:535e6718fa239ce87dead3d22e7c53324bed44bfcef94018918e8804d24af478
+  database:
+    runtimeRole: control_api_runtime
+  encryption:
+    keyId: primary
+  # Flow run artifacts stay inline in PostgreSQL (the only non-GCS option).
+  flows:
+    storage: postgres
+  # REQUIRED OVERRIDE: the public api origin (the api ALB, or your DNS name).
+  publicUrl: https://api.placeholder.company
+  # REQUIRED OVERRIDE: the public dashboard origin.
+  dashboardUrl: https://dashboard.placeholder.company/
+  # REQUIRED OVERRIDE: existing Secret name; database-url and
+  # database-migrations-url point at RDS/Aurora (or in-cluster CNPG).
+  existingSecret: example-agent-relay-secrets
+  services:
+    relayauthUrl: http://relayauth:8787
+    relaycastUrl: http://relaycast:8787
+    # REQUIRED OVERRIDE: must match relaycast.baseUrl.
+    relaycastPublicUrl: https://cast.placeholder.company
+    # Required by the chart even with components.relayhistory=false. They
+    # name the RelayHistory Service and public origin you add once a
+    # RelayHistory image is available; until then the history-backed
+    # session reads fail (docs/self-hosted-eks.md, "Gaps").
+    relayhistoryUrl: http://relayhistory:8080
+    relayhistoryPublicUrl: https://history.placeholder.company
+  service:
+    annotations:
+      alb.ingress.kubernetes.io/healthcheck-path: /readyz
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 10.0.0.0/16 }
+    allowAllEgress: true
+
+relay-dashboard:
+  fullnameOverride: relay-dashboard
+  image:
+    # Release image (public GHCR).
+    repository: ghcr.io/agentworkforce/relay-dashboard
+    digest: sha256:bbeca872c7e204a02a17050db6ac6309c6d36a07bcd00e1da3a739923f990282
+  runtime:
+    # REQUIRED OVERRIDE: the public dashboard origin.
+    publicUrl: https://dashboard.placeholder.company
+    appPath: /
+    apiBasePath: /cloud/api
+    loginPath: /login
+  api:
+    serviceName: relay-cloud-api
+  service:
+    annotations:
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+  ingress:
+    enabled: false
+  networkPolicy:
+    enabled: true
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: 10.0.0.0/16 }
