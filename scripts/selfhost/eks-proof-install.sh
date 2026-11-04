@@ -10,15 +10,22 @@
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh status
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh uninstall
 #
-# prereqs: the CloudNativePG operator, a CNPG cluster for the control API
-#   database (HoopDb gets its own CNPG cluster from the chart), and the release
+# prereqs: the CloudNativePG operator, CNPG clusters for the control API
+#   and RelayHistory databases (HoopDb gets its own CNPG cluster from the
+#   chart), and the release
 #   Secret with freshly generated values. Secret values are generated into a
 #   mode-0700 temp dir, loaded with --from-file and removed; nothing is
 #   printed. Re-running keeps an existing Secret.
 # install: helm install/upgrade of the published chart with values-eks.yaml
-#   plus a generated proof overlay (bucket, ECR digest, tenant, VPC CIDR), the
-#   three ALB Ingresses (dashboard, api, cast), then a second upgrade with the
-#   ALB hostnames as the public origins.
+#   plus a generated proof overlay (domain origins, bucket, tenant, VPC CIDR,
+#   image digests), then the ALB Ingress (one ALB, four hosts, TLS with the
+#   ACM certificate from eks-proof-dns.sh cert-request). The public origins
+#   are https://<domain>, api., cast. and history.<domain>, so the install is
+#   a single pass; eks-proof-dns.sh alb + cf-hosts then point DNS at the ALB.
+#   EKS_PROOF_INTERIM_BEARER=true sets alleyoop auth.allowInterimRelayAuthBearer
+#   (ALLOW_INTERIM_RELAYAUTH_BEARER, with environment=local as the chart
+#   requires) for services images that still need it to accept a courier
+#   push; leave it unset otherwise.
 # bootstrap-org: the control plane's one-time installation organization
 #   (POST /api/v1/organizations with the bootstrap token, from inside the API
 #   pod so the token never leaves it). Idempotent: skips when one exists.
@@ -36,15 +43,21 @@ NAME="${EKS_PROOF_NAME:-pippen-sbx-eks-proof}"
 NS="${EKS_PROOF_NAMESPACE:-agent-relay}"
 RELEASE="${EKS_PROOF_RELEASE:-agent-relay}"
 CHART="${EKS_PROOF_CHART:-oci://ghcr.io/agentworkforce/charts/agent-relay}"
-CHART_VERSION="${EKS_PROOF_CHART_VERSION:-0.3.4}"
+CHART_VERSION="${EKS_PROOF_CHART_VERSION:-0.3.6}"
 SECRET="${EKS_PROOF_SECRET:-agent-relay-eks-proof}"
 ORG_ID="${EKS_PROOF_ORG_ID:-org_eks_proof}"
 VPC_CIDR="${EKS_PROOF_VPC_CIDR:-10.42.0.0/16}"
 BUCKET="${NAME}-${ACCOUNT}"
-# sessions-pipeline main 7d7229b, the ECR copy in sessions-dev (500268966557)
-# whose repository policy lets the sandbox account pull.
-SERVICES_REPO="${EKS_PROOF_SERVICES_REPO:-500268966557.dkr.ecr.us-west-2.amazonaws.com/96bulls-services}"
-SERVICES_DIGEST="${EKS_PROOF_SERVICES_DIGEST:-sha256:5bb6075240afa02a1b1797a81c07bffa029954eac7803d702ecba20db35d4db9}"
+DOMAIN="${EKS_PROOF_DOMAIN:-aws-proof.agentrelay.com}"
+# Public GHCR images by digest: sessions-pipeline 7d7229b (the image
+# sessions-pipeline chart 0.6.0 is audited with; main 1247da7 needs a
+# session_token_verifier role that chart does not bootstrap) and
+# relayhistory-cloud 53c3333. No ECR copy or pull secret.
+SERVICES_REPO="${EKS_PROOF_SERVICES_REPO:-ghcr.io/agentworkforce/96bulls-services}"
+SERVICES_DIGEST="${EKS_PROOF_SERVICES_DIGEST:-sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2}"
+HISTORY_REPO="${EKS_PROOF_HISTORY_REPO:-ghcr.io/agentworkforce/relayhistory}"
+HISTORY_DIGEST="${EKS_PROOF_HISTORY_DIGEST:-sha256:d3166bb14e1d6043426a4dd8cc05408b94574c8d79ad5fd6e789e0de00ab371b}"
+INTERIM_BEARER="${EKS_PROOF_INTERIM_BEARER:-false}"
 CNPG_CHART_VERSION="${EKS_PROOF_CNPG_CHART_VERSION:-0.26.1}"
 PG_IMAGE="ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3"
 STATE_DIR="${EKS_PROOF_STATE_DIR:-$ROOT/.eks-proof}"
@@ -78,6 +91,9 @@ cmd_prereqs() {
       openssl rand -hex 32 > selfhost-encryption-key
       printf 'eks1:%s' "$(openssl rand -hex 32)" > SUMMARY_MASTER_KEYS
       openssl rand -hex 24 > control-api-runtime-password
+      openssl rand -hex 24 > relayhistory-runtime-password
+      printf 'postgresql://relayhistory_runtime:%s@relayhistory-pg-rw.%s.svc:5432/relayhistory?sslmode=disable' \
+        "$(cat relayhistory-runtime-password)" "$NS" > DATABASE_URL
       # The control API database: the CNPG app user owns it and runs the
       # migrations; the runtime role gets only what the migrations grant.
       printf 'postgresql://control_api_runtime:%s@control-api-pg-rw.%s.svc:5432/control_api?sslmode=disable' \
@@ -86,12 +102,15 @@ cmd_prereqs() {
     kubectl -n "$NS" create secret generic control-api-runtime --type kubernetes.io/basic-auth \
       --from-literal=username=control_api_runtime --from-file=password="$d/control-api-runtime-password" >/dev/null
     kubectl -n "$NS" label secret control-api-runtime cnpg.io/reload=true >/dev/null
+    kubectl -n "$NS" create secret generic relayhistory-runtime --type kubernetes.io/basic-auth \
+      --from-literal=username=relayhistory_runtime --from-file=password="$d/relayhistory-runtime-password" >/dev/null
+    kubectl -n "$NS" label secret relayhistory-runtime cnpg.io/reload=true >/dev/null
     kubectl -n "$NS" create secret generic "$SECRET" \
       --from-file="$d/relaycast-internal-secret" --from-file="$d/relaycast-workspace-bootstrap-secret" \
       --from-file="$d/relayauth-internal-secret" --from-file="$d/relayauth-signing-key.pem" \
       --from-file="$d/relayauth-bootstrap-api-key" --from-file="$d/relayauth-api-key" \
       --from-file="$d/selfhost-bootstrap-token" --from-file="$d/selfhost-encryption-key" \
-      --from-file="$d/SUMMARY_MASTER_KEYS" --from-file="$d/database-url" >/dev/null
+      --from-file="$d/SUMMARY_MASTER_KEYS" --from-file="$d/database-url" --from-file="$d/DATABASE_URL" >/dev/null
     rm -rf "$d"
   fi
 
@@ -119,7 +138,38 @@ spec:
         passwordSecret:
           name: control-api-runtime
 EOF
+  log "CNPG cluster relayhistory-pg (vector, pg_trgm)"
+  kubectl apply -f - >/dev/null <<EOF
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: relayhistory-pg
+  namespace: ${NS}
+spec:
+  instances: 1
+  imageName: ${PG_IMAGE}
+  storage:
+    size: 5Gi
+  bootstrap:
+    initdb:
+      database: relayhistory
+      owner: relayhistory
+      # The migrations create these; vector is not a trusted extension, so
+      # they are created here as superuser and the migrations' IF NOT EXISTS
+      # finds them.
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public
+  managed:
+    roles:
+      - name: relayhistory_runtime
+        ensure: present
+        login: true
+        passwordSecret:
+          name: relayhistory-runtime
+EOF
   kubectl -n "$NS" wait cluster/control-api-pg --for=condition=Ready --timeout=15m >/dev/null
+  kubectl -n "$NS" wait cluster/relayhistory-pg --for=condition=Ready --timeout=15m >/dev/null
   # database-migrations-url = the CNPG app user's URI (owner of control_api).
   if ! kubectl -n "$NS" get secret "$SECRET" -o jsonpath='{.data.database-migrations-url}' | grep -q .; then
     local uri
@@ -128,14 +178,27 @@ EOF
       -p "{\"stringData\":{\"database-migrations-url\":\"${uri}?sslmode=disable\"}}" >/dev/null
     unset uri
   fi
+  # DATABASE_MIGRATIONS_URL = the relayhistory owner (CNPG app user).
+  if ! kubectl -n "$NS" get secret "$SECRET" -o jsonpath='{.data.DATABASE_MIGRATIONS_URL}' | grep -q .; then
+    local huri
+    huri="$(kubectl -n "$NS" get secret relayhistory-pg-app -o jsonpath='{.data.uri}' | base64 -d)"
+    kubectl -n "$NS" patch secret "$SECRET" --type merge \
+      -p "{\"stringData\":{\"DATABASE_MIGRATIONS_URL\":\"${huri}?sslmode=disable\"}}" >/dev/null
+    unset huri
+  fi
   log "prereqs ready"
 }
 
-# proof_overlay <dashboard> <api> <cast>: the non-secret proof overlay.
+# proof_overlay: the non-secret proof overlay.
 proof_overlay() {
-  local dash="$1" api="$2" cast="$3"
+  local dash="https://${DOMAIN}" api="https://api.${DOMAIN}" cast="https://cast.${DOMAIN}" history="https://history.${DOMAIN}"
+  # The chart allows the interim bearer only with environment=local (which
+  # otherwise only labels logs and error events).
+  local alleyoop_env=production
+  [[ "$INTERIM_BEARER" == true ]] && alleyoop_env=local
   cat > "$STATE_DIR/values-eks-proof.yaml" <<EOF
 # Generated by eks-proof-install.sh: proof-specific, non-secret.
+# ALLOW_INTERIM_RELAYAUTH_BEARER on the ingest: ${INTERIM_BEARER}
 global:
   tenant:
     orgId: ${ORG_ID}
@@ -159,16 +222,31 @@ sessions-pipeline:
     image: { repository: ${SERVICES_REPO}, digest: "${SERVICES_DIGEST}" }
     existingSecret: ${SECRET}
     locker: { bucket: ${BUCKET}, region: ${REGION} }
-    auth: { historyOrigin: https://history-unavailable.eks-proof.agentrelay.com }
+    auth:
+      jwksUrl: http://relayauth.${NS}.svc:8787/.well-known/jwks.json
+      historyOrigin: ${history}
+      allowInterimRelayAuthBearer: ${INTERIM_BEARER}
+    environment: ${alleyoop_env}
   privilegedSql:
     sqlImage: { repository: ${SERVICES_REPO}, digest: "${SERVICES_DIGEST}" }
+relayhistory:
+  image: { repository: ${HISTORY_REPO}, digest: "${HISTORY_DIGEST}" }
+  database:
+    existingSecret: ${SECRET}
+    runtimeRole: relayhistory_runtime
+  relayauth:
+    historyOrigin: ${history}
+  networkPolicy:
+    ingressFrom:
+      - podSelector: {}
+      - ipBlock: { cidr: ${VPC_CIDR} }
 relay-cloud-api:
   existingSecret: ${SECRET}
   publicUrl: ${api}
   dashboardUrl: ${dash}/
   services:
     relaycastPublicUrl: ${cast}
-    relayhistoryPublicUrl: https://history-unavailable.eks-proof.agentrelay.com
+    relayhistoryPublicUrl: ${history}
   networkPolicy:
     ingressFrom:
       - podSelector: {}
@@ -189,42 +267,28 @@ helm_apply() {
     --wait --timeout 20m
 }
 
-alb_host() {
-  kubectl -n "$NS" get ingress "$1" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true
-}
-
 cmd_install() {
-  local dash api cast
-  dash="$(alb_host agent-relay-dashboard)"; api="$(alb_host agent-relay-api)"; cast="$(alb_host agent-relay-cast)"
-  if [[ -z "$dash" || -z "$api" || -z "$cast" ]]; then
-    # First pass: placeholder origins, so the Services exist for the ALBs.
-    proof_overlay https://dashboard-pending.eks-proof.agentrelay.com https://api-pending.eks-proof.agentrelay.com \
-      https://cast-pending.eks-proof.agentrelay.com
-    log "helm install (pass 1, placeholder origins)"
-    helm_apply
-    "$HERE/eks-alb-ingress.sh" "$NS" | kubectl apply -f -
-    log "waiting for ALB hostnames"
-    for _ in $(seq 1 60); do
-      dash="$(alb_host agent-relay-dashboard)"; api="$(alb_host agent-relay-api)"; cast="$(alb_host agent-relay-cast)"
-      [[ -n "$dash" && -n "$api" && -n "$cast" ]] && break
-      sleep 10
-    done
-    [[ -n "$dash" && -n "$api" && -n "$cast" ]] || { log "ALB hostnames did not appear"; exit 1; }
-  fi
-  dash="${dash#http://}"; api="${api#http://}"; cast="${cast#http://}"
-  # The charts accept only https public origins and an ALB hostname cannot
-  # get an ACM certificate, so the proof names https://<ALB hostname> (the
-  # validation passes) while the ALBs listen on HTTP only. Clients in the
-  # proof use http://<ALB hostname>. Production: a DNS name and ACM cert.
-  dash="https://${dash#https://}"; api="https://${api#https://}"; cast="https://${cast#https://}"
-  proof_overlay "$dash" "$api" "$cast"
-  log "helm upgrade (pass 2): dashboard=$dash api=$api cast=$cast"
+  local cert
+  cert="$(cat "$STATE_DIR/acm-cert-arn" 2>/dev/null)" ||
+    { log "no $STATE_DIR/acm-cert-arn: run eks-proof-dns.sh cert-request first"; exit 1; }
+  proof_overlay
+  log "helm upgrade --install $CHART $CHART_VERSION (domain $DOMAIN, interim bearer $INTERIM_BEARER)"
   helm_apply
+  EKS_ALB_DOMAIN="$DOMAIN" EKS_ALB_CERT_ARN="$cert" "$HERE/eks-alb-ingress.sh" "$NS" | kubectl apply -f -
+  log "waiting for the ALB hostname"
+  local alb=""
+  for _ in $(seq 1 60); do
+    alb="$(kubectl -n "$NS" get ingress agent-relay -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+    [[ -n "$alb" ]] && break
+    sleep 10
+  done
+  [[ -n "$alb" ]] || { log "the ALB hostname did not appear"; kubectl -n "$NS" describe ingress agent-relay | tail -20; exit 1; }
+  log "ALB $alb"
   cmd_status
 }
 
 cmd_bootstrap_org() {
-  local owner="${EKS_PROOF_OWNER_EMAIL:-owner@eks-proof.agentrelay.com}"
+  local owner="${EKS_PROOF_OWNER_EMAIL:-owner@${DOMAIN}}"
   kubectl -n "$NS" exec -i deploy/relay-cloud-api -- node --input-type=module - "$owner" <<'JS'
 import { readFileSync } from "node:fs";
 const token = readFileSync("/var/run/agent-relay/secrets/selfhost-bootstrap-token", "utf8").trim();
@@ -252,6 +316,7 @@ cmd_uninstall() {
   kubectl -n "$NS" delete ingress --all --wait=true --timeout=10m || true
   helm -n "$NS" uninstall "$RELEASE" --wait --timeout 10m || true
   kubectl -n "$NS" delete cluster.postgresql.cnpg.io --all --wait=true --timeout=10m || true
+  kubectl -n "$NS" delete secret control-api-runtime relayhistory-runtime "$SECRET" --ignore-not-found || true
   kubectl -n "$NS" delete pvc --all --wait=true --timeout=10m || true
   helm -n cnpg-system uninstall cnpg --wait --timeout 10m || true
   kubectl delete namespace "$NS" cnpg-system --wait=true --timeout=10m || true

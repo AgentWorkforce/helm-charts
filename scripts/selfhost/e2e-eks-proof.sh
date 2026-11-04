@@ -11,7 +11,11 @@
 #     eks.s3_locker_*        Pod Identity -> S3: put/head/get/list/delete through
 #                            the services image's Locker adapter, in the alleyoop
 #                            pod (e2e-eks-proof-s3.ts)
-#     eks.alb_targets        every ALB target group has healthy targets
+#     eks.alb_targets        every target group of the ALB has healthy targets
+#     eks.acm_certificate    the HTTPS listener's ACM certificate is ISSUED and
+#                            names all four hosts
+#     eks.tls.<host>         public DNS -> ALB, the certificate verifies with the
+#                            system trust store, http:// redirects to https://
 #     eks.cnpg               the CNPG clusters are healthy
 #
 # Run it under the Pippen lease, so kubectl and aws use the session role:
@@ -20,10 +24,11 @@
 #
 # Options it sets itself: --context (a temporary kubeconfig), --namespace,
 # --sessions-namespace (the same namespace: the umbrella installs the
-# Sessions Pipeline next to the rest), --secret, --edge alb and the origins
-# (read from the three ALB Ingresses), and --relayauth-url (RelayAuth runs in
-# the release namespace under the umbrella). Any other option is passed through,
-# e.g. --skip-flows, --allow-known-gap NAME or --no-cleanup.
+# Sessions Pipeline next to the rest), --secret, --edge alb and the four
+# https origins (from relay-cloud-api SELFHOST_PUBLIC_URL = https://api.<domain>),
+# --require-public, and --relayauth-url (RelayAuth runs in the release
+# namespace under the umbrella). Any other option is passed through, e.g.
+# --skip-flows, --allow-known-gap NAME or --no-cleanup.
 #
 # --eks-checks-only runs only the EKS checks (no e2e-gcp-proof.sh cases).
 #
@@ -47,29 +52,28 @@ aws --region "$REGION" eks update-kubeconfig --name "$NAME" --alias eks-proof \
 export KUBECONFIG="$KUBECONFIG_FILE"
 K=(kubectl --context eks-proof -n "$NS")
 
-origin() { # ingress -> http://<alb hostname>
-  local h
-  h="$("${K[@]}" get ingress "$1" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)"
-  [[ -n "$h" ]] && printf 'http://%s' "$h"
-}
-DASHBOARD="$(origin agent-relay-dashboard)"
-API="$(origin agent-relay-api)"
-CAST="$(origin agent-relay-cast)"
-if [[ -z "$DASHBOARD" || -z "$API" || -z "$CAST" ]]; then
-  echo "E2E_RESULT=FAIL"; echo "reason: the ALB Ingresses have no hostnames (eks-alb-ingress.sh applied?)"; exit 1
+# Public origins: the HTTPS hosts the control API was installed with
+# (relay-cloud-api SELFHOST_PUBLIC_URL = https://api.<domain>).
+api_url="$("${K[@]}" get deploy relay-cloud-api \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SELFHOST_PUBLIC_URL")].value}' 2>/dev/null)"
+DOMAIN="${EKS_PROOF_DOMAIN:-${api_url#https://api.}}"
+DOMAIN="${DOMAIN%/}"
+if [[ -z "$DOMAIN" || "$DOMAIN" == "$api_url" ]]; then
+  echo "E2E_RESULT=FAIL"; echo "reason: relay-cloud-api SELFHOST_PUBLIC_URL is not https://api.<domain> (got ${api_url:-none})"; exit 1
 fi
-# RelayHistory is not part of the EKS profile yet (no release image); the
-# origin is the chart value, so its public checks fail with no backend.
-HISTORY="$("${K[@]}" get deploy relay-cloud-api \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="RELAYHISTORY_PUBLIC_URL")].value}' 2>/dev/null)"
-HISTORY="${HISTORY:-http://history.unavailable.invalid}"
+DASHBOARD="https://$DOMAIN"
+API="https://api.$DOMAIN"
+CAST="https://cast.$DOMAIN"
+HISTORY="https://history.$DOMAIN"
+ALB="$("${K[@]}" get ingress "${EKS_ALB_INGRESS_NAME:-agent-relay}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)"
+[[ -n "$ALB" ]] || { echo "E2E_RESULT=FAIL"; echo "reason: the ALB Ingress has no hostname (eks-alb-ingress.sh applied?)"; exit 1; }
 
 rc=0
 EKS_ONLY=false
 if [[ "${1:-}" == --eks-checks-only ]]; then EKS_ONLY=true; shift; fi
 $EKS_ONLY || bash "$HERE/e2e-gcp-proof.sh" --context eks-proof --namespace "$NS" --sessions-namespace "$NS" \
   --secret "$SECRET" --edge alb --dashboard-origin "$DASHBOARD" --api-origin "$API" \
-  --cast-origin "$CAST" --history-origin "${HISTORY%/}" --relayauth-url http://relayauth:8787 "$@" || rc=$?
+  --cast-origin "$CAST" --history-origin "$HISTORY" --relayauth-url http://relayauth:8787 --require-public "$@" || rc=$?
 
 printf '\n== EKS checks (%s)\n' "$(date -u +%FT%TZ)"
 EKS_FAILS=0
@@ -99,14 +103,45 @@ grep -q '^EKS|PASS|eks.s3_locker_roundtrip|' <<<"$s3_out" || eks FAIL eks.s3_loc
 unhealthy=""
 healthy=0
 for lb in $(aws --region "$REGION" elbv2 describe-load-balancers \
-  --query "LoadBalancers[?contains(DNSName, \`${DASHBOARD#http://}\`) || contains(DNSName, \`${API#http://}\`) || contains(DNSName, \`${CAST#http://}\`)].LoadBalancerArn" --output text 2>/dev/null); do
+  --query "LoadBalancers[?DNSName=='${ALB}'].LoadBalancerArn" --output text 2>/dev/null); do
   for tg in $(aws --region "$REGION" elbv2 describe-target-groups --load-balancer-arn "$lb" --query 'TargetGroups[].TargetGroupArn' --output text); do
     states="$(aws --region "$REGION" elbv2 describe-target-health --target-group-arn "$tg" --query 'TargetHealthDescriptions[].TargetHealth.State' --output text | tr '\t' ' ')"
     if [[ " $states " == *" healthy "* ]]; then healthy=$((healthy + 1)); else unhealthy+="${tg##*/}=${states:-none} "; fi
   done
 done
-[[ -z "$unhealthy" && $healthy -gt 0 ]] && eks PASS eks.alb_targets "healthy_target_groups=$healthy" ||
-  eks FAIL eks.alb_targets "healthy=$healthy unhealthy=${unhealthy% }"
+[[ -z "$unhealthy" && $healthy -gt 0 ]] && eks PASS eks.alb_targets "alb=${ALB} healthy_target_groups=$healthy" ||
+  eks FAIL eks.alb_targets "alb=${ALB} healthy=$healthy unhealthy=${unhealthy% }"
+
+# ACM: the listener certificate is ISSUED and covers every public host.
+cert="$(aws --region "$REGION" elbv2 describe-listeners --load-balancer-arn \
+  "$(aws --region "$REGION" elbv2 describe-load-balancers --query "LoadBalancers[?DNSName=='${ALB}'].LoadBalancerArn | [0]" --output text)" \
+  --query "Listeners[?Port==\`443\`].Certificates[0].CertificateArn | [0]" --output text 2>/dev/null)"
+acm="$(aws --region "$REGION" acm describe-certificate --certificate-arn "$cert" \
+  --query 'Certificate.[Status, join(`,`, SubjectAlternativeNames), NotAfter]' --output text 2>/dev/null)"
+read -r acm_status acm_names acm_after <<<"$acm"
+acm_missing=""
+for h in "$DOMAIN" "api.$DOMAIN" "cast.$DOMAIN" "history.$DOMAIN"; do
+  [[ ",$acm_names," == *",$h,"* ]] || acm_missing+="$h "
+done
+[[ "$acm_status" == ISSUED && -z "$acm_missing" ]] &&
+  eks PASS eks.acm_certificate "status=$acm_status names=$acm_names not_after=$acm_after" ||
+  eks FAIL eks.acm_certificate "status=${acm_status:-none} missing=${acm_missing% } cert=${cert:-none}"
+
+# TLS from the public internet: each host resolves to the ALB, the
+# certificate verifies against the system trust store, and port 80 redirects.
+for h in "$DOMAIN" "api.$DOMAIN" "cast.$DOMAIN" "history.$DOMAIN"; do
+  tls="$(curl --disable -sS -o /dev/null --max-time 20 -w '%{http_code} %{ssl_verify_result} %{remote_ip}' "https://$h/healthz" 2>&1)"
+  redirect="$(curl --disable -sS -o /dev/null --max-time 20 -w '%{http_code} %{redirect_url}' "http://$h/" 2>&1)"
+  issuer="$(openssl s_client -connect "$h:443" -servername "$h" </dev/null 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null | sed 's/^issuer=//')"
+  read -r tls_code tls_verify tls_ip <<<"$tls"
+  read -r r_code r_url <<<"$redirect"
+  label="${h%.$DOMAIN}"; [[ "$h" == "$DOMAIN" ]] && label=dashboard
+  if [[ "$tls_verify" == 0 && "$tls_code" =~ ^[1-5][0-9][0-9]$ && "$r_code" == 301 && "$r_url" == https://$h* ]]; then
+    eks PASS "eks.tls.$label" "host=$h verify=ok https_status=$tls_code ip=$tls_ip http_redirect=$r_code issuer=\"$issuer\""
+  else
+    eks FAIL "eks.tls.$label" "host=$h tls=\"$tls\" redirect=\"$redirect\" issuer=\"$issuer\""
+  fi
+done
 
 cnpg="$("${K[@]}" get cluster.postgresql.cnpg.io -o jsonpath='{range .items[*]}{.metadata.name}={.status.phase}{";"}{end}' 2>/dev/null)"
 cnpg_ok=false

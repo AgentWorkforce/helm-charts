@@ -667,8 +667,12 @@ else
         emit FAIL pipeline.trace "verify returned no trace id; worker logs not checked"
       else
         for worker in hoopdb-indexer referee bob-costas; do
-          lines="$("${KB[@]}" logs "deploy/bulls96-worker-$worker" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$trace")"
-          leaks="$("${KB[@]}" logs "deploy/bulls96-worker-$worker" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$marker")"
+          # bulls96-worker-<w> in the GKE proof's own Sessions namespace,
+          # <release>-worker-<w> under the umbrella chart (EKS).
+          dep="$("${KB[@]}" get deploy -o name 2>/dev/null | grep -E -- "-worker-${worker}\$" | head -n 1)"
+          dep="${dep:-deploy/bulls96-worker-$worker}"
+          lines="$("${KB[@]}" logs "$dep" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$trace")"
+          leaks="$("${KB[@]}" logs "$dep" --since-time="$pushed_at" 2>/dev/null | grep -c -- "$marker")"
           if ((lines > 0 && leaks == 0)); then
             emit PASS "pipeline.logs_$worker" "trace_lines=$lines marker_in_logs=0"
           else
