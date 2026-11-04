@@ -1359,6 +1359,34 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 12.7.0
+    created: "2026-11-04T11:13:23.89678613Z"
+    description: Portable Relaycast core for self-hosted Agent Relay deployments
+    digest: 618004c92154a5c38a204827dc5580242762e77710abab8f581685b95d9d9fa4
+    home: https://github.com/AgentWorkforce/relaycast
+    keywords:
+    - relaycast
+    - agents
+    - realtime
+    - self-hosted
+    - agentworkforce
+    kubeVersion: '>=1.22.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relaycast
+    sources:
+    - https://github.com/AgentWorkforce/relaycast
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relaycast
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relaycast-0.3.4/relaycast-0.3.4.tgz
+    version: 0.3.4
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 12.7.0
     created: "2026-11-04T01:47:14.819057619Z"
     description: Portable Relaycast core for self-hosted Agent Relay deployments
     digest: 0e6d0c0138ed9351830fc669b1b6dbb017b30f25891e5dbe72188c8f647dc99c
@@ -1542,6 +1570,35 @@ entries:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/relaycast-0.1.0/relaycast-0.1.0.tgz
     version: 0.1.0
   relayfile:
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.1.0
+    created: "2026-11-04T11:13:24.112457246Z"
+    description: 'Relayfile — virtual filesystem sync for agents. A single Go binary
+      that serves a workspace file-sync API over HTTP, backed by Postgres in production
+      or in-memory for development. '
+    digest: d312e2212cf55eecb07999e9ef978026577b67bfccee7738d71b273a0b6de798
+    home: https://github.com/AgentWorkforce/relayfile
+    keywords:
+    - relayfile
+    - vfs
+    - filesystem
+    - sync
+    - agents
+    - agentworkforce
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relayfile
+    sources:
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relayfile
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relayfile-0.2.1/relayfile-0.2.1.tgz
+    version: 0.2.1
   - annotations:
       agentworkforce.dev/license-scope: First-party chart code only; dependencies
         and images retain their own licenses.
@@ -1923,4 +1980,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/sessions-pipeline-worker-0.6.0/sessions-pipeline-worker-0.6.0.tgz
     version: 0.6.0
-generated: "2026-11-04T08:36:20.365598755Z"
+generated: "2026-11-04T11:13:24.112595182Z"
