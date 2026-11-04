@@ -1175,6 +1175,34 @@ entries:
         and images retain their own licenses.
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
+    appVersion: 12.7.0
+    created: "2026-11-04T01:27:50.516846237Z"
+    description: Portable Relaycast core for self-hosted Agent Relay deployments
+    digest: 676eea6126df0e9a418568453e79d79988d91b863708fec1bdb5458efbe91154
+    home: https://github.com/AgentWorkforce/relaycast
+    keywords:
+    - relaycast
+    - agents
+    - realtime
+    - self-hosted
+    - agentworkforce
+    kubeVersion: '>=1.22.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce/helm-charts
+    name: relaycast
+    sources:
+    - https://github.com/AgentWorkforce/relaycast
+    - https://github.com/AgentWorkforce/helm-charts/tree/main/charts/relaycast
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relaycast-0.3.2/relaycast-0.3.2.tgz
+    version: 0.3.2
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
     appVersion: 12.2.1-selfhost.1
     created: "2026-11-03T19:23:50.423542383Z"
     description: Portable Relaycast core for self-hosted Agent Relay deployments
@@ -1684,4 +1712,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/sessions-pipeline-worker-0.6.0/sessions-pipeline-worker-0.6.0.tgz
     version: 0.6.0
-generated: "2026-11-03T19:23:50.814388037Z"
+generated: "2026-11-04T01:27:50.516976178Z"
