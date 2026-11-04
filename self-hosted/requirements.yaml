@@ -1699,8 +1699,8 @@ entries:
     secrets:
       - name: <operator-chosen, integrations.<provider>.existingSecret>
         keys:
-          - { key: client-id, optional: false }
-          - { key: client-secret, optional: false }
+          - { key: client-id, optional: false, note: "default name; override with integrations.<provider>.clientIdKey" }
+          - { key: client-secret, optional: false, note: "default name; override with integrations.<provider>.clientSecretKey" }
     profiles: [relay-cloud-api]
     status: shipped
     provided_by: operator

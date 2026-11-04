@@ -301,7 +301,7 @@ mounted file (_CLIENT_SECRET_FILE), optional _SCOPES. */ -}}
 {{- $idKey := toString ($app.clientIdKey | default "client-id") }}
 {{- $secretKey := toString ($app.clientSecretKey | default "client-secret") }}
 {{- if eq $idKey $secretKey }}{{ fail (printf "integrations.%s.clientIdKey and clientSecretKey must name different Secret keys" $provider) }}{{ end }}
-{{- /* Never hand the API the migration (owner) credential through an integration reference. */ -}}
-{{- if and (eq (toString $app.existingSecret) (toString $.Values.existingSecret)) (or (eq $idKey (toString $.Values.secretKeys.databaseMigrationsUrl)) (eq $secretKey (toString $.Values.secretKeys.databaseMigrationsUrl))) }}{{ fail (printf "integrations.%s must not read secretKeys.databaseMigrationsUrl from existingSecret: the migration credential never reaches the API pod" $provider) }}{{ end }}
+{{- /* Never hand an API credential (the migration owner credential included) to an integration reference. */ -}}
+{{- if eq (toString $app.existingSecret) (toString $.Values.existingSecret) }}{{- range $name, $key := $.Values.secretKeys }}{{- if and (not (empty $key)) (or (eq $idKey (toString $key)) (eq $secretKey (toString $key))) }}{{ fail (printf "integrations.%s must not reuse secretKeys.%s from existingSecret" $provider $name) }}{{ end }}{{ end }}{{ end }}
 {{- end }}
 {{- end -}}
