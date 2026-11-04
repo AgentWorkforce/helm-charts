@@ -1,7 +1,8 @@
 # CI: runtime.backend=durable-actors, AWS shape: S3 blob store and S3 deployer
 # artifact store on native AWS (no endpoint) with path-style addressing forced.
 # Placeholder identities only (EKS Pod Identity needs no annotations).
-# Asserted by ci/actors-s3/render.sh.
+# ci/actors-s3/render.sh asserts the deploy Job's artifact-store env and the
+# gateway's blob-store env (RELAYFILE_BLOB_STORE, RELAYFILE_S3_REGION).
 runtime:
   backend: durable-actors
   durableActors:

@@ -69,6 +69,11 @@ FILES_ROLE="${ROLE_PREFIX}-files"
 for r in "$CLUSTER_ROLE" "$NODE_ROLE" "$CP_ROLE" "$STORAGE_ROLE" "$DEPLOYER_ROLE" "$FILES_ROLE"; do
   ((${#r} <= 64)) || { echo "IAM role name $r is longer than 64 characters: shorten EKS_ACTORS_NAME" >&2; exit 2; }
 done
+((${#BUCKET} <= 63)) || { echo "bucket name $BUCKET is longer than 63 characters: shorten EKS_ACTORS_NAME" >&2; exit 2; }
+# Every role this script creates carries OWNER_TAG=<NAME>; existing roles are
+# updated or deleted only with that tag. EKS_ACTORS_ADOPT_ROLES=1 adopts (tags)
+# same-named roles made by an older copy of this script that did not tag them.
+OWNER_TAG="agent-relay.dev/eks-actors-proof"
 LAUNCH_TEMPLATE="${NAME}-nodes"
 TAG_KEY="pippen:sandbox"
 TAG_SPEC_TAGS="{Key=${TAG_KEY},Value=true},{Key=Name,Value=${NAME}}"
@@ -86,14 +91,28 @@ trust_service() {
   printf '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"%s"},"Action":%s}]}' "$1" "$2"
 }
 
+# role_owned <role>: true when the role carries OWNER_TAG=$NAME (adopting an
+# untagged one when EKS_ACTORS_ADOPT_ROLES=1).
+role_owned() {
+  local owner
+  owner="$(aws_ iam list-role-tags --role-name "$1" --query "Tags[?Key=='${OWNER_TAG}'].Value | [0]" --output text | none_empty)"
+  [[ "$owner" == "$NAME" ]] && return 0
+  if [[ -z "$owner" && -n "${EKS_ACTORS_ADOPT_ROLES:-}" ]]; then
+    aws_ iam tag-role --role-name "$1" --tags "Key=${OWNER_TAG},Value=${NAME}"
+    log "adopted role $1"; return 0
+  fi
+  return 1
+}
+
 ensure_role() {
   local role="$1" trust="$2"; shift 2
   if ! aws_ iam get-role --role-name "$role" >/dev/null 2>&1; then
     log "create role ${ROLE_PATH}${role}"
     aws_ iam create-role --role-name "$role" --path "$ROLE_PATH" \
-      --permissions-boundary "$BOUNDARY" --tags "Key=${TAG_KEY},Value=true" \
+      --permissions-boundary "$BOUNDARY" --tags "Key=${TAG_KEY},Value=true" "Key=${OWNER_TAG},Value=${NAME}" \
       --assume-role-policy-document "$trust" >/dev/null
   else
+    role_owned "$role" || { echo "role $role exists but is not tagged ${OWNER_TAG}=${NAME}: refusing to change it" >&2; exit 1; }
     aws_ iam update-assume-role-policy --role-name "$role" --policy-document "$trust"
   fi
   local p
@@ -373,6 +392,7 @@ cmd_down() {
   local role p
   for role in "$FILES_ROLE" "$DEPLOYER_ROLE" "$STORAGE_ROLE" "$CP_ROLE" "$NODE_ROLE" "$CLUSTER_ROLE"; do
     aws_ iam get-role --role-name "$role" >/dev/null 2>&1 || continue
+    if ! role_owned "$role"; then log "keep role $role: not tagged ${OWNER_TAG}=${NAME}"; continue; fi
     for p in $(aws_ iam list-role-policies --role-name "$role" --query 'PolicyNames[]' --output text); do
       aws_ iam delete-role-policy --role-name "$role" --policy-name "$p"
     done

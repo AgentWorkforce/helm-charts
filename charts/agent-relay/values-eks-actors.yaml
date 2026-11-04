@@ -6,8 +6,9 @@
 #   helm upgrade --install agent-relay charts/agent-relay -n agent-relay \
 #     -f charts/agent-relay/values-eks-actors.yaml -f <your overrides>
 #
-# To run the actors next to the rest of the suite, set those components back to
-# true in your overrides and configure them (there is no EKS base profile yet).
+# To run the actors next to the rest of the suite, layer it over the core EKS
+# profile (values-eks.yaml, docs/self-hosted-eks.md) and set the other
+# components back to true in your overrides, after this file.
 #
 # It needs a durable-actors control-plane image built from the AgentWorkforce
 # fork (S3 storage, AWS placement and sandbox scheduling; charts/durable-actors
@@ -82,8 +83,9 @@ durable-actors:
     maxStarting: 4
 
 relaycast:
-  # Holds internal-secret, credential-keyring and file-signing-secret
-  # (docs/self-hosted-durable-actors.md); credentials.authority self needs the keyring.
+  # Holds internal-secret, workspace-bootstrap-secret, credential-keyring and
+  # file-signing-secret (docs/self-hosted-durable-actors.md); credentials.authority
+  # self needs the keyring.
   existingSecret: <relaycast Secret, e.g. relaycast-secrets>
   secretKeys:
     credentialKeyring: credential-keyring

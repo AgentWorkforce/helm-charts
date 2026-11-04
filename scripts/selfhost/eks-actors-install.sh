@@ -204,10 +204,16 @@ cmd_install() {
 # durable-actors chart creates (and deletes on uninstall), so it follows install.
 # durable-actors only hands a Secret to actor code when it carries
 # terse.ai/customer-secret=true ("secret is not marked for customer code").
+# Only a Secret this script made (OWNER_LABEL=owned) is ever marked for actor
+# code; a pre-existing one is refused, so nothing foreign reaches the actors.
 cmd_actor_env() {
   if kubectl -n "$SANDBOX_NS" get secret relaycast-actor-env >/dev/null 2>&1; then
+    if [[ "$(kubectl -n "$SANDBOX_NS" get secret relaycast-actor-env -o jsonpath="{.metadata.labels['agent-relay\.dev/eks-actors-proof']}")" != owned ]]; then
+      echo "$SANDBOX_NS/relaycast-actor-env exists but was not created by this script: delete it or label it ${OWNER_LABEL}=owned after checking its keys" >&2
+      exit 1
+    fi
     kubectl -n "$SANDBOX_NS" label secret relaycast-actor-env terse.ai/customer-secret=true --overwrite >/dev/null
-    log "relaycast-actor-env exists (labelled terse.ai/customer-secret=true)"; return
+    log "relaycast-actor-env exists (owned; labelled terse.ai/customer-secret=true)"; return
   fi
   local dir; dir="$(mktemp -d)"; chmod 700 "$dir"
   ( umask 077
@@ -221,7 +227,7 @@ cmd_actor_env() {
     --from-file=RELAYCAST_FILE_SIGNING_SECRET="$dir/RELAYCAST_FILE_SIGNING_SECRET" \
     --from-file=RELAYCAST_INTERNAL_SECRET="$dir/RELAYCAST_INTERNAL_SECRET"
   rm -rf "$dir"
-  kubectl -n "$SANDBOX_NS" label secret relaycast-actor-env terse.ai/customer-secret=true --overwrite >/dev/null
+  kubectl -n "$SANDBOX_NS" label secret relaycast-actor-env terse.ai/customer-secret=true "${OWNER_LABEL}=owned" --overwrite >/dev/null
 }
 
 cmd_status() {

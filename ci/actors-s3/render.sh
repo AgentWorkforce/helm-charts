@@ -34,15 +34,22 @@ expect "relayfile deployer" "$rf" "DURABLE_ACTORS_S3_FORCE_PATH_STYLE=true"
 # GCS deployers stay free of S3 variables (the deployer rejects them).
 for c in relaycast relayfile; do
   g=$(job_env "$c" durable-actors-values.yaml)
-  absent "$c gcs deployer" "$g" "DURABLE_ACTORS_ARTIFACT_STORE"
-  absent "$c gcs deployer" "$g" "DURABLE_ACTORS_S3_FORCE_PATH_STYLE"
+  for name in DURABLE_ACTORS_ARTIFACT_STORE DURABLE_ACTORS_S3_REGION DURABLE_ACTORS_S3_ENDPOINT DURABLE_ACTORS_S3_FORCE_PATH_STYLE; do
+    absent "$c gcs deployer" "$g" "$name"
+  done
 done
 
 # Control plane on S3 (charts/durable-actors/ci/eks-values.yaml).
 cp=$(helm template ci "$ROOT/charts/durable-actors" --namespace ci -f "$ROOT/charts/durable-actors/ci/eks-values.yaml" \
   | yq -r 'select(.kind == "Deployment") | .spec.template.spec.containers[].env[] | select(has("value")) | .name + "=" + (.value | tostring)')
 expect "durable-actors control plane" "$cp" "DURABLE_ACTORS_STORAGE_PROVIDER=s3"
-grep -q "^DURABLE_ACTORS_S3_FORCE_PATH_STYLE=" <<<"$cp" || err "durable-actors control plane: DURABLE_ACTORS_S3_FORCE_PATH_STYLE missing"
+expect "durable-actors control plane" "$cp" "DURABLE_ACTORS_S3_FORCE_PATH_STYLE=false"
+
+# Relayfile gateway blob store on S3 (Deployment env of the same fixture).
+gw=$(helm template ci "$ROOT/charts/relayfile" --namespace ci -f "$ROOT/charts/relayfile/ci/durable-actors-s3-values.yaml" \
+  | yq -r 'select(.kind == "Deployment") | .spec.template.spec.containers[].env[] | select(has("value")) | .name + "=" + (.value | tostring)')
+expect "relayfile gateway" "$gw" "RELAYFILE_BLOB_STORE=s3"
+expect "relayfile gateway" "$gw" "RELAYFILE_S3_REGION=us-west-2"
 
 [ "$fail" = 0 ] && echo "actors S3 render assertions: OK"
 exit "$fail"
