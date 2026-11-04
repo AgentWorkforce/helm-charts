@@ -23,6 +23,14 @@ runtime:
   apiBasePath: /cloud/api
   loginPath: /login
 
+# Optional enterprise branding: one customer profile, rendered as JSON into
+# DASHBOARD_CUSTOMER_PROFILE and served in /runtime-config.js (no rebuild).
+# Empty keeps the Agent Relay look. Fields (all optional): productName, title,
+# logo ({light, dark} or one URL), favicon, accentColor, brandColor,
+# supportUrl, poweredByAgentRelay (default true under a custom brand).
+# See the README "Customer profile" section.
+customerProfile: {}
+
 # A leaf Ingress can proxy /cloud/api to this Service. The GKE proof uses the
 # umbrella Ingress instead and leaves this ingress disabled. Required when
 # ingress.enabled=true: the relay-cloud-api Service name in this namespace,

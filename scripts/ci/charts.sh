@@ -372,6 +372,16 @@ for chart in "${charts[@]}"; do
           || err "$chart: writable dashboard content must be prepared by the hardened init container"
         [ "$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].volumeMounts[] | select(.mountPath == "/usr/share/nginx/html") | .name' <<<"$out")" = html ] \
           || err "$chart: runtime-config.js cannot be written with a read-only root filesystem"
+        ! yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[].name' <<<"$out" | grep -qx DASHBOARD_CUSTOMER_PROFILE \
+          || err "$chart: no customerProfile must render no DASHBOARD_CUSTOMER_PROFILE (default branding)"
+        expect_render_failure "$chart" "$v" "non-map customer profile" "customerProfile must be a map" --set customerProfile=Acme
+        expect_render_failure "$chart" "$v" "false customer profile" "customerProfile must be a map" --set customerProfile=false
+        expect_render_failure "$chart" "$v" "list customer profile" "customerProfile must be a map" --set-json 'customerProfile=[]'
+        expect_render_failure "$chart" "$v" "empty-string customer profile" "customerProfile must be a map" --set-string 'customerProfile='
+        brand=$(render "$chart" charts/relay-dashboard/ci/branding.profile.yaml)
+        profile=$(yq 'select(.kind == "Deployment") | .spec.template.spec.containers[0].env[] | select(.name == "DASHBOARD_CUSTOMER_PROFILE") | .value' <<<"$brand")
+        [ "$(jq -r '.productName + " " + .logo.dark + " " + (.poweredByAgentRelay | tostring)' <<<"$profile")" = "Acme Relay https://acme.example/brand/logo-on-dark.svg true" ] \
+          || err "$chart: customerProfile must render as one JSON object in DASHBOARD_CUSTOMER_PROFILE"
         ;;
       relay-cloud-api)
         v=charts/relay-cloud-api/ci/default-values.yaml
