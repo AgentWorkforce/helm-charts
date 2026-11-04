@@ -11,7 +11,7 @@
 {{- if and $components.relayauth (index ((.Values.relayauth | default dict).jwksIngress | default dict) "enabled" | default false) }}{{ fail "gkeIngress requires relayauth.jwksIngress.enabled=false" }}{{ end -}}
 {{- $apiBasePath := dig "runtime" "apiBasePath" "" $dashboard -}}
 {{- if and $apiBasePath (ne $apiBasePath "/cloud/api") }}{{ fail "gkeIngress routes /cloud/api to relay-cloud-api; relay-dashboard.runtime.apiBasePath must be /cloud/api" }}{{ end -}}
-{{- with dig "dashboardUrl" "" $cloudApi }}{{ $rootHost := dig "hosts" "root" "" $gke }}{{ $single := dig "singleHost" "host" "" ($.Values.global | default dict) }}{{ $want := $single | default $rootHost }}{{ if and $want (ne (urlParse (toString .)).host $want) }}{{ fail (printf "relay-cloud-api.dashboardUrl must be on the dashboard host https://%s/ (sign-in, OAuth and invite links land there)" $want) }}{{ end }}{{ end -}}
+{{- with dig "dashboardUrl" "" $cloudApi }}{{ $rootHost := dig "hosts" "root" "" $gke }}{{ $single := dig "singleHost" "host" "" ($.Values.global | default dict) }}{{ $want := $single | default $rootHost }}{{ if and $want (ne (trimSuffix ":443" (urlParse (toString .)).host) $want) }}{{ fail (printf "relay-cloud-api.dashboardUrl must be on the dashboard host https://%s/ (sign-in, OAuth and invite links land there)" $want) }}{{ end }}{{ end -}}
 {{- $loginPath := dig "runtime" "loginPath" "" $dashboard -}}
 {{- if and $loginPath (ne $loginPath "/login") }}{{ fail "gkeIngress routes /login to relay-cloud-api; relay-dashboard.runtime.loginPath must be /login" }}{{ end -}}
 {{- $policyBackends := dict "relaycast" $relaycast "relayhistory" $relayhistory "relay-cloud-api" $cloudApi "relay-dashboard" $dashboard -}}

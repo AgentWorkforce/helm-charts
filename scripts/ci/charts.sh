@@ -491,6 +491,7 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "missing API image" "image.digest is required" --set relay-cloud-api.image.digest=
         expect_render_failure "$chart" "$v" "missing dashboard image" "image.digest is required" --set relay-dashboard.image.digest=
         expect_render_failure "$chart" "$v" "dashboardUrl off the root host" "relay-cloud-api.dashboardUrl must be on the dashboard host" --set relay-cloud-api.dashboardUrl=https://elsewhere.agentrelay.com/
+        [ -n "$(render "$chart" "$v" --set relay-cloud-api.dashboardUrl=https://gcp-proof.agentrelay.com:443/)" ] || err "$chart: dashboardUrl with an explicit :443 on the root host must render"
         expect_render_failure "$chart" "$v" "ar_ authority without relayauth" "relaycast.credentials.authority=relayauth requires components.relayauth=true" --set components.relayauth=false --set relaycast.credentials.format=ar --set relaycast.credentials.authority=relayauth --set relaycast.credentials.relayauth.url=http://relayauth:8787 --set relaycast.secretKeys.relayauthToken=relaycast-relayauth-token
         ;;
     esac
