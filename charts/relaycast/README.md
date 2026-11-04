@@ -8,8 +8,12 @@ a reachable RelayAuth deployment.
 
 The self-host runtime is a single Node process backed by SQLite and a local
 uploaded-file store, both on one persistent volume. The chart therefore allows
-exactly one replica and upgrades with `Recreate`. `runtime.backend` is fixed to
-`sqlite`, and the chart refuses names of backends that are not implemented.
+exactly one replica and upgrades with `Recreate`. That is `runtime.backend:
+sqlite`, the default. `runtime.backend: durable-actors` (experimental, a
+fresh-install backend) runs a stateless gateway in front of one TerseAI
+durable-actors `Workspace` actor per workspace; its contract is in
+[docs/self-hosted-durable-actors.md](../../docs/self-hosted-durable-actors.md).
+The chart refuses names of backends that are not implemented.
 
 ## Defaults
 
@@ -109,6 +113,51 @@ credentials:
 secretKeys:
   relayauthToken: relaycast-relayauth-token   # key in existingSecret
 ```
+
+## Keyed workspace creates on durable-actors
+
+With `runtime.backend: durable-actors`, a keyed workspace create
+(`Idempotency-Key`) needs the workspace bootstrap secret on the gateway **and**
+on every actor, with the same bytes. Without it, keyed creates answer 503
+`workspace_create_idempotency_unavailable`; unkeyed creates are unaffected.
+Requires gateway and deployer images from relaycast PR #622 or later.
+
+```yaml
+secretKeys:
+  # existingSecret key; becomes RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET on the gateway
+  workspaceBootstrapSecret: relaycast-actors-workspace-bootstrap-secret
+# RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED ("true"/"false"; default false)
+bootstrapProofRequired: false
+```
+
+The chart cannot write or read the actor env Secret (`runtime.durableActors.actorEnvSecrets`,
+for example `relaycast-actor-env` in the durable-actors sandbox namespace), so you
+must put the same values there yourself:
+
+```bash
+v=$(openssl rand -base64 48 | tr -d '\n')   # 64 characters, no trailing newline
+kubectl -n "$NS" patch secret relaycast-secrets --type merge \
+  -p "{\"stringData\":{\"relaycast-actors-workspace-bootstrap-secret\":\"$v\"}}"
+kubectl -n "$NS-$RELEASE" patch secret relaycast-actor-env --type merge \
+  -p "{\"stringData\":{\"RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET\":\"$v\",\"RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED\":\"false\"}}"
+unset v
+```
+
+Actors read their env when they start, so update the actor Secret first, then
+upgrade (a new deployer Job re-registers the bundle). Keep the secret stable:
+changing it re-derives every keyed workspace id.
+
+`bootstrapProofRequired: true` makes an anonymous keyed `POST /v1/workspaces`
+send `X-Workspace-Bootstrap-Secret`; the gateway refuses a missing or wrong
+proof with 401 `workspace_create_bootstrap_secret_invalid` before any actor
+call. It only matters with `publicWorkspaceCreate: true` (never behind an
+edge, which denies `/v1/workspaces`). Unkeyed creates and keyed
+`POST /internal/workspaces` never ask for proof. Known edge: a weak key (fewer
+than 32 characters) sent with a missing or wrong proof gets 401, not 400
+`key_too_weak`, because the proof is checked first.
+
+The full request/answer table is in
+[docs/self-hosted-durable-actors.md](../../docs/self-hosted-durable-actors.md#workspace-bootstrap-secret-actor-mode).
 
 ## Public ingress
 

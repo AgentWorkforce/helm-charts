@@ -291,9 +291,16 @@ compatibility:
       images_note: not built for the charts yet
       notes: 'Follow-up re-pin to sessions-pipeline main after #127 (session briefs, generation 5ed11913...). Needs new GHCR/ECR digests, ci/sessions-pipeline-search-worker-role/services-commit and services-generation, and the session-brief entries below shipped.'
       db_combos: []
+    - id: relaycast-0.3.4
+      status: unreleased
+      current: true
+      charts: { relaycast: 0.3.4 }
+      app_versions: { relaycast: 12.7.0 }
+      images:
+        relaycast: { repository: ghcr.io/agentworkforce/relaycast-self-host, digest: sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e }
+      notes: 'Not tagged. runtime.backend=durable-actors wires the workspace bootstrap secret (secretKeys.workspaceBootstrapSecret, RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET as env) and bootstrapProofRequired (RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED, always rendered on the gateway) for keyed workspace creates; needs relaycast-actors-gateway and deployer images from relaycast PR #622 or later, and the same values in the actor env Secret. The SQLite render and its default image are unchanged from 0.3.3 apart from the chart label.'
     - id: relaycast-0.3.3
       status: shipped
-      current: true
       charts: { relaycast: 0.3.3 }
       app_versions: { relaycast: 12.7.0 }
       images:
@@ -364,9 +371,20 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.3.9
+    - id: agent-relay-0.3.10
       status: unreleased
       current: true
+      charts: { agent-relay: 0.3.10, relayhistory: 0.1.1, relay-cloud-api: 0.2.4, relay-dashboard: 0.1.3 }
+      app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
+      depends:
+        agent-relay: { relaycast: 0.3.4, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.4, relay-dashboard: 0.1.3, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+      images:
+        relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
+        relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
+        relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
+      notes: 'Not tagged. Depends on relaycast 0.3.4 (actor-mode workspace bootstrap secret and proof policy, relaycast PR #622). Proof overlay only: values-gcp-proof-durable-actors.yaml sets relaycast.secretKeys.workspaceBootstrapSecret and bootstrapProofRequired: true and pins relaycast-actors-gateway sha256:026e8c1b1e78b2946c53871e8e5701e0cac9b6121c2b4124cd376ceece33cb45 and relaycast-actors-deployer sha256:9b9fee183167a169370c20950caf63824417b8064ea7e1ef4bd00026ab5fd106 (relaycast main 46281074). The customer profile (values-gcp.yaml), its images and every other template are unchanged from 0.3.9.'
+    - id: agent-relay-0.3.9
+      status: shipped
       charts: { agent-relay: 0.3.9, relayhistory: 0.1.1, relay-cloud-api: 0.2.4, relay-dashboard: 0.1.3 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
@@ -482,7 +500,7 @@ internal_env:
   - { name: RELAYCAST_DB_PATH, chart: relaycast, why: fixed /data/relaycast.db on the data PVC }
   - { name: RELAYCAST_ENV, chart: relaycast, why: reserved name in the extraEnv guard; the environment is passed as --env (server.environment) }
   - { name: RELAYCAST_INTERNAL_SECRET, chart: relaycast, why: reserved prefix in the extraEnv guard; the Secret is mounted as a file }
-  - { name: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET, chart: relaycast, why: reserved prefix in the extraEnv guard; the Secret is mounted as a file }
+  - { name: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET, chart: relaycast, why: "reserved prefix in the extraEnv guard; sqlite mounts the Secret as a file, durable-actors passes secretKeys.workspaceBootstrapSecret as this env var (req.relaycast.durable-actors-secrets)" }
   - { name: RELAYCAST_RELAYAUTH, chart: relaycast, why: reserved prefix in the extraEnv guard; the RelayAuth remote tagger is wired through credentials.relayauth.url and secretKeys.relayauthToken }
   - { name: RELAYCAST_CREDENTIAL, chart: relaycast, why: reserved prefix in the extraEnv guard; the credential format and local keyring are wired through credentials.* and secretKeys.credentialKeyring }
   - { name: BACKUP_KEEP, chart: relaycast, why: backup CronJob; from backup.keep }
@@ -2300,7 +2318,7 @@ entries:
   - id: opt.relaycast.workspace-create
     kind: option
     title: Anonymous workspace creation
-    description: Off by default; workspaces are created through the internal admin API. Refused with ingress. bootstrapProofRequired demands bootstrap-secret proof for anonymous keyed creates.
+    description: Off by default; workspaces are created through the internal admin API. Refused with ingress. bootstrapProofRequired demands bootstrap-secret proof for anonymous keyed creates (with runtime.backend=durable-actors it also requires secretKeys.workspaceBootstrapSecret, and the actor env Secret must carry the same RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED).
     chart: relaycast
     values: [publicWorkspaceCreate, bootstrapProofRequired]
     env: [RELAYCAST_PUBLIC_WORKSPACE_CREATE, RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED]
@@ -3023,8 +3041,8 @@ entries:
       SANDBOX namespace, labelled terse.ai/customer-secret=true, and are passed as
       DURABLE_ACTORS_SECRET_REFS. devRuntime.secretKey is the dev sidecar's key.
     chart: relaycast
-    values: [runtime.durableActors.fileSigningSecretKey, runtime.durableActors.invocationSecret.*, runtime.durableActors.adminKeySecret.*, runtime.durableActors.actorEnvSecrets, runtime.durableActors.devRuntime.secretKey, runtime.durableActors.deployer.*]
-    env: [DURABLE_ACTORS_SECRET, RELAYCAST_FILE_SIGNING_SECRET, DURABLE_ACTORS_ARTIFACT_BUCKET, DURABLE_ACTORS_SECRET_REFS, DURABLE_ACTORS_ORGANIZATION_ID]
+    values: [runtime.durableActors.fileSigningSecretKey, runtime.durableActors.invocationSecret.*, runtime.durableActors.adminKeySecret.*, runtime.durableActors.actorEnvSecrets, runtime.durableActors.devRuntime.secretKey, runtime.durableActors.deployer.*, secretKeys.workspaceBootstrapSecret]
+    env: [DURABLE_ACTORS_SECRET, RELAYCAST_FILE_SIGNING_SECRET, DURABLE_ACTORS_ARTIFACT_BUCKET, DURABLE_ACTORS_SECRET_REFS, DURABLE_ACTORS_ORGANIZATION_ID, RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET]
     profiles: [relaycast-durable-actors]
     status: shipped
     provided_by: operator
@@ -3034,6 +3052,7 @@ entries:
         keys:
           - { key: file-signing-secret, key_path: runtime.durableActors.fileSigningSecretKey }
           - { key: credential-keyring, key_path: secretKeys.credentialKeyring }
+          - { key: "<operator-chosen, no default>", key_path: secretKeys.workspaceBootstrapSecret, optional: "keyed workspace creates (Idempotency-Key); RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET on the gateway, the same bytes as the actor env Secret's" }
       - name: "<runtime.durableActors.invocationSecret.name>"
         keys:
           - { key: durable-actors-invoke-key, key_path: runtime.durableActors.invocationSecret.key }
@@ -3046,11 +3065,13 @@ entries:
           - { key: RELAYCAST_PUBLIC_URL }
           - { key: RELAYCAST_FILE_SIGNING_SECRET }
           - { key: RELAYCAST_INTERNAL_SECRET }
+          - { key: RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET, optional: "with secretKeys.workspaceBootstrapSecret: the same bytes as that key" }
+          - { key: RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED, optional: "true or false; equal to bootstrapProofRequired" }
         note: label terse.ai/customer-secret=true; keys become actor env
       - name: "<existingSecret, devRuntime only>"
         keys:
           - { key: durable-actors-dev-secret, key_path: runtime.durableActors.devRuntime.secretKey }
-    verify: helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes
+    verify: helm template fails with "invocationSecret must not be the admin key Secret" or "actorEnvSecrets is required" on miswiring; the deploy Job completes; with secretKeys.workspaceBootstrapSecret, a keyed POST /internal/workspaces answers 201 and its replay 200 with the same workspace
     sources:
       - "charts/relaycast/templates/_actors.tpl:78"
       - "charts/relaycast/templates/_actors.tpl:206"
