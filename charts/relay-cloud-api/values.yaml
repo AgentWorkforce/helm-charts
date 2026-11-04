@@ -9,8 +9,15 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-# Public origin of the minimal API, normally the api. host.
+# Public origin of the minimal API, normally the api. host. Leave it empty in
+# single-host mode: it is derived as https://<global.singleHost.host>.
 publicUrl: ""
+# Single-host mode, normally set once on the agent-relay umbrella: the API is
+# served on this host under /cloud/api, /login and /api next to the dashboard,
+# publicUrl is derived from it, and the leaf ingress must stay disabled.
+global:
+  singleHost:
+    host: ""
 existingSecret: ""
 secretKeys:
   databaseUrl: database-url

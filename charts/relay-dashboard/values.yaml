@@ -15,7 +15,8 @@ service:
   port: 8080
   annotations: {}
 
-# Runtime configuration consumed by the dashboard container.
+# Runtime configuration consumed by the dashboard container. Leave publicUrl
+# empty in single-host mode: it is derived as https://<global.singleHost.host>.
 runtime:
   publicUrl: ""
   appPath: /
@@ -34,6 +35,7 @@ ingress:
   enabled: false
   className: ""
   annotations: {}
+  # Derived from global.singleHost.host in single-host mode.
   host: ""
   tls: []
   externalTls: false
@@ -84,3 +86,11 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 topologySpreadConstraints: []
+
+# Single-host mode, normally set once on the agent-relay umbrella: the
+# dashboard and the control API share this host. runtime.publicUrl and
+# ingress.host are derived from it, and the leaf Ingress also routes /api to
+# the API (next to apiBasePath and loginPath).
+global:
+  singleHost:
+    host: ""

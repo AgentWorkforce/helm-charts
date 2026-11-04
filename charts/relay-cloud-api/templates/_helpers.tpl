@@ -30,6 +30,23 @@ app.kubernetes.io/component: api
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) }}{{ fail "image.digest must be sha256:<64 lowercase hex characters>" }}{{ end -}}
 {{- printf "%s@%s" .Values.image.repository $digest -}}
 {{- end -}}
+{{- /* Single-host mode (global.singleHost.host, set once on the agent-relay
+umbrella): the API is served on that host under /cloud/api, /login and /api
+next to the dashboard, so publicUrl is https://<host> and is derived instead
+of set a second time. Desktop and the CLI log in against that same origin. */ -}}
+{{- define "relay-cloud-api.singleHost" -}}{{ dig "singleHost" "host" "" (.Values.global | default dict) }}{{- end -}}
+{{- define "relay-cloud-api.publicUrl" -}}
+{{- $single := include "relay-cloud-api.singleHost" . -}}
+{{- if $single }}{{ printf "https://%s" $single }}{{ else }}{{ .Values.publicUrl }}{{ end -}}
+{{- end -}}
+{{- define "relay-cloud-api.validateSingleHost" -}}
+{{- $single := include "relay-cloud-api.singleHost" . -}}
+{{- if $single }}
+{{- if or (gt (len $single) 253) (regexMatch "(^|\\.)[0-9]+$" $single) (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$" $single)) }}{{ fail "global.singleHost.host must be a lowercase DNS hostname (no scheme, port or path; labels of 1-63 characters that start and end with a letter or digit, not an IP address)" }}{{ end -}}
+{{- if and .Values.publicUrl (ne (trimSuffix "/" .Values.publicUrl) (printf "https://%s" $single)) }}{{ fail (printf "publicUrl is derived from global.singleHost.host (https://%s); leave publicUrl empty" $single) }}{{ end -}}
+{{- if .Values.ingress.enabled }}{{ fail "global.singleHost.host serves the API through the dashboard host's routes (/cloud/api, /login, /api); set ingress.enabled=false (relay-dashboard.ingress or the agent-relay gkeIngress routes it)" }}{{ end -}}
+{{- end -}}
+{{- end -}}
 {{- define "relay-cloud-api.validate" -}}
 {{- $image := include "relay-cloud-api.image" . -}}
 {{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the self-host API pilot has process-local login/device rate limits and is not HA" }}{{ end -}}
@@ -45,7 +62,8 @@ settings. */ -}}
 {{- range $name := keys .Values.secretKeys | sortAlpha }}{{ $key := toString (index $.Values.secretKeys $name) }}{{ if empty $key }}{{ continue }}{{ end }}{{ if hasKey $seenSecretKeys $key }}{{ fail (printf "secretKeys.%s and secretKeys.%s both name Secret key %q: every secretKeys value must be distinct (a collision with databaseMigrationsUrl would mount the migration credential into the API pod)" (get $seenSecretKeys $key) $name $key) }}{{ end }}{{ $_ := set $seenSecretKeys $key $name }}{{ end -}}
 {{- include "relay-cloud-api.validateRuntime" . -}}
 {{- if and .Values.migrations.enabled (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name when migrations are enabled" }}{{ end -}}
-{{- if not (regexMatch "^https://[^/?#]+$" .Values.publicUrl) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
+{{- include "relay-cloud-api.validateSingleHost" . -}}
+{{- if not (regexMatch "^https://[^/?#]+$" (include "relay-cloud-api.publicUrl" .)) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $url := dict "relayauthUrl" .Values.services.relayauthUrl "relaycastUrl" .Values.services.relaycastUrl "relayhistoryUrl" .Values.services.relayhistoryUrl }}{{ if not (regexMatch "^https?://[^/?#]+$" $url) }}{{ fail (printf "services.%s must be an HTTP(S) origin with no path" $name) }}{{ end }}{{ end -}}
 {{- $publicOriginPattern := "^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(:[0-9]{1,5})?$" -}}
 {{- range $name, $url := dict "relaycastPublicUrl" .Values.services.relaycastPublicUrl "relayhistoryPublicUrl" .Values.services.relayhistoryPublicUrl -}}
@@ -57,7 +75,7 @@ settings. */ -}}
 {{- range .Values.networkPolicy.additionalEgress }}{{ if empty .to }}{{ fail "every networkPolicy.additionalEgress rule needs a non-empty to (an empty to matches every destination; use ipBlock 0.0.0.0/0 to allow any destination explicitly)" }}{{ end }}{{ end -}}
 {{- range $key, $_ := include "relay-cloud-api.selectorLabels" . | fromYaml }}{{ if hasKey ($.Values.podLabels | default dict) $key }}{{ fail (printf "podLabels must not set selector label %s: the Deployment selector would no longer match its pods" $key) }}{{ end }}{{ end -}}
 {{- if ne .Values.service.type "ClusterIP" }}{{ fail "service.type must be ClusterIP" }}{{ end -}}
-{{- if .Values.ingress.enabled }}{{ if empty .Values.ingress.hosts }}{{ fail "ingress.enabled=true requires at least one host" }}{{ end }}{{ if not (has (urlParse .Values.publicUrl).hostname .Values.ingress.hosts) }}{{ fail "ingress.hosts must include the publicUrl host" }}{{ end }}{{ if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end }}{{ if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end }}{{ end -}}
+{{- if .Values.ingress.enabled }}{{ if empty .Values.ingress.hosts }}{{ fail "ingress.enabled=true requires at least one host" }}{{ end }}{{ if not (has (urlParse (include "relay-cloud-api.publicUrl" .)).hostname .Values.ingress.hosts) }}{{ fail "ingress.hosts must include the publicUrl host" }}{{ end }}{{ if and (not .Values.ingress.externalTls) (empty .Values.ingress.tls) }}{{ fail "ingress.enabled=true requires ingress.tls unless externalTls=true" }}{{ end }}{{ if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.ingressFrom) }}{{ fail "ingress with networkPolicy requires networkPolicy.ingressFrom" }}{{ end }}{{ end -}}
 {{- end -}}
 {{- /* Secret files mounted into the API pod: env name -> Secret data key.
 Optional keys are left out while empty. */ -}}
