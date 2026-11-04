@@ -64,3 +64,12 @@ relay-dashboard:
     # Proof build of AgentWorkforce/relay-dashboard 53d484b
     # (selfhost/device-approval; the self-host build served at /). Proof-only.
     digest: sha256:23361e08b899f272ed5debcbd4e7d6c6555591029357d6fba6c54236063bca62
+  # The proof's custom Agent Relay Desktop build (AGENT_RELAY_SITE_URL=
+  # https://gcp-proof.agentrelay.com, AGENT_RELAY_URL_SCHEME=agentrelay-gcpproof)
+  # refuses links for any other scheme or site. Settings > Workspace builds its
+  # connect link from this (relay-dashboard #88; chart relay-dashboard >= 0.1.2,
+  # agent-relay >= 0.3.6, renders customerProfile, older charts ignore it).
+  customerProfile:
+    desktop:
+      urlScheme: agentrelay-gcpproof
+      siteUrl: https://gcp-proof.agentrelay.com

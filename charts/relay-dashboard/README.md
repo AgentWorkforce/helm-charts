@@ -47,6 +47,7 @@ images ignore the value.
 | `customerProfile.brandColor` | Solid primary button color. |
 | `customerProfile.supportUrl` | Support link in the account menu and on the device page (`https://…` or `mailto:`). |
 | `customerProfile.poweredByAgentRelay` | `false` hides the "Powered by Agent Relay" line shown under a custom brand. |
+| `customerProfile.desktop.urlScheme` / `.siteUrl` | Agent Relay Desktop deep links: the URL scheme and site of the Desktop build for this deployment. Settings shows a "Connect your agents" link (`<urlScheme>://connect?site=<siteUrl>&…`). Needs a dashboard image from relay-dashboard #88 or later. Not branding: on its own it changes nothing else. |
 
 URLs may be `https`/`http`, same-origin paths or `data:image/…`. Example
 customer values:

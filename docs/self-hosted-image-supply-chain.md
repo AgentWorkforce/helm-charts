@@ -1,6 +1,6 @@
 # Self-hosted customer image and source inventory
 
-Status: **blocked for customer release** (agent-relay 0.3.6, audited
+Status: **blocked for customer release** (agent-relay 0.3.7, audited
 2026-11-03; images unchanged since 0.3.3).
 
 The machine-readable source of this audit is

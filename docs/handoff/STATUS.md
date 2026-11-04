@@ -1,9 +1,11 @@
 # Release status: what is proven and what is preview
 
-Release: `agent-relay` chart 0.3.6, 2026-11-04. **Pending publication**: it
-will be published to `oci://ghcr.io/agentworkforce/charts/agent-relay` version
-0.3.6 by the `agent-relay-0.3.6` tag's release workflow
-(`release-agent-relay.yml`), and is not available until that run succeeds.
+Release: `agent-relay` chart 0.3.7, 2026-11-04, a GKE proof-overlay patch of
+0.3.6 (Desktop deep-link settings for the proof; nothing else changes). It is
+not tagged yet; 0.3.6 is the latest published version (below). 0.3.6 was
+published from the `agent-relay-0.3.6` tag by `release-agent-relay.yml`
+([run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329),
+with a GitHub build-provenance attestation; pullable anonymously).
 0.3.6 adds opt-in single-host mode and the optional dashboard
 `customerProfile` (enterprise branding, relay-dashboard chart 0.1.2); 0.3.5
 was never tagged. A default render and the customer image matrix are
@@ -12,14 +14,15 @@ the pinned customer dashboard digest, which predates it and ignores
 `customerProfile`; it needs a dashboard image built from relay-dashboard
 `8eac2bd` or later to be published and pinned.
 
-Published versions of the umbrella chart:
+Versions of the umbrella chart (published, plus the untagged candidate):
 
 | Version | Tag | Notes |
 |---|---|---|
 | 0.3.1 | `agent-relay-0.3.1` | First published version. Relaycast `a05732ad…` (no SBOM, min-mode provenance). |
 | 0.3.3 | `agent-relay-0.3.3` | Pins the attested Relaycast image `81274dca…` (engine 12.7.0) and the GKE proof-overlay refresh. 0.3.2 was never tagged. |
 | 0.3.4 | `agent-relay-0.3.4` | Documentation patch of 0.3.3 (Relaycast `ar_` credentials guidance). Published by [run 41754926487](https://github.com/AgentWorkforce/helm-charts/actions/runs/41754926487). |
-| 0.3.6 | `agent-relay-0.3.6` (to be pushed) | Opt-in single-host mode and optional dashboard `customerProfile` branding (relay-dashboard 0.1.2); 0.3.5 was never tagged. Pending publication; not pullable until the tag's release run succeeds. |
+| 0.3.6 | `agent-relay-0.3.6` | Opt-in single-host mode and optional dashboard `customerProfile` branding (relay-dashboard 0.1.2); 0.3.5 was never tagged. Published by [run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329). |
+| 0.3.7 | not tagged yet | GKE proof-overlay patch of 0.3.6 (Desktop deep links). |
 
 This release is for **review by a company evaluating a self-hosted Agent Relay
 on GCP**. It is a reviewable `portable-single` release that pins every
@@ -65,7 +68,7 @@ These gate items are open. None of them is claimed.
   `docs/operations/capacity-and-load-test.md` have not run. Alerts, dashboards
   and runbooks evidence are not produced. No SLO or capacity claim is made.
 - **Version compatibility** (server N and N-1 x Desktop current and previous): not
-  run (server N is 0.3.6, N-1 is 0.3.4).
+  run (server N is 0.3.7, N-1 is 0.3.6).
 - **Desktop**: the custom-origin Desktop (self-hosted sign-in) passes CI on
   macOS arm64/x64, Linux x64/arm64 and Windows (relay-desktop CI run
   41606660810), but it is not merged or released yet.
