@@ -39,8 +39,8 @@ publicly. We do not run a paid bug bounty.
 
 ## Supported versions
 
-Fixes ship in the next chart release. We do not backport fixes to older chart
-versions; upgrade to the latest release to receive them.
+Fixes ship in the next release of the affected chart. We do not backport fixes
+to older versions of that chart; upgrade to its latest release to receive them.
 
 ## Scope
 

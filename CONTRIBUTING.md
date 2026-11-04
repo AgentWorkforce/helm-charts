@@ -35,7 +35,7 @@ chart's `version` in `Chart.yaml` when you change it.
 - Describe what changed and why, and how you tested it.
 - Never commit secrets, credentials, real customer data or production
   identifiers, including in tests and fixtures. Use obviously fake values.
-- Pull request CI runs without repository secrets, including on forks. One
+- Fork pull request CI runs without repository secrets. One
   check, `search-worker-role-kind`, needs a repository secret: on a fork pull
   request that touches the Sessions Pipeline charts it fails rather than skips,
   and a maintainer re-runs it from a branch in this repository before merge.
