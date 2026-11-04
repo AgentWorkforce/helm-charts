@@ -53,26 +53,30 @@ aws_() { aws --region "$REGION" "$@"; }
 
 # cert_arn: an existing certificate this proof owns: tagged pippen:sandbox=true
 # and covering every proof host. Anything else is never adopted (nor deleted).
+# Prints nothing and succeeds only when a completed search found no match; an
+# AWS lookup failure returns non-zero, so callers never request a duplicate.
 cert_arn() {
-  local arn names tag h ok
-  for arn in $(aws_ acm list-certificates --certificate-statuses PENDING_VALIDATION ISSUED \
-      --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn" --output text); do
+  local arns arn names tag h ok
+  arns="$(aws_ acm list-certificates --certificate-statuses PENDING_VALIDATION ISSUED \
+    --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn" --output text)" || return 1
+  for arn in $arns; do
     tag="$(aws_ acm list-tags-for-certificate --certificate-arn "$arn" \
-      --query "Tags[?Key=='${TAG_KEY}'].Value | [0]" --output text 2>/dev/null)"
+      --query "Tags[?Key=='${TAG_KEY}'].Value | [0]" --output text)" || return 1
     [[ "$tag" == true ]] || continue
-    names=",$(aws_ acm describe-certificate --certificate-arn "$arn" \
-      --query 'join(`,`, Certificate.SubjectAlternativeNames)' --output text),"
+    names="$(aws_ acm describe-certificate --certificate-arn "$arn" \
+      --query 'join(`,`, Certificate.SubjectAlternativeNames)' --output text)" || return 1
+    names=",${names},"
     ok=true
     for h in "${HOSTS[@]}"; do [[ "$names" == *",$h,"* ]] || ok=false; done
     $ok && { echo "$arn"; return 0; }
   done
-  # None found: empty output, success (callers assign it under set -e).
+  # None found: empty output, success.
   return 0
 }
 
 cmd_cert_request() {
   local arn out=""
-  arn="$(cert_arn)"
+  arn="$(cert_arn)" || { log "ACM certificate lookup failed; not requesting a new one"; exit 1; }
   if [[ -z "$arn" ]]; then
     log "request ACM certificate for ${HOSTS[*]}"
     arn="$(aws_ acm request-certificate --domain-name "$DOMAIN" \
@@ -120,7 +124,7 @@ cmd_alb() {
 
 cmd_cert_delete() {
   local arn
-  arn="$(cat "$STATE_DIR/acm-cert-arn" 2>/dev/null || cert_arn)"
+  arn="$(cat "$STATE_DIR/acm-cert-arn" 2>/dev/null || cert_arn)" || { log "ACM certificate lookup failed"; exit 1; }
   [[ -n "$arn" ]] || { log "no certificate"; return 0; }
   [[ "$(aws_ acm list-tags-for-certificate --certificate-arn "$arn" --query "Tags[?Key=='${TAG_KEY}'].Value | [0]" --output text 2>/dev/null)" == true ]] ||
     { log "refusing to delete $arn: not tagged ${TAG_KEY}=true"; exit 1; }
