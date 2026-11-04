@@ -364,9 +364,20 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.3.6
+    - id: agent-relay-0.3.7
       status: unreleased
       current: true
+      charts: { agent-relay: 0.3.7, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2 }
+      app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
+      depends:
+        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+      images:
+        relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
+        relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
+        relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
+      notes: '0.3.7 (tag agent-relay-0.3.7) is a GKE proof-overlay patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme agentrelay-gcpproof, siteUrl https://gcp-proof.agentrelay.com) for the proof''s custom Desktop build, which the dashboard''s Connect your agents link uses (relay-dashboard #88; folds helm-charts #46). Templates, images, the customer profile (values-gcp.yaml) and every default render are unchanged from 0.3.6.'
+    - id: agent-relay-0.3.6
+      status: shipped
       charts: { agent-relay: 0.3.6, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
@@ -375,7 +386,7 @@ compatibility:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: '0.3.6 (tag agent-relay-0.3.6) releases the never-tagged 0.3.5 together with dashboard branding. From 0.3.5: opt-in single-host mode (global.singleHost.host, off by default): the dashboard and the control API share one host (/, /cloud/api, /login, /api), relay-cloud-api 0.2.2 derives publicUrl and the dashboard derives runtime.publicUrl and ingress.host from it, and the GKE Ingress drops the api host; Relaycast, Relay History, Relayfile and durable-actors keep their own hosts (README Single-host mode). New in 0.3.6: relay-dashboard chart 0.1.2 adds the optional customerProfile (enterprise branding: product name and title, light/dark logo, favicon, accent and button colors, support link, Powered by Agent Relay) rendered into DASHBOARD_CUSTOMER_PROFILE and served in /runtime-config.js; values-gcp.yaml carries a commented example. Branding needs a dashboard image built from relay-dashboard 8eac2bd or later (which also fixes the sessions sidebar facets); the pinned customer dashboard digest predates it and ignores the value. With single-host mode off and no customerProfile every default render is byte-identical to 0.3.4 apart from the helm.sh/chart labels. Images unchanged from 0.3.4.'
+      notes: '0.3.6 is published from the tag agent-relay-0.3.6 (release run 41769269329); it releases the never-tagged 0.3.5 together with dashboard branding. From 0.3.5: opt-in single-host mode (global.singleHost.host, off by default): the dashboard and the control API share one host (/, /cloud/api, /login, /api), relay-cloud-api 0.2.2 derives publicUrl and the dashboard derives runtime.publicUrl and ingress.host from it, and the GKE Ingress drops the api host; Relaycast, Relay History, Relayfile and durable-actors keep their own hosts (README Single-host mode). New in 0.3.6: relay-dashboard chart 0.1.2 adds the optional customerProfile (enterprise branding: product name and title, light/dark logo, favicon, accent and button colors, support link, Powered by Agent Relay) rendered into DASHBOARD_CUSTOMER_PROFILE and served in /runtime-config.js; values-gcp.yaml carries a commented example. Branding needs a dashboard image built from relay-dashboard 8eac2bd or later (which also fixes the sessions sidebar facets); the pinned customer dashboard digest predates it and ignores the value. With single-host mode off and no customerProfile every default render is byte-identical to 0.3.4 apart from the helm.sh/chart labels. Images unchanged from 0.3.4.'
     - id: agent-relay-0.3.4
       status: shipped
       charts: { agent-relay: 0.3.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
