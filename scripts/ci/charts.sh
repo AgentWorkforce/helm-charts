@@ -331,8 +331,9 @@ for chart in "${charts[@]}"; do
         expect_render_failure "$chart" "$v" "actors proof not a bool" "bootstrapProofRequired must be true or false" --set-string bootstrapProofRequired=yes --set secretKeys.workspaceBootstrapSecret=wbs
         expect_render_failure "$chart" "$v" "actors bootstrap secret in extraEnv" "must not appear in extraEnv" --set-json 'extraEnv=[{"name":"RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET","value":"x"}]'
         expect_render_failure "$chart" "$v" "actors proof flag in extraEnv" "must not appear in extraEnv" --set-json 'extraEnv=[{"name":"RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED","value":"true"}]'
-        ! render "$chart" charts/relaycast/ci/default-values.yaml --set secretKeys.workspaceBootstrapSecret=wbs | grep -q wbs \
-          || err "$chart: the SQLite render must ignore secretKeys.workspaceBootstrapSecret"
+        out=$(render "$chart" charts/relaycast/ci/default-values.yaml --set secretKeys.workspaceBootstrapSecret=wbs)
+        ! grep -q wbs <<<"$out" || err "$chart: the SQLite render must ignore secretKeys.workspaceBootstrapSecret"
+        out=$(render "$chart" "$v")
         gw_env() { yq "select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"$1\") | .env[] | select(.name == \"$2\") | $3" <<<"$out"; }
         [ "$(gw_env gateway RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED .value)" = false ] \
           || err "$chart: the actors gateway must render RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED=false by default"
@@ -348,7 +349,7 @@ for chart in "${charts[@]}"; do
         # The dev sidecar is the actors' env: it gets the same two values.
         out=$(render "$chart" charts/relaycast/ci/durable-actors-dev-values.yaml --set secretKeys.workspaceBootstrapSecret=wbs --set bootstrapProofRequired=true)
         for c in gateway durable-actors-dev; do
-          [ "$(gw_env "$c" RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET '.valueFrom.secretKeyRef.key')" = wbs ] \
+          [ "$(gw_env "$c" RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET '.valueFrom.secretKeyRef.name + "/" + .valueFrom.secretKeyRef.key')" = relaycast-secrets/wbs ] \
             || err "$chart: devRuntime $c must read RELAYCAST_WORKSPACE_BOOTSTRAP_SECRET from secretKeys.workspaceBootstrapSecret"
           [ "$(gw_env "$c" RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED .value)" = true ] \
             || err "$chart: devRuntime $c must render RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED=true"

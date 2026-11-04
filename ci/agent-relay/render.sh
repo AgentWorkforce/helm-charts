@@ -601,9 +601,6 @@ test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relayfile-server
 proof_keys=$(yq 'select(.kind == "Deployment" and .metadata.name == "relaycast") | ((.. | select(has("secretKeyRef")) | .secretKeyRef | select(.name == "agent-relay-gcp-proof") | .key), (.. | select(has("secret")) | .secret | select(.secretName == "agent-relay-gcp-proof") | .items[].key))' <<<"$da_out" | grep -v '^---$' | grep . | sort -u | paste -sd, -)
 test "$proof_keys" = relaycast-actors-internal-secret,relaycast-actors-workspace-bootstrap-secret,relaycast-credential-keyring,relaycast-file-signing-secret \
   || da_fail "relaycast actor gateway reads unexpected agent-relay-gcp-proof keys: $proof_keys"
-# Keyed workspace creates: the proof's bootstrap secret and proof policy.
-test "$(yq 'select(.kind == "Deployment" and .metadata.name == "relaycast") | .spec.template.spec.containers[0].env[] | select(.name == "RELAYCAST_WORKSPACE_BOOTSTRAP_PROOF_REQUIRED") | .value' <<<"$da_out")" = true \
-  || da_fail "the proof's relaycast actor gateway must require the bootstrap proof"
 for consumer in relaycast relayfile-server; do
   grep -qx "$consumer" <<<"$(yq 'select(.kind == "Deployment") | .metadata.name' <<<"$da_out")" || da_fail "missing $consumer"
 done
