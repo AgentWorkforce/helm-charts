@@ -66,6 +66,12 @@ Requirements:
 - a selfhost-api image from relaycontrol #13 or later;
 - a dashboard image from relay-dashboard #92 or later, for the invite UI.
 
+The `relay-cloud-api` and `relay-dashboard` digests pinned in `values-gcp.yaml`
+predate both, so override `relay-cloud-api.image.digest` and
+`relay-dashboard.image.digest` with images built from those revisions (or
+later) until the pins move. Otherwise the new values render but the API ignores
+them and Members has no invite UI.
+
 With none of these values set, renders are byte-identical apart from the
 `helm.sh/chart` labels.
 

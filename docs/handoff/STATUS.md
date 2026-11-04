@@ -1,8 +1,10 @@
 # Release status: what is proven and what is preview
 
-Release: `agent-relay` chart 0.3.7, 2026-11-04, a GKE proof-overlay patch of
-0.3.6 (Desktop deep-link settings for the proof; nothing else changes). It is
-not tagged yet; 0.3.6 is the latest published version (below). 0.3.6 was
+Release candidate: `agent-relay` chart 0.3.8 (not tagged yet): first-boot
+bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4), and it
+includes the never-tagged 0.3.7 (a GKE proof-overlay patch of 0.3.6 with
+Desktop deep-link settings for the proof). 0.3.6 is the latest published
+version (below). 0.3.6 was
 published from the `agent-relay-0.3.6` tag by `release-agent-relay.yml`
 ([run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329),
 with a GitHub build-provenance attestation; pullable anonymously).

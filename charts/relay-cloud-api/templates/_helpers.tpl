@@ -313,7 +313,7 @@ blocks are empty, so existing renders are unchanged. */ -}}
 {{- end }}
 {{- with .Values.smtp.host }}
 - { name: SELFHOST_SMTP_HOST, value: {{ . | quote }} }
-- { name: SELFHOST_SMTP_PORT, value: {{ int64 ($.Values.smtp.port | default 587) | toString | quote }} }
+- { name: SELFHOST_SMTP_PORT, value: {{ int64 (ternary 587 $.Values.smtp.port (or (kindIs "invalid" $.Values.smtp.port) (eq (toString $.Values.smtp.port) ""))) | toString | quote }} }
 {{- with $.Values.smtp.security }}
 - { name: SELFHOST_SMTP_SECURITY, value: {{ . | quote }} }
 {{- end }}
@@ -342,7 +342,7 @@ blocks are empty, so existing renders are unchanged. */ -}}
 {{- if and $b.orgName (not .Values.secretKeys.relaycastInternalSecret) }}{{ fail "bootstrap.orgName requires secretKeys.relaycastInternalSecret (the Secret key holding relaycast's internal secret, e.g. relaycast-internal-secret): the API creates the default workspace's Relaycast workspace with it" }}{{ end -}}
 {{- if and (or $b.adminName $b.workspaceName) (not $b.orgName) }}{{ fail "bootstrap.adminName and bootstrap.workspaceName need bootstrap.orgName and bootstrap.adminEmail" }}{{ end -}}
 {{- $oidc := .Values.auth.oidc -}}
-{{- if and (or $b.orgName $oidc.issuer .Values.auth.emailLink.enabled) (not .Values.dashboardUrl) (not (include "relay-cloud-api.singleHost" .)) }}{{ fail "dashboardUrl is required with bootstrap, auth.oidc or auth.emailLink (outside single-host mode): sign-in and invite links land on the dashboard origin, where the session cookie must be set" }}{{ end -}}
+{{- if and (or $b.orgName $oidc.issuer .Values.auth.emailLink.enabled .Values.smtp.host) (not .Values.dashboardUrl) (not (include "relay-cloud-api.singleHost" .)) }}{{ fail "dashboardUrl is required with bootstrap, auth.oidc, auth.emailLink or smtp (outside single-host mode): sign-in and invite links land on the dashboard origin, where the session cookie must be set" }}{{ end -}}
 {{- if $oidc.issuer }}
 {{- if not (regexMatch (ternary "^https?://[^?#@\\s]+$" "^https://[^?#@\\s]+$" (eq $oidc.allowHttpIssuer true)) (toString $oidc.issuer)) }}{{ fail "auth.oidc.issuer must be an https URL without credentials, query or fragment (allowHttpIssuer=true, for tests only, also accepts http)" }}{{ end -}}
 {{- if not $oidc.clientId }}{{ fail "auth.oidc.clientId is required with auth.oidc.issuer" }}{{ end -}}
@@ -363,7 +363,8 @@ blocks are empty, so existing renders are unchanged. */ -}}
 {{- if and .Values.auth.emailLink.enabled (not $smtp.host) }}{{ fail "auth.emailLink.enabled requires smtp.host" }}{{ end -}}
 {{- if $smtp.host }}
 {{- if not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$" (toString $smtp.host)) }}{{ fail "smtp.host must be a hostname" }}{{ end -}}
-{{- if or (not (regexMatch "^[0-9]+$" (toString ($smtp.port | default 587)))) (lt (int64 ($smtp.port | default 587)) 1) (gt (int64 ($smtp.port | default 587)) 65535) }}{{ fail "smtp.port must be 1-65535" }}{{ end -}}
+{{- $port := ternary 587 $smtp.port (or (kindIs "invalid" $smtp.port) (eq (toString $smtp.port) "")) -}}
+{{- if or (not (regexMatch "^[0-9]+$" (toString $port))) (lt (int64 $port) 1) (gt (int64 $port) 65535) }}{{ fail "smtp.port must be 1-65535" }}{{ end -}}
 {{- if and $smtp.security (not (has (toString $smtp.security) (list "tls" "starttls" "none"))) }}{{ fail "smtp.security must be tls, starttls or none" }}{{ end -}}
 {{- if or (not $smtp.from) (not (contains "@" (toString $smtp.from))) }}{{ fail "smtp.from is required with smtp.host, e.g. \"Agent Relay <relay@example.com>\"" }}{{ end -}}
 {{- if ne (empty $smtp.username) (empty .Values.secretKeys.smtpPassword) }}{{ fail "smtp.username and secretKeys.smtpPassword must be set together" }}{{ end -}}
