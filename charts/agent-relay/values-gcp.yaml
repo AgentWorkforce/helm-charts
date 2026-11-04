@@ -191,8 +191,13 @@ sessions-pipeline:
         mode: podIdentity
     # Same GCS data-path settings as worker.extraEnv.
     extraEnv: *sessionsGcsDataPath
+    # The ingest (services f1c2672 and later) validates its RelayAuth/JWKS
+    # URLs: https, or (with this) plain http to an in-cluster Service FQDN
+    # only (<svc>.<ns>.svc), as in values-eks.yaml.
+    allowInClusterHttp: true
     auth:
-      jwksUrl: http://relayauth:8787/.well-known/jwks.json
+      # REQUIRED OVERRIDE: <release namespace> in the FQDN.
+      jwksUrl: http://relayauth.agent-relay.svc:8787/.well-known/jwks.json
       # Must equal relayauth.issuer; the chart default (https://96bulls.local)
       # rejects every RelayAuth-signed courier assertion.
       issuer: http://relayauth:8787

@@ -100,6 +100,14 @@ What the new images bring, in one place:
 agent-relay CLI release with the new coding-agent device logins (15.1.2 or
 later) was not on npm when 0.3.11 was cut; raise that value once it ships.
 
+**Upgrade step: ingest JWKS URL.** The new services image only accepts an
+https RelayAuth JWKS URL, or plain http to an in-cluster Service FQDN when
+`allowInClusterHttp` is on. `values-gcp.yaml` now sets
+`sessions-pipeline.alleyoop.allowInClusterHttp: true` and
+`auth.jwksUrl: http://relayauth.<release namespace>.svc:8787/.well-known/jwks.json`.
+If your overrides set the old short `http://relayauth:8787/...` URL, change
+it, or session ingest cannot verify courier tokens.
+
 **Upgrade step: HoopDb roles (required).** The new Sessions services image
 checks roles that the sessions-pipeline 0.6.0 chart does not create in the
 customer profile (`roleBootstrap: false`). Without them its migrate Job fails
