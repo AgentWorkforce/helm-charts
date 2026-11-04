@@ -1,10 +1,11 @@
 # Release status: what is proven and what is preview
 
-Release candidate: `agent-relay` chart 0.3.8 (not tagged yet): first-boot
-bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4), and it
-includes the never-tagged 0.3.7 (a GKE proof-overlay patch of 0.3.6 with
-Desktop deep-link settings for the proof). 0.3.6 is the latest published
-version (below). 0.3.6 was
+Release candidate: `agent-relay` chart 0.3.9 (not tagged yet): first-boot
+bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4). It
+includes the never-tagged 0.3.8 (relay-cloud-api 0.2.3 operator OAuth apps
+for just-in-time integration connects) and 0.3.7 (GKE proof-overlay patch
+with Desktop deep-link settings). 0.3.6 is the latest published version
+(below). 0.3.6 was
 published from the `agent-relay-0.3.6` tag by `release-agent-relay.yml`
 ([run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329),
 with a GitHub build-provenance attestation; pullable anonymously).
@@ -24,8 +25,8 @@ Versions of the umbrella chart (published, plus the untagged candidate):
 | 0.3.3 | `agent-relay-0.3.3` | Pins the attested Relaycast image `81274dca…` (engine 12.7.0) and the GKE proof-overlay refresh. 0.3.2 was never tagged. |
 | 0.3.4 | `agent-relay-0.3.4` | Documentation patch of 0.3.3 (Relaycast `ar_` credentials guidance). Published by [run 41754926487](https://github.com/AgentWorkforce/helm-charts/actions/runs/41754926487). |
 | 0.3.6 | `agent-relay-0.3.6` | Opt-in single-host mode and optional dashboard `customerProfile` branding (relay-dashboard 0.1.2); 0.3.5 was never tagged. Published by [run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329). |
-| 0.3.7 | not tagged yet | GKE proof-overlay patch of 0.3.6 (Desktop deep links). |
-| 0.3.8 | not tagged yet | First-boot bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4); supersedes 0.3.7. |
+| 0.3.8 | not tagged yet | relay-cloud-api 0.2.3 integration OAuth apps (`integrations.<provider>.existingSecret`) and the never-tagged 0.3.7 proof-overlay patch (Desktop deep links). |
+| 0.3.9 | not tagged yet | First-boot bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4); supersedes the never-tagged 0.3.8. |
 
 This release is for **review by a company evaluating a self-hosted Agent Relay
 on GCP**. It is a reviewable `portable-single` release that pins every
@@ -58,6 +59,12 @@ This archive is therefore labelled a development preview.
   (`docs/handoff/evidence/gke-durable-actors-preview.md`).
 - **Relayflows in-cluster** (`components.relayflows`, off by default): see
   `docs/self-hosted-relayflows.md`.
+- **Integration OAuth apps** (relay-cloud-api 0.2.3,
+  `integrations.<provider>.existingSecret`, none by default): the customer's
+  own OAuth app per integration, for just-in-time connects from the CLI and
+  flow pages. Not verified with a real provider app yet, and it needs a
+  selfhost-api image with operator OAuth apps (relaycontrol #12 or later),
+  which the pinned customer image predates.
 
 ## Not yet done; planned
 
@@ -71,7 +78,7 @@ These gate items are open. None of them is claimed.
   `docs/operations/capacity-and-load-test.md` have not run. Alerts, dashboards
   and runbooks evidence are not produced. No SLO or capacity claim is made.
 - **Version compatibility** (server N and N-1 x Desktop current and previous): not
-  run (server N is 0.3.7, N-1 is 0.3.6).
+  run (server N is 0.3.8, N-1 is 0.3.6).
 - **Desktop**: the custom-origin Desktop (self-hosted sign-in) passes CI on
   macOS arm64/x64, Linux x64/arm64 and Windows (relay-desktop CI run
   41606660810), but it is not merged or released yet.

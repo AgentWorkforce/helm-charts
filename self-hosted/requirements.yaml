@@ -364,10 +364,10 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.3.8
+    - id: agent-relay-0.3.9
       status: unreleased
       current: true
-      charts: { agent-relay: 0.3.8, relayhistory: 0.1.1, relay-cloud-api: 0.2.4, relay-dashboard: 0.1.3 }
+      charts: { agent-relay: 0.3.9, relayhistory: 0.1.1, relay-cloud-api: 0.2.4, relay-dashboard: 0.1.3 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
         agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.4, relay-dashboard: 0.1.3, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
@@ -375,7 +375,7 @@ compatibility:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: '0.3.8 is to be published from the tag agent-relay-0.3.8 (not tagged yet). Bundles relay-cloud-api 0.2.4: first-boot bootstrap (bootstrap.orgName/adminEmail create the organization, its owner and a Default workspace bound to a new Relaycast workspace through secretKeys.relaycastInternalSecret; idempotent), sign-in (auth.oidc OpenID Connect with PKCE; auth.emailLink with smtp), invites (auth.inviteTtlHours, auth.autoJoinDomains) and smtp for invite emails; values-gcp.yaml carries a commented example. Requires a selfhost-api image from relaycontrol #13 or later and a dashboard image from relay-dashboard #92 or later for the Members invite UI; the digests pinned in values-gcp.yaml predate both, so override relay-cloud-api.image.digest and relay-dashboard.image.digest until the pins move. With none of these values set every render is byte-identical apart from the helm.sh/chart labels. Supersedes the never-released 0.3.7 and includes its changes: A GKE proof-overlay and documentation patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme and siteUrl of the proof''s custom Desktop build) (folds helm-charts #46), and relay-dashboard chart 0.1.3 documents customerProfile.desktop in its README. The Connect your agents link needs a dashboard image from relay-dashboard #88 or later; the overlay''s own dashboard digest (53d484b) predates it, and the live proof deploy overrides that digest. For 0.3.7 alone the umbrella templates, images and values-gcp.yaml were unchanged from 0.3.6 (0.3.8 changes the relay-cloud-api templates as described above).'
+      notes: '0.3.9 is to be published from the tag agent-relay-0.3.9 (not tagged yet). Bundles relay-cloud-api 0.2.4: first-boot bootstrap (bootstrap.orgName/adminEmail create the organization, its owner and a Default workspace bound to a new Relaycast workspace through secretKeys.relaycastInternalSecret; idempotent), sign-in (auth.oidc OpenID Connect with PKCE; auth.emailLink with smtp), invites (auth.inviteTtlHours, auth.autoJoinDomains) and smtp for invite emails; values-gcp.yaml carries a commented example. Requires a selfhost-api image from relaycontrol #13 or later and a dashboard image from relay-dashboard #92 or later for the Members invite UI; the digests pinned in values-gcp.yaml predate both, so override relay-cloud-api.image.digest and relay-dashboard.image.digest until the pins move. With none of these values set every render is byte-identical apart from the helm.sh/chart labels. Supersedes the never-released 0.3.8 and includes its changes: Bundles relay-cloud-api 0.2.3, which adds integrations.<provider>.existingSecret: the customer''s own OAuth app per integration (client ID from the Secret, client secret mounted as a file), for just-in-time connects from the CLI, flow onboarding and flow creation. Register <publicUrl>/api/v1/integrations/oauth/callback in each provider app. Requires a selfhost-api built from relaycontrol with operator OAuth apps (selfhost/jit-integrations). Supersedes the never-released 0.3.7 and includes its changes: A GKE proof-overlay and documentation patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme and siteUrl of the proof''s custom Desktop build) (folds helm-charts #46), and relay-dashboard chart 0.1.3 documents customerProfile.desktop in its README. The Connect your agents link needs a dashboard image from relay-dashboard #88 or later; the overlay''s own dashboard digest (53d484b) predates it, and the live proof deploy overrides that digest. Templates, images and values-gcp.yaml are unchanged from 0.3.6; renders differ only in the helm.sh/chart labels, plus DASHBOARD_CUSTOMER_PROFILE in the gcp-proof-live render.'
     - id: agent-relay-0.3.6
       status: shipped
       charts: { agent-relay: 0.3.6, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2 }
@@ -826,8 +826,13 @@ entries:
     description: |
       alleyoop.auth.historyOrigin renders RELAYHISTORY_ORIGIN on the ingest: the
       bare origin expected as the History assertion audience. It must be
-      byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Unset, nothing is
-      rendered (the services default applies).
+      byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Set, it is also
+      what turns on verification of courier assertions with the interim bearer
+      off; this needs a 96bulls-services image built from sessions-pipeline
+      887a844 or later on both alleyoop.image.digest and worker.image.digest
+      (older images refuse every upload unless the interim bearer is on).
+      Unset, nothing is rendered and, outside environment=local, the ingest
+      refuses every courier upload.
     chart: sessions-pipeline
     values: [alleyoop.auth.historyOrigin]
     env: [RELAYHISTORY_ORIGIN]
@@ -849,10 +854,14 @@ entries:
     description: |
       alleyoop.auth.allowInterimRelayAuthBearer renders
       ALLOW_INTERIM_RELAYAUTH_BEARER on the ingest. false (default) keeps the
-      ingest fail-closed: couriers must present origin-bound migration
-      assertions. true accepts legacy RelayAuth bearer tokens and is allowed
-      only with environment=local; any other environment, a non-boolean value,
-      or setting the variable through extraEnv or ingest.env fails the render.
+      ingest fail-closed: with auth.historyOrigin set, couriers present
+      RelayAuth assertions minted for exactly that origin (RS256 against the
+      configured JWKS, auth.jwksUrl or auth.localJwks, issuer auth.issuer,
+      the dedicated History assertion class; services image requirement under
+      opt.alleyoop.history-origin), and without it every bearer is refused. true accepts any RelayAuth-signed bearer, including
+      the legacy shared audience, and is allowed only with environment=local;
+      any other environment, a non-boolean value, or setting the variable
+      through extraEnv or ingest.env fails the render.
     chart: sessions-pipeline
     values: [alleyoop.auth.allowInterimRelayAuthBearer]
     env: [ALLOW_INTERIM_RELAYAUTH_BEARER]
@@ -1776,6 +1785,43 @@ entries:
     sources:
       - "charts/relay-cloud-api/values.yaml"
       - "charts/relay-cloud-api/templates/_helpers.tpl"
+
+  - id: opt.relay-cloud-api.integrations
+    kind: option
+    title: Integration OAuth apps for just-in-time connects
+    description: |
+      integrations.<provider>.existingSecret supplies the customer's own OAuth
+      app for an integration (github, slack, linear, notion, ...): the client ID
+      (clientIdKey, default client-id) as SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID and
+      the client secret (clientSecretKey, default client-secret) mounted as a
+      file (SELFHOST_OAUTH_<PROVIDER>_CLIENT_SECRET_FILE); optional scopes
+      override. Users connect just in time from the CLI, flow onboarding and
+      flow creation. Register <publicUrl>/api/v1/integrations/oauth/callback as
+      the callback URL in each provider app. A provider without an entry shows
+      users "Your administrator needs to configure the <Provider> app".
+      Env per provider (<PROVIDER> = id upper-cased, - as _):
+      SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID, SELFHOST_OAUTH_<PROVIDER>_CLIENT_SECRET_FILE,
+      SELFHOST_OAUTH_<PROVIDER>_SCOPES. This needs a selfhost-api image with
+      operator OAuth apps (relaycontrol #12 or later).
+    chart: relay-cloud-api
+    values: [integrations]
+    secrets:
+      - name: <operator-chosen, integrations.<provider>.existingSecret>
+        keys:
+          - { key: client-id, optional: false, note: "default name; override with integrations.<provider>.clientIdKey" }
+          - { key: client-secret, optional: false, note: "default name; override with integrations.<provider>.clientSecretKey" }
+    profiles: [relay-cloud-api]
+    status: shipped
+    provided_by: operator
+    default: none (no integration can be connected until its app is configured)
+    choices:
+      - { value: none }
+      - { value: one entry per provider with existingSecret }
+    verify: helm template renders the client ID from secretKeyRef and mounts only the client secret, and fails on a missing existingSecret, an inline clientId/clientSecret (unsupported field), equal key names, the migration credential key, or an invalid provider id
+    sources:
+      - "charts/relay-cloud-api/values.yaml"
+      - "charts/relay-cloud-api/templates/_helpers.tpl"
+      - "charts/relay-cloud-api/templates/deployment.yaml"
 
   - id: opt.relay-cloud-api.flows
     kind: option

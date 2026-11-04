@@ -14,7 +14,7 @@ registered, every shipped entry must exist in the charts, planned entries must
 not be referenced by any template, and the compatibility matrix must equal
 the pinned digests.
 
-Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 102 entries: 39 requirements (38 shipped, 1 planned), 63 options (61 shipped, 2 planned).
+Source of truth: [`self-hosted/requirements.yaml`](../self-hosted/requirements.yaml). 103 entries: 39 requirements (38 shipped, 1 planned), 64 options (62 shipped, 2 planned).
 
 ## Contents
 
@@ -67,7 +67,7 @@ Services image (sessions-pipeline-worker, alleyoop and the privileged SQL Jobs):
 | relayauth-0.1.2 | shipped | relayauth 0.1.2 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | License-annotation patch bump of 0.1.1. Superseded by 0.1.3. |
 | relayauth-0.1.1 | shipped | relayauth 0.1.1 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdf…` |  |  | relayauth 784582ef (machine-bound History assertion contract, relayauth #113). Superseded by 0.1.2. |
 | relayauth-0.1.0 | shipped | relayauth 0.1.0 | relayauth: `ghcr.io/agentworkforce/relayauth@sha256:eb71daa28e30…` |  |  | superseded by 0.1.1. |
-| agent-relay-0.3.8 | unreleased | agent-relay 0.3.8<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.4<br>relay-dashboard 0.1.3<br>(deps: relaycast 0.3.3, relayauth 0.1.3, sessions-pipeline 0.6.0, relayhistory 0.1.1, relay-cloud-api 0.2.4, relay-dashboard 0.1.3, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | 0.3.8 is to be published from the tag agent-relay-0.3.8 (not tagged yet). Bundles relay-cloud-api 0.2.4: first-boot bootstrap (bootstrap.orgName/adminEmail create the organization, its owner and a Default workspace bound to a new Relaycast workspace through secretKeys.relaycastInternalSecret; idempotent), sign-in (auth.oidc OpenID Connect with PKCE; auth.emailLink with smtp), invites (auth.inviteTtlHours, auth.autoJoinDomains) and smtp for invite emails; values-gcp.yaml carries a commented example. Requires a selfhost-api image from relaycontrol #13 or later and a dashboard image from relay-dashboard #92 or later for the Members invite UI; the digests pinned in values-gcp.yaml predate both, so override relay-cloud-api.image.digest and relay-dashboard.image.digest until the pins move. With none of these values set every render is byte-identical apart from the helm.sh/chart labels. Supersedes the never-released 0.3.7 and includes its changes: A GKE proof-overlay and documentation patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme and siteUrl of the proof's custom Desktop build) (folds helm-charts #46), and relay-dashboard chart 0.1.3 documents customerProfile.desktop in its README. The Connect your agents link needs a dashboard image from relay-dashboard #88 or later; the overlay's own dashboard digest (53d484b) predates it, and the live proof deploy overrides that digest. For 0.3.7 alone the umbrella templates, images and values-gcp.yaml were unchanged from 0.3.6 (0.3.8 changes the relay-cloud-api templates as described above). |
+| agent-relay-0.3.9 | unreleased | agent-relay 0.3.9<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.4<br>relay-dashboard 0.1.3<br>(deps: relaycast 0.3.3, relayauth 0.1.3, sessions-pipeline 0.6.0, relayhistory 0.1.1, relay-cloud-api 0.2.4, relay-dashboard 0.1.3, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | 0.3.9 is to be published from the tag agent-relay-0.3.9 (not tagged yet). Bundles relay-cloud-api 0.2.4: first-boot bootstrap (bootstrap.orgName/adminEmail create the organization, its owner and a Default workspace bound to a new Relaycast workspace through secretKeys.relaycastInternalSecret; idempotent), sign-in (auth.oidc OpenID Connect with PKCE; auth.emailLink with smtp), invites (auth.inviteTtlHours, auth.autoJoinDomains) and smtp for invite emails; values-gcp.yaml carries a commented example. Requires a selfhost-api image from relaycontrol #13 or later and a dashboard image from relay-dashboard #92 or later for the Members invite UI; the digests pinned in values-gcp.yaml predate both, so override relay-cloud-api.image.digest and relay-dashboard.image.digest until the pins move. With none of these values set every render is byte-identical apart from the helm.sh/chart labels. Supersedes the never-released 0.3.8 and includes its changes: Bundles relay-cloud-api 0.2.3, which adds integrations.<provider>.existingSecret: the customer's own OAuth app per integration (client ID from the Secret, client secret mounted as a file), for just-in-time connects from the CLI, flow onboarding and flow creation. Register <publicUrl>/api/v1/integrations/oauth/callback in each provider app. Requires a selfhost-api built from relaycontrol with operator OAuth apps (selfhost/jit-integrations). Supersedes the never-released 0.3.7 and includes its changes: A GKE proof-overlay and documentation patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme and siteUrl of the proof's custom Desktop build) (folds helm-charts #46), and relay-dashboard chart 0.1.3 documents customerProfile.desktop in its README. The Connect your agents link needs a dashboard image from relay-dashboard #88 or later; the overlay's own dashboard digest (53d484b) predates it, and the live proof deploy overrides that digest. Templates, images and values-gcp.yaml are unchanged from 0.3.6; renders differ only in the helm.sh/chart labels, plus DASHBOARD_CUSTOMER_PROFILE in the gcp-proof-live render. |
 | agent-relay-0.3.6 | shipped | agent-relay 0.3.6<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.2<br>relay-dashboard 0.1.2<br>(deps: relaycast 0.3.3, relayauth 0.1.3, sessions-pipeline 0.6.0, relayhistory 0.1.1, relay-cloud-api 0.2.2, relay-dashboard 0.1.2, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | 0.3.6 is published from the tag agent-relay-0.3.6 (release run 41769269329); it releases the never-tagged 0.3.5 together with dashboard branding. From 0.3.5: opt-in single-host mode (global.singleHost.host, off by default): the dashboard and the control API share one host (/, /cloud/api, /login, /api), relay-cloud-api 0.2.2 derives publicUrl and the dashboard derives runtime.publicUrl and ingress.host from it, and the GKE Ingress drops the api host; Relaycast, Relay History, Relayfile and durable-actors keep their own hosts (README Single-host mode). New in 0.3.6: relay-dashboard chart 0.1.2 adds the optional customerProfile (enterprise branding: product name and title, light/dark logo, favicon, accent and button colors, support link, Powered by Agent Relay) rendered into DASHBOARD_CUSTOMER_PROFILE and served in /runtime-config.js; values-gcp.yaml carries a commented example. Branding needs a dashboard image built from relay-dashboard 8eac2bd or later (which also fixes the sessions sidebar facets); the pinned customer dashboard digest predates it and ignores the value. With single-host mode off and no customerProfile every default render is byte-identical to 0.3.4 apart from the helm.sh/chart labels. Images unchanged from 0.3.4. |
 | agent-relay-0.3.4 | shipped | agent-relay 0.3.4<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.3, relayauth 0.1.3, sessions-pipeline 0.6.0, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | 0.3.4 is published from the tag agent-relay-0.3.4 (release run 41754926487) as a documentation patch of 0.3.3: relaycast chart 0.3.3 and relayauth chart 0.1.3 drop the stale instruction to override the relaycast image.digest for ar_ credentials (the pinned engine 12.7.0 default satisfies >=12.3.x), and values-gcp.yaml's credentials comment says the same. Images, templates and rendered values-gcp.yaml are unchanged from 0.3.3. |
 | agent-relay-0.3.3 | shipped | agent-relay 0.3.3<br>relayhistory 0.1.1<br>relay-cloud-api 0.2.1<br>relay-dashboard 0.1.0<br>(deps: relaycast 0.3.2, relayauth 0.1.2, sessions-pipeline 0.6.0, relayhistory 0.1.1, relay-cloud-api 0.2.1, relay-dashboard 0.1.0, relayflows 0.2.4, durable-actors 0.14.6, relayfile 0.2.0) | relayhistory: `ghcr.io/agentworkforce/relayhistory@sha256:<required>`<br>relay-cloud-api: `ghcr.io/agentworkforce/selfhost-api@sha256:<required>`<br>relay-dashboard: `ghcr.io/agentworkforce/relay-dashboard@sha256:<required>` |  |  | 0.3.3 (tag agent-relay-0.3.3) moves relaycast to chart 0.3.2 and pins relaycast-self-host sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e (relaycast main bf713d86, engine 12.7.0; SBOM + max-mode provenance + GitHub attestation; public) in values-gcp.yaml, and includes the never-tagged 0.3.2 proof refresh: GKE proof refresh on top of 0.3.1 (tag agent-relay-0.3.1). Proof overlays only: values-gcp-proof-durable-actors.yaml pins relaycast-actors-gateway sha256:faf66ec45d2c755ab5cdc6ee32bca6dc48446dff444118cab18fa1f765124ffa and relaycast-actors-deployer sha256:a81e91ed52bfb7cbb0a8c2773752df3b5d78afdc443608998b3203a30e314cee (relaycast main 3624cc12); values-gcp-proof-relayfile.yaml pins relayfile-actors sha256:7fb2110701a004f9f7ed2b025d25156fbe993208598bfbd0498a48b30df48299 and relayfile-actors-workspace sha256:c5851a1b1f7624390a1a00ebdee69e8e521dc3f23f345c582d62e09dba9a6e83 (relayfile main 39f84fcf); values-gcp-proof-live.yaml pins the experimental unsupported RelayHistory sha256:f36ae1671bdcd88a2b8b2df62c8edecb1381237d9f968747b39298959ad33563 (relayhistory-cloud 3cb76752). Proof CPU requests sized for the e2-medium pool, and the README documents the write-hold upgrade with the Relayflows smoke Job. The customer profile (values-gcp.yaml) and templates are unchanged from 0.3.1 apart from the Relaycast pin. Superseded by 0.3.4. |
@@ -566,6 +566,7 @@ chart `relay-cloud-api` · values [`ci/default-values.yaml`](../charts/relay-clo
 | shipped | [First-boot organization, owner and default workspace](#opt-relay-cloud-api-bootstrap) | `disabled`, `enabled` | `disabled (manual bootstrap with the bootstrap token)` | values `bootstrap.*`, `secretKeys.relaycastInternalSecret`; env `SELFHOST_BOOTSTRAP_ORG_NAME`, `SELFHOST_BOOTSTRAP_ADMIN_EMAIL`, `SELFHOST_BOOTSTRAP_ADMIN_NAME`, `SELFHOST_BOOTSTRAP_WORKSPACE_NAME`, `RELAYCAST_INTERNAL_SECRET_FILE`; Secret `<existingSecret>` keys `<operator-chosen, e.g. relaycast-internal-secret>` |
 | shipped | [Sign-in methods (OIDC, email links), invites and auto-join](#opt-relay-cloud-api-sign-in) | `none`, `oidc`, `email links`, `oidc and email links` | `none (operator break-glass only)` | values `auth.*`, `secretKeys.oidcClientSecret`; env `SELFHOST_OIDC_ISSUER`, `SELFHOST_OIDC_CLIENT_ID`, `SELFHOST_OIDC_CLIENT_SECRET_FILE`, `SELFHOST_OIDC_ALLOWED_DOMAINS`, `SELFHOST_OIDC_DISPLAY_NAME`, `SELFHOST_OIDC_SCOPES`, `SELFHOST_OIDC_REDIRECT_URL`, `SELFHOST_OIDC_ALLOW_HTTP_ISSUER`, `SELFHOST_EMAIL_LOGIN`, `SELFHOST_AUTO_JOIN_DOMAINS`, `SELFHOST_INVITE_TTL_HOURS`; Secret `<existingSecret>` keys `<operator-chosen, e.g. oidc-client-secret>` |
 | shipped | [SMTP for invite emails and sign-in links](#opt-relay-cloud-api-smtp) | `none`, `smtp` | `none (copy invite links)` | values `smtp.*`, `secretKeys.smtpPassword`; env `SELFHOST_SMTP_HOST`, `SELFHOST_SMTP_PORT`, `SELFHOST_SMTP_SECURITY`, `SELFHOST_SMTP_USERNAME`, `SELFHOST_SMTP_PASSWORD_FILE`, `SELFHOST_EMAIL_FROM`; Secret `<existingSecret>` keys `<operator-chosen, e.g. smtp-password>` |
+| shipped | [Integration OAuth apps for just-in-time connects](#opt-relay-cloud-api-integrations) | `none`, `one entry per provider with existingSecret` | `none (no integration can be connected until its app is configured)` | values `integrations`; Secret `<operator-chosen, integrations.<provider>.existingSecret>` keys `client-id`, `client-secret` |
 | shipped | [Relayflows control-plane storage and worker queue](#opt-relay-cloud-api-flows) | `postgres`, `gcs` | `postgres` | values `flows.*`; env `SELFHOST_FLOWS_STORAGE`, `SELFHOST_FLOWS_GCS_BUCKET`, `SELFHOST_FLOWS_GCS_PREFIX`, `SELFHOST_FLOWS_WORKER_RELAYCAST_URL`, `SELFHOST_FLOWS_QUEUE_PING_MS` |
 | shipped | [Self-host telemetry level and transport](#opt-relay-cloud-api-telemetry) | `errors`, `full`, `off` | `errors` | values `telemetry.*`, `secretKeys.telemetryInstallKey`; env `SELFHOST_TELEMETRY_LEVEL`, `SELFHOST_TELEMETRY_TRANSPORT`, `SELFHOST_TELEMETRY_ENDPOINT`, `SELFHOST_TELEMETRY_INSTALL_ID`, `SELFHOST_TELEMETRY_INSTALL_KEY_FILE`, `SELFHOST_TELEMETRY_PROBES`, `SELFHOST_TELEMETRY_DEPLOYMENT`; Secret `<existingSecret>` keys `<operator-chosen, no default>` |
 
@@ -1458,8 +1459,13 @@ bundled MinIO at http://locker:9000 works with the default false.
 
 alleyoop.auth.historyOrigin renders RELAYHISTORY_ORIGIN on the ingest: the
 bare origin expected as the History assertion audience. It must be
-byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Unset, nothing is
-rendered (the services default applies).
+byte-equal to the courier's RELAYAUTH_HISTORY_ORIGIN. Set, it is also
+what turns on verification of courier assertions with the interim bearer
+off; this needs a 96bulls-services image built from sessions-pipeline
+887a844 or later on both alleyoop.image.digest and worker.image.digest
+(older images refuse every upload unless the interim bearer is on).
+Unset, nothing is rendered and, outside environment=local, the ingest
+refuses every courier upload.
 
 - Default: `unset`
 - Choices: `unset`; `origin`
@@ -1477,10 +1483,14 @@ rendered (the services default applies).
 
 alleyoop.auth.allowInterimRelayAuthBearer renders
 ALLOW_INTERIM_RELAYAUTH_BEARER on the ingest. false (default) keeps the
-ingest fail-closed: couriers must present origin-bound migration
-assertions. true accepts legacy RelayAuth bearer tokens and is allowed
-only with environment=local; any other environment, a non-boolean value,
-or setting the variable through extraEnv or ingest.env fails the render.
+ingest fail-closed: with auth.historyOrigin set, couriers present
+RelayAuth assertions minted for exactly that origin (RS256 against the
+configured JWKS, auth.jwksUrl or auth.localJwks, issuer auth.issuer,
+the dedicated History assertion class; services image requirement under
+opt.alleyoop.history-origin), and without it every bearer is refused. true accepts any RelayAuth-signed bearer, including
+the legacy shared audience, and is allowed only with environment=local;
+any other environment, a non-boolean value, or setting the variable
+through extraEnv or ingest.env fails the render.
 
 - Default: `false`
 - Choices: `false`; `true`: environment=local only
@@ -1974,6 +1984,34 @@ owners copy the single-use link from Settings > Members.
 - Secret: `<existingSecret>` from `existingSecret`; keys `<operator-chosen, e.g. smtp-password>` from `secretKeys.smtpPassword` (optional: required with smtp.username)
 - Verify: an invite created in Settings > Members reports "Invitation emailed to <email>" (emailDelivery sent)
 - Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl)
+
+#### opt.relay-cloud-api.integrations
+
+<a id="opt-relay-cloud-api-integrations"></a>
+
+**Integration OAuth apps for just-in-time connects** · shipped · chart `relay-cloud-api` · profiles relay-cloud-api
+
+integrations.<provider>.existingSecret supplies the customer's own OAuth
+app for an integration (github, slack, linear, notion, ...): the client ID
+(clientIdKey, default client-id) as SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID and
+the client secret (clientSecretKey, default client-secret) mounted as a
+file (SELFHOST_OAUTH_<PROVIDER>_CLIENT_SECRET_FILE); optional scopes
+override. Users connect just in time from the CLI, flow onboarding and
+flow creation. Register <publicUrl>/api/v1/integrations/oauth/callback as
+the callback URL in each provider app. A provider without an entry shows
+users "Your administrator needs to configure the <Provider> app".
+Env per provider (<PROVIDER> = id upper-cased, - as _):
+SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID, SELFHOST_OAUTH_<PROVIDER>_CLIENT_SECRET_FILE,
+SELFHOST_OAUTH_<PROVIDER>_SCOPES. This needs a selfhost-api image with
+operator OAuth apps (relaycontrol #12 or later).
+
+- Default: `none (no integration can be connected until its app is configured)`
+- Choices: `none`; `one entry per provider with existingSecret`
+- Provided by: operator
+- Values: `integrations`
+- Secret: `<operator-chosen, integrations.<provider>.existingSecret>`; keys `client-id`; `client-secret`
+- Verify: helm template renders the client ID from secretKeyRef and mounts only the client secret, and fails on a missing existingSecret, an inline clientId/clientSecret (unsupported field), equal key names, the migration credential key, or an invalid provider id
+- Sources: [`charts/relay-cloud-api/values.yaml`](../charts/relay-cloud-api/values.yaml), [`charts/relay-cloud-api/templates/_helpers.tpl`](../charts/relay-cloud-api/templates/_helpers.tpl), [`charts/relay-cloud-api/templates/deployment.yaml`](../charts/relay-cloud-api/templates/deployment.yaml)
 
 #### opt.relay-cloud-api.flows
 

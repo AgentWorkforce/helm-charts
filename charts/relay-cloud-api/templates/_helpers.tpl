@@ -64,6 +64,7 @@ settings. */ -}}
 {{- if and .Values.migrations.enabled (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name when migrations are enabled" }}{{ end -}}
 {{- include "relay-cloud-api.validateSingleHost" . -}}
 {{- include "relay-cloud-api.validateIdentity" . -}}
+{{- include "relay-cloud-api.validateIntegrations" . -}}
 {{- if not (regexMatch "^https://[^/?#]+$" (include "relay-cloud-api.publicUrl" .)) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $url := dict "relayauthUrl" .Values.services.relayauthUrl "relaycastUrl" .Values.services.relaycastUrl "relayhistoryUrl" .Values.services.relayhistoryUrl }}{{ if not (regexMatch "^https?://[^/?#]+$" $url) }}{{ fail (printf "services.%s must be an HTTP(S) origin with no path" $name) }}{{ end }}{{ end -}}
 {{- $publicOriginPattern := "^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(:[0-9]{1,5})?$" -}}
@@ -373,4 +374,37 @@ blocks are empty, so existing renders are unchanged. */ -}}
 {{- end -}}
 {{- if and .Values.secretKeys.oidcClientSecret (not $oidc.issuer) }}{{ fail "secretKeys.oidcClientSecret is set but auth.oidc.issuer is empty" }}{{ end -}}
 {{- if and .Values.secretKeys.smtpPassword (not $smtp.username) }}{{ fail "secretKeys.smtpPassword needs smtp.host and smtp.username" }}{{ end -}}
+{{- end -}}
+
+{{- /* Operator OAuth apps for just-in-time integration connects:
+SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID from the Secret, the client secret as a
+mounted file (_CLIENT_SECRET_FILE), optional _SCOPES. */ -}}
+{{- define "relay-cloud-api.integrationEnv" -}}
+{{- range $provider := keys (.Values.integrations | default dict) | sortAlpha }}
+{{- $app := index $.Values.integrations $provider }}
+{{- $prefix := printf "SELFHOST_OAUTH_%s" (upper (replace "-" "_" $provider)) }}
+- name: {{ printf "%s_CLIENT_ID" $prefix }}
+  valueFrom:
+    secretKeyRef: { name: {{ $app.existingSecret | quote }}, key: {{ $app.clientIdKey | default "client-id" | quote }} }
+- { name: {{ printf "%s_CLIENT_SECRET_FILE" $prefix }}, value: {{ printf "/var/run/agent-relay/integrations/%s/client-secret" $provider | quote }} }
+{{- with $app.scopes }}
+- { name: {{ printf "%s_SCOPES" $prefix }}, value: {{ . | quote }} }
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{- define "relay-cloud-api.validateIntegrations" -}}
+{{- $allowed := list "existingSecret" "clientIdKey" "clientSecretKey" "scopes" -}}
+{{- range $provider, $app := (.Values.integrations | default dict) }}
+{{- if not (regexMatch "^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$" $provider) }}{{ fail (printf "integrations.%s: provider ids are lowercase letters, digits and inner -" $provider) }}{{ end }}
+{{- if not (kindIs "map" $app) }}{{ fail (printf "integrations.%s must be a map with existingSecret" $provider) }}{{ end }}
+{{- range $field, $_ := $app }}{{ if not (has $field $allowed) }}{{ fail (printf "integrations.%s.%s is not supported: client IDs and secrets come only from existingSecret (allowed: existingSecret, clientIdKey, clientSecretKey, scopes)" $provider $field) }}{{ end }}{{ end }}
+{{- if empty $app.existingSecret }}{{ fail (printf "integrations.%s.existingSecret is required; client IDs and secrets are never inline" $provider) }}{{ end }}
+{{- range $field := list "clientIdKey" "clientSecretKey" }}{{ with index $app $field }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString .)) }}{{ fail (printf "integrations.%s.%s must be a Kubernetes Secret data key" $provider $field) }}{{ end }}{{ end }}{{ end }}
+{{- $idKey := toString ($app.clientIdKey | default "client-id") }}
+{{- $secretKey := toString ($app.clientSecretKey | default "client-secret") }}
+{{- if eq $idKey $secretKey }}{{ fail (printf "integrations.%s.clientIdKey and clientSecretKey must name different Secret keys" $provider) }}{{ end }}
+{{- /* Never hand an API credential (the migration owner credential included) to an integration reference. */ -}}
+{{- if eq (toString $app.existingSecret) (toString $.Values.existingSecret) }}{{- range $name, $key := $.Values.secretKeys }}{{- if and (not (empty $key)) (or (eq $idKey (toString $key)) (eq $secretKey (toString $key))) }}{{ fail (printf "integrations.%s must not reuse secretKeys.%s from existingSecret" $provider $name) }}{{ end }}{{ end }}{{ end }}
+{{- end }}
 {{- end -}}

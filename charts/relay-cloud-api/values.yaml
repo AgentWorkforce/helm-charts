@@ -122,6 +122,21 @@ smtp:
   username: ""
   # Required with host, e.g. "Agent Relay <relay@acme.com>".
   from: ""
+# Integration OAuth apps: operator configuration, one entry per provider id
+# (github, slack, linear, notion, ...). Users connect just in time from the CLI,
+# flow onboarding and flow creation; there is no settings page for this. Each
+# app's client ID and secret come from an existing Secret (never inline):
+#   integrations:
+#     github:
+#       existingSecret: agent-relay-github-app
+#       clientIdKey: client-id          # default
+#       clientSecretKey: client-secret  # default; mounted as a file
+#       scopes: ""                      # optional override, space separated
+# Register this callback URL in every provider app:
+#   <publicUrl>/api/v1/integrations/oauth/callback
+# A provider without an entry shows users "Your administrator needs to
+# configure the <Provider> app" instead of a connect button.
+integrations: {}
 
 # Relayflows control plane (workers, runs, queue).
 flows:
