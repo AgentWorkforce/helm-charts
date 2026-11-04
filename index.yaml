@@ -1103,6 +1103,31 @@ entries:
       artifacthub.io/license: Apache-2.0
     apiVersion: v2
     appVersion: 0.1.0
+    created: "2026-11-04T04:05:14.562606767Z"
+    description: Static self-hosted Agent Relay sessions and messaging dashboard
+    digest: 7c4bbed4fbdc145e56594d24e39984dc587089e2d2eec2ae10d94185f82abb9b
+    home: https://github.com/AgentWorkforce/relay-dashboard
+    keywords:
+    - agent-relay
+    - dashboard
+    - self-hosted
+    kubeVersion: '>=1.28.0-0'
+    maintainers:
+    - name: AgentWorkforce
+      url: https://github.com/AgentWorkforce
+    name: relay-dashboard
+    sources:
+    - https://github.com/AgentWorkforce/relay-dashboard
+    type: application
+    urls:
+    - https://github.com/AgentWorkforce/helm-charts/releases/download/relay-dashboard-0.1.2/relay-dashboard-0.1.2.tgz
+    version: 0.1.2
+  - annotations:
+      agentworkforce.dev/license-scope: First-party chart code only; dependencies
+        and images retain their own licenses.
+      artifacthub.io/license: Apache-2.0
+    apiVersion: v2
+    appVersion: 0.1.0
     created: "2026-11-04T03:53:48.724326407Z"
     description: Static self-hosted Agent Relay sessions and messaging dashboard
     digest: c696fa265f36a7485d4521bc1b4b097a4d5dcb6b544ddb8f4739293bfb4862d7
@@ -1819,4 +1844,4 @@ entries:
     urls:
     - https://github.com/AgentWorkforce/helm-charts/releases/download/sessions-pipeline-worker-0.6.0/sessions-pipeline-worker-0.6.0.tgz
     version: 0.6.0
-generated: "2026-11-04T03:53:48.724490674Z"
+generated: "2026-11-04T04:05:14.562688369Z"
