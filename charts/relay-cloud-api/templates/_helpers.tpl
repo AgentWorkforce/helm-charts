@@ -51,7 +51,7 @@ of set a second time. Desktop and the CLI log in against that same origin. */ -}
 {{- $image := include "relay-cloud-api.image" . -}}
 {{- if ne (int .Values.replicaCount) 1 }}{{ fail "replicaCount must be 1: the self-host API pilot has process-local login/device rate limits and is not HA" }}{{ end -}}
 {{- if not .Values.existingSecret }}{{ fail "existingSecret is required; inline credentials are not supported" }}{{ end -}}
-{{- $optionalSecretKeys := list "previousEncryptionKey" "internalToken" "telemetryInstallKey" -}}
+{{- $optionalSecretKeys := list "previousEncryptionKey" "internalToken" "telemetryInstallKey" "relaycastInternalSecret" "oidcClientSecret" "smtpPassword" -}}
 {{- range $name, $key := .Values.secretKeys }}{{ if and (has $name $optionalSecretKeys) (empty $key) }}{{ continue }}{{ end }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString $key)) }}{{ fail (printf "secretKeys.%s must be a Kubernetes Secret data key" $name) }}{{ end }}{{ end -}}
 {{- /* Every non-empty secretKeys.* value must name a distinct Secret key. The
 API pod projects the runtime and optional keys by key name, so a collision
@@ -63,6 +63,7 @@ settings. */ -}}
 {{- include "relay-cloud-api.validateRuntime" . -}}
 {{- if and .Values.migrations.enabled (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name when migrations are enabled" }}{{ end -}}
 {{- include "relay-cloud-api.validateSingleHost" . -}}
+{{- include "relay-cloud-api.validateIdentity" . -}}
 {{- if not (regexMatch "^https://[^/?#]+$" (include "relay-cloud-api.publicUrl" .)) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $url := dict "relayauthUrl" .Values.services.relayauthUrl "relaycastUrl" .Values.services.relaycastUrl "relayhistoryUrl" .Values.services.relayhistoryUrl }}{{ if not (regexMatch "^https?://[^/?#]+$" $url) }}{{ fail (printf "services.%s must be an HTTP(S) origin with no path" $name) }}{{ end }}{{ end -}}
 {{- $publicOriginPattern := "^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(:[0-9]{1,5})?$" -}}
@@ -83,6 +84,9 @@ Optional keys are left out while empty. */ -}}
 {{- $files := dict "DATABASE_URL_FILE" .Values.secretKeys.databaseUrl "RELAYAUTH_API_KEY_FILE" .Values.secretKeys.relayauthApiKey "SELFHOST_BOOTSTRAP_TOKEN_FILE" .Values.secretKeys.bootstrapToken "SELFHOST_ENCRYPTION_KEY_FILE" .Values.secretKeys.encryptionKey -}}
 {{- with .Values.secretKeys.previousEncryptionKey }}{{ $_ := set $files "SELFHOST_ENCRYPTION_PREVIOUS_KEY_FILE" . }}{{ end -}}
 {{- with .Values.secretKeys.internalToken }}{{ $_ := set $files "SELFHOST_INTERNAL_TOKEN_FILE" . }}{{ end -}}
+{{- with .Values.secretKeys.relaycastInternalSecret }}{{ $_ := set $files "RELAYCAST_INTERNAL_SECRET_FILE" . }}{{ end -}}
+{{- if and .Values.auth.oidc.issuer .Values.secretKeys.oidcClientSecret }}{{ $_ := set $files "SELFHOST_OIDC_CLIENT_SECRET_FILE" .Values.secretKeys.oidcClientSecret }}{{ end -}}
+{{- if and .Values.smtp.host .Values.smtp.username .Values.secretKeys.smtpPassword }}{{ $_ := set $files "SELFHOST_SMTP_PASSWORD_FILE" .Values.secretKeys.smtpPassword }}{{ end -}}
 {{- if and (ne (include "relay-cloud-api.telemetryLevel" .) "off") .Values.secretKeys.telemetryInstallKey }}{{ $_ := set $files "SELFHOST_TELEMETRY_INSTALL_KEY_FILE" .Values.secretKeys.telemetryInstallKey }}{{ end -}}
 {{- toJson $files -}}
 {{- end -}}
@@ -147,6 +151,7 @@ telemetry.deployment is checked in validateRuntime before it is merged. */ -}}
 {{- if not (kindIs "invalid" .Values.flows.queuePingMs) }}{{ if ne (toString .Values.flows.queuePingMs) "" }}
 - { name: SELFHOST_FLOWS_QUEUE_PING_MS, value: {{ int64 .Values.flows.queuePingMs | toString | quote }} }
 {{- end }}{{ end }}
+{{- include "relay-cloud-api.identityEnv" . }}
 {{- $level := include "relay-cloud-api.telemetryLevel" . }}
 - { name: SELFHOST_TELEMETRY_LEVEL, value: {{ $level | quote }} }
 - { name: SELFHOST_TELEMETRY_TRANSPORT, value: {{ .Values.telemetry.transport | default "https" | quote }} }
@@ -270,4 +275,101 @@ spec:
             path: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
     - name: tmp
       emptyDir: { sizeLimit: 64Mi }
+{{- end -}}
+
+{{- /* bootstrap-signup: first-boot bootstrap, OIDC, email links, SMTP and
+invites (relaycontrol src/identity/config.ts). Nothing renders while the
+blocks are empty, so existing renders are unchanged. */ -}}
+{{- define "relay-cloud-api.identityEnv" -}}
+{{- with .Values.bootstrap.orgName }}
+- { name: SELFHOST_BOOTSTRAP_ORG_NAME, value: {{ . | quote }} }
+- { name: SELFHOST_BOOTSTRAP_ADMIN_EMAIL, value: {{ $.Values.bootstrap.adminEmail | lower | quote }} }
+{{- with $.Values.bootstrap.adminName }}
+- { name: SELFHOST_BOOTSTRAP_ADMIN_NAME, value: {{ . | quote }} }
+{{- end }}
+{{- with $.Values.bootstrap.workspaceName }}
+- { name: SELFHOST_BOOTSTRAP_WORKSPACE_NAME, value: {{ . | quote }} }
+{{- end }}
+{{- end }}
+{{- $oidc := .Values.auth.oidc }}
+{{- with $oidc.issuer }}
+- { name: SELFHOST_OIDC_ISSUER, value: {{ . | quote }} }
+- { name: SELFHOST_OIDC_CLIENT_ID, value: {{ $oidc.clientId | quote }} }
+{{- with $oidc.allowedDomains }}
+- { name: SELFHOST_OIDC_ALLOWED_DOMAINS, value: {{ join "," . | lower | quote }} }
+{{- end }}
+{{- with $oidc.displayName }}
+- { name: SELFHOST_OIDC_DISPLAY_NAME, value: {{ . | quote }} }
+{{- end }}
+{{- with $oidc.scopes }}
+- { name: SELFHOST_OIDC_SCOPES, value: {{ . | quote }} }
+{{- end }}
+{{- with $oidc.redirectUrl }}
+- { name: SELFHOST_OIDC_REDIRECT_URL, value: {{ . | quote }} }
+{{- end }}
+{{- if $oidc.allowHttpIssuer }}
+- { name: SELFHOST_OIDC_ALLOW_HTTP_ISSUER, value: "true" }
+{{- end }}
+{{- end }}
+{{- with .Values.smtp.host }}
+- { name: SELFHOST_SMTP_HOST, value: {{ . | quote }} }
+- { name: SELFHOST_SMTP_PORT, value: {{ int64 ($.Values.smtp.port | default 587) | toString | quote }} }
+{{- with $.Values.smtp.security }}
+- { name: SELFHOST_SMTP_SECURITY, value: {{ . | quote }} }
+{{- end }}
+{{- with $.Values.smtp.username }}
+- { name: SELFHOST_SMTP_USERNAME, value: {{ . | quote }} }
+{{- end }}
+- { name: SELFHOST_EMAIL_FROM, value: {{ $.Values.smtp.from | quote }} }
+{{- end }}
+{{- if .Values.auth.emailLink.enabled }}
+- { name: SELFHOST_EMAIL_LOGIN, value: "true" }
+{{- end }}
+{{- with .Values.auth.autoJoinDomains }}
+- { name: SELFHOST_AUTO_JOIN_DOMAINS, value: {{ join "," . | lower | quote }} }
+{{- end }}
+{{- if not (kindIs "invalid" .Values.auth.inviteTtlHours) }}{{ if ne (toString .Values.auth.inviteTtlHours) "" }}
+- { name: SELFHOST_INVITE_TTL_HOURS, value: {{ int64 .Values.auth.inviteTtlHours | toString | quote }} }
+{{- end }}{{ end }}
+{{- end -}}
+
+{{- define "relay-cloud-api.validateIdentity" -}}
+{{- $email := "^[^@\\s<>()\",;:]+@[^@\\s<>()\",;:]+\\.[^@\\s<>()\",;:]+$" -}}
+{{- $domain := "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$" -}}
+{{- $b := .Values.bootstrap -}}
+{{- if ne (empty $b.orgName) (empty $b.adminEmail) }}{{ fail "bootstrap.orgName and bootstrap.adminEmail must be set together" }}{{ end -}}
+{{- if $b.adminEmail }}{{ if not (regexMatch $email (toString $b.adminEmail)) }}{{ fail "bootstrap.adminEmail must be an email address" }}{{ end }}{{ end -}}
+{{- if and $b.orgName (not .Values.secretKeys.relaycastInternalSecret) }}{{ fail "bootstrap.orgName requires secretKeys.relaycastInternalSecret (the Secret key holding relaycast's internal secret, e.g. relaycast-internal-secret): the API creates the default workspace's Relaycast workspace with it" }}{{ end -}}
+{{- if and (or $b.adminName $b.workspaceName) (not $b.orgName) }}{{ fail "bootstrap.adminName and bootstrap.workspaceName need bootstrap.orgName and bootstrap.adminEmail" }}{{ end -}}
+{{- $oidc := .Values.auth.oidc -}}
+{{- if and (or $b.orgName $oidc.issuer .Values.auth.emailLink.enabled) (not .Values.dashboardUrl) (not (include "relay-cloud-api.singleHost" .)) }}{{ fail "dashboardUrl is required with bootstrap, auth.oidc or auth.emailLink (outside single-host mode): sign-in and invite links land on the dashboard origin, where the session cookie must be set" }}{{ end -}}
+{{- if $oidc.issuer }}
+{{- if not (regexMatch (ternary "^https?://[^?#@\\s]+$" "^https://[^?#@\\s]+$" (eq $oidc.allowHttpIssuer true)) (toString $oidc.issuer)) }}{{ fail "auth.oidc.issuer must be an https URL without credentials, query or fragment (allowHttpIssuer=true, for tests only, also accepts http)" }}{{ end -}}
+{{- if not $oidc.clientId }}{{ fail "auth.oidc.clientId is required with auth.oidc.issuer" }}{{ end -}}
+{{- if not .Values.secretKeys.oidcClientSecret }}{{ fail "auth.oidc.issuer requires secretKeys.oidcClientSecret (the Secret key holding the OIDC client secret)" }}{{ end -}}
+{{- with $oidc.redirectUrl }}{{ if not (regexMatch "^https?://[^/?#@\\s]+/login/oidc/callback$" (toString .)) }}{{ fail "auth.oidc.redirectUrl must be <origin>/login/oidc/callback" }}{{ end }}{{ end -}}
+{{- else if or $oidc.clientId $oidc.allowedDomains $oidc.displayName $oidc.scopes $oidc.redirectUrl $oidc.allowHttpIssuer }}
+{{- fail "auth.oidc.* settings need auth.oidc.issuer" -}}
+{{- end -}}
+{{- if not (kindIs "slice" ($oidc.allowedDomains | default list)) }}{{ fail "auth.oidc.allowedDomains must be a list of email domains" }}{{ end -}}
+{{- if not (kindIs "slice" (.Values.auth.autoJoinDomains | default list)) }}{{ fail "auth.autoJoinDomains must be a list of email domains" }}{{ end -}}
+{{- range $item := concat ($oidc.allowedDomains | default list) (.Values.auth.autoJoinDomains | default list) }}
+{{- if not (regexMatch $domain (lower (toString $item))) }}{{ fail (printf "auth.oidc.allowedDomains and auth.autoJoinDomains list email domains such as example.com (got %q)" (toString $item)) }}{{ end -}}
+{{- end -}}
+{{- if not (kindIs "invalid" .Values.auth.inviteTtlHours) }}{{ if ne (toString .Values.auth.inviteTtlHours) "" }}
+{{- if or (not (regexMatch "^[0-9]+$" (toString .Values.auth.inviteTtlHours))) (lt (int64 .Values.auth.inviteTtlHours) 1) (gt (int64 .Values.auth.inviteTtlHours) 720) }}{{ fail "auth.inviteTtlHours must be an integer from 1 to 720" }}{{ end -}}
+{{- end }}{{ end -}}
+{{- $smtp := .Values.smtp -}}
+{{- if and .Values.auth.emailLink.enabled (not $smtp.host) }}{{ fail "auth.emailLink.enabled requires smtp.host" }}{{ end -}}
+{{- if $smtp.host }}
+{{- if not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$" (toString $smtp.host)) }}{{ fail "smtp.host must be a hostname" }}{{ end -}}
+{{- if or (not (regexMatch "^[0-9]+$" (toString ($smtp.port | default 587)))) (lt (int64 ($smtp.port | default 587)) 1) (gt (int64 ($smtp.port | default 587)) 65535) }}{{ fail "smtp.port must be 1-65535" }}{{ end -}}
+{{- if and $smtp.security (not (has (toString $smtp.security) (list "tls" "starttls" "none"))) }}{{ fail "smtp.security must be tls, starttls or none" }}{{ end -}}
+{{- if or (not $smtp.from) (not (contains "@" (toString $smtp.from))) }}{{ fail "smtp.from is required with smtp.host, e.g. \"Agent Relay <relay@example.com>\"" }}{{ end -}}
+{{- if ne (empty $smtp.username) (empty .Values.secretKeys.smtpPassword) }}{{ fail "smtp.username and secretKeys.smtpPassword must be set together" }}{{ end -}}
+{{- else if or $smtp.username $smtp.from $smtp.security }}
+{{- fail "smtp.* settings need smtp.host" -}}
+{{- end -}}
+{{- if and .Values.secretKeys.oidcClientSecret (not $oidc.issuer) }}{{ fail "secretKeys.oidcClientSecret is set but auth.oidc.issuer is empty" }}{{ end -}}
+{{- if and .Values.secretKeys.smtpPassword (not $smtp.username) }}{{ fail "secretKeys.smtpPassword needs smtp.host and smtp.username" }}{{ end -}}
 {{- end -}}

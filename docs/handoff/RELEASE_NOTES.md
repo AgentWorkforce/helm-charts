@@ -37,6 +37,38 @@ Desktop setup. Relayflows, durable actors and Relayfile are optional preview
 components, off by default. Billing, provider integrations and hosted fleet
 are out of scope.
 
+## agent-relay 0.3.8 (unreleased): first boot, sign-in and invites
+
+To be published from the `agent-relay-0.3.8` tag (not tagged yet). It
+supersedes the never-tagged 0.3.7 and includes its changes. It ships with
+relay-cloud-api 0.2.4.
+
+- **First-boot bootstrap.** Set `relay-cloud-api.bootstrap.{orgName,adminEmail}`
+  together with `secretKeys.relaycastInternalSecret` and `dashboardUrl`. On
+  first start the API:
+  - creates the organization;
+  - makes the admin email its owner;
+  - creates a `Default` workspace bound to a new Relaycast workspace.
+
+  It is idempotent, so it is safe on an existing install.
+- **Sign-in.** `auth.oidc` adds OpenID Connect with PKCE (Google Workspace,
+  Okta, Entra ID, Keycloak). The client secret goes in
+  `secretKeys.oidcClientSecret`. Optional `auth.emailLink` sends single-use
+  email sign-in links and needs `smtp`. The bootstrap token remains the
+  operator break-glass.
+- **Invites.** Owners and admins invite from Settings → Members:
+  - links are single use and expire after `auth.inviteTtlHours`;
+  - they are emailed when `smtp` is set and can always be copied;
+  - `auth.autoJoinDomains` lets a domain join without invites.
+- `values-gcp.yaml` carries a commented example.
+
+Requirements:
+- a selfhost-api image from relaycontrol #13 or later;
+- a dashboard image from relay-dashboard #92 or later, for the invite UI.
+
+With none of these values set, renders are byte-identical apart from the
+`helm.sh/chart` labels.
+
 ## agent-relay 0.3.7 (2026-11-04): proof overlay patch
 
 To be published from the `agent-relay-0.3.7` tag (not tagged yet). 0.3.7 is

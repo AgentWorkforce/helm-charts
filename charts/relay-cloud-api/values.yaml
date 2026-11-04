@@ -36,6 +36,15 @@ secretKeys:
   # Telemetry install signing key issued by Agent Relay (at least 32 bytes).
   # Required when telemetry.level is not off.
   telemetryInstallKey: ""
+  # Relaycast's internal admin secret (the same Secret key relaycast's
+  # secretKeys.internalSecret names, e.g. relaycast-internal-secret). Required
+  # with bootstrap.orgName: the API creates the default workspace's Relaycast
+  # workspace through POST /internal/workspaces.
+  relaycastInternalSecret: ""
+  # OIDC client secret (required with auth.oidc.issuer).
+  oidcClientSecret: ""
+  # SMTP password (required with smtp.username).
+  smtpPassword: ""
 
 # Encryption key identifiers. Non-secret labels stored with every encrypted
 # value; the key material itself is secretKeys.encryptionKey.
@@ -53,6 +62,66 @@ encryption:
 # the API's publicUrl + "/", which is wrong whenever the dashboard has its own
 # host.
 dashboardUrl: ""
+
+# First-boot bootstrap (relaycontrol docs/identity.md). With orgName and
+# adminEmail set, the API creates the installation's organization on its first
+# start, makes adminEmail its owner, and creates a default workspace bound to
+# a new Relaycast workspace (needs secretKeys.relaycastInternalSecret). It is
+# idempotent: an existing organization and workspace are kept, and a newly
+# configured adminEmail is made an owner once. The admin then signs in at
+# <dashboard>/login with a method from auth below.
+bootstrap:
+  orgName: ""
+  adminEmail: ""
+  # Display name until the admin's first sign-in; empty uses the email's
+  # local part.
+  adminName: ""
+  # Empty uses "Default".
+  workspaceName: ""
+
+# How people sign in at <dashboard>/login. Without OIDC or email links only
+# the operator break-glass (a device code approved with the bootstrap token)
+# works.
+auth:
+  # OpenID Connect (Google Workspace, Okta, Microsoft Entra ID, Keycloak, ...):
+  # authorization code + PKCE. Register <dashboard origin>/login/oidc/callback
+  # as the redirect URI. The client secret is secretKeys.oidcClientSecret.
+  oidc:
+    # e.g. https://accounts.google.com, https://<org>.okta.com/oauth2/default,
+    # https://login.microsoftonline.com/<tenant-id>/v2.0
+    issuer: ""
+    clientId: ""
+    # Email domains allowed to sign in (others are refused), e.g. [acme.com].
+    allowedDomains: []
+    # Button label "Continue with <displayName>"; empty: "single sign-on".
+    displayName: ""
+    # Space-separated; empty: "openid email profile".
+    scopes: ""
+    # Fixed redirect URI (<origin>/login/oidc/callback); empty: the origin
+    # the sign-in started on.
+    redirectUrl: ""
+    # Test only: accept an http:// issuer (e.g. an in-cluster Dex).
+    allowHttpIssuer: false
+  # Email sign-in links (single use, 15 minutes); requires smtp.host.
+  emailLink:
+    enabled: false
+  # Verified emails in these domains join as member on first sign-in without
+  # an invite, e.g. [acme.com]. Empty: invites only.
+  autoJoinDomains: []
+  # Invite link lifetime in hours (1-720); empty: 168 (7 days).
+  inviteTtlHours: ""
+
+# SMTP for invite emails and sign-in links. Without it invites still work:
+# owners copy the single-use link from Settings > Members.
+smtp:
+  host: ""
+  port: 587
+  # starttls (default), tls (implicit TLS, usual on 465) or none.
+  security: ""
+  # Set together with secretKeys.smtpPassword.
+  username: ""
+  # Required with host, e.g. "Agent Relay <relay@acme.com>".
+  from: ""
 
 # Relayflows control plane (workers, runs, queue).
 flows:

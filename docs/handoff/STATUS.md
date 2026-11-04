@@ -23,6 +23,7 @@ Versions of the umbrella chart (published, plus the untagged candidate):
 | 0.3.4 | `agent-relay-0.3.4` | Documentation patch of 0.3.3 (Relaycast `ar_` credentials guidance). Published by [run 41754926487](https://github.com/AgentWorkforce/helm-charts/actions/runs/41754926487). |
 | 0.3.6 | `agent-relay-0.3.6` | Opt-in single-host mode and optional dashboard `customerProfile` branding (relay-dashboard 0.1.2); 0.3.5 was never tagged. Published by [run 41769269329](https://github.com/AgentWorkforce/helm-charts/actions/runs/41769269329). |
 | 0.3.7 | not tagged yet | GKE proof-overlay patch of 0.3.6 (Desktop deep links). |
+| 0.3.8 | not tagged yet | First-boot bootstrap, OIDC / email sign-in and invites (relay-cloud-api 0.2.4); supersedes 0.3.7. |
 
 This release is for **review by a company evaluating a self-hosted Agent Relay
 on GCP**. It is a reviewable `portable-single` release that pins every
