@@ -131,6 +131,8 @@ relaycast:
       fileStore:
         driver: s3
         bucket: <relaycast files bucket>
+        # eks-actors-sandbox.sh's files role may write only relaycast/* and relayfile/*.
+        prefix: relaycast/
         s3:
           region: <region>
 
@@ -158,5 +160,6 @@ relayfile:
       blobStore:
         driver: s3
         bucket: <relayfile blob bucket>
+        prefix: relayfile/
         s3:
           region: <region>

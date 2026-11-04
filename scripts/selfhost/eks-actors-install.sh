@@ -189,6 +189,9 @@ cmd_prepull() {
       echo "$NS $kind exists but was not created by this script: refusing to change it" >&2; exit 1
     fi
   done
+  # The pull credential must not outlive this command, whether it succeeds or not.
+  # shellcheck disable=SC2064
+  trap "kubectl -n '$NS' delete daemonset/image-prepull secret/image-pull --ignore-not-found >/dev/null 2>&1; rm -f '$KUBECONFIG_FILE'" EXIT
   kubectl -n "$NS" create secret generic image-pull --type=kubernetes.io/dockerconfigjson \
     --from-file=.dockerconfigjson="$config" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   kubectl -n "$NS" label secret image-pull "${OWNER_LABEL}=owned" --overwrite >/dev/null

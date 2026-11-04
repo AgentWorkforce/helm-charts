@@ -324,9 +324,20 @@ cmd_status() {
   printf 'vpc=%s bucket=%s\n' "$(vpc_id)" "$(aws_ s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1 && echo "$BUCKET" || echo absent)"
 }
 
+# cluster_exists: 0 when the cluster exists, 1 when EKS confirms it does not;
+# any other lookup error stops the script, so `down` never deletes storage
+# while a cluster it could not see may still be running actors.
+cluster_exists() {
+  local err
+  if err="$(aws_ eks describe-cluster --name "$NAME" 2>&1 >/dev/null)"; then return 0; fi
+  if grep -q ResourceNotFoundException <<<"$err"; then return 1; fi
+  echo "describe-cluster $NAME failed: $err" >&2
+  exit 1
+}
+
 cmd_down() {
   local vpc assoc group id
-  if aws_ eks describe-cluster --name "$NAME" >/dev/null 2>&1; then
+  if cluster_exists; then
     kubeconfig
     kubectl delete ingress --all -A --wait=true --timeout=10m || true
     kubectl delete svc -A --field-selector spec.type=LoadBalancer --wait=true --timeout=10m || true
