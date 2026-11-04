@@ -40,8 +40,8 @@ hosted fleet are out of scope; operator-configured integration OAuth apps
 
 ## agent-relay 0.3.10 (2026-11-04): current images, every pin public
 
-Published from the `agent-relay-0.3.10` tag
-(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.10). It
+Released by `release-agent-relay.yml` when the `agent-relay-0.3.10` tag is
+pushed (`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.10). It
 supersedes the never-tagged 0.3.7, 0.3.8 and 0.3.9 and includes their changes
 (below), so it covers everything since 0.3.6. The leaf charts are unchanged
 from 0.3.9 (relay-cloud-api 0.2.4, relay-dashboard 0.1.3, relayhistory 0.1.1,
@@ -59,7 +59,7 @@ REQUIRED OVERRIDE zero digests (RelayHistory, Sessions services) are gone.
 | Sessions services (worker, alleyoop) | `ghcr.io/agentworkforce/96bulls-services@sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9` | sessions-pipeline `f1c2672` |
 | Relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:81274dca7ab58673383dc7a9c777f422f29606c7422e81b5ea15724770f1455e` (unchanged) | relaycast `bf713d86` (engine 12.7.0) |
 | RelayAuth | `ghcr.io/agentworkforce/relayauth@sha256:c23c92d25fdffef3b5838a1eef4c226925f859706365d9ccece229795b877288` (unchanged) | relayauth `784582e` |
-| Sessions wait-for-role | `ghcr.io/cloudnative-pg/postgresql@sha256:ed6923f9…` (unchanged) | upstream `4c2710a` |
+| Sessions wait-for-role | `ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3` (unchanged) | upstream `4c2710a` |
 
 Mirror each one by digest into your registry, as before (image supply-chain
 guide).
@@ -113,12 +113,19 @@ for f in session_directory_search_worker session_token_verifier session_ingest_r
 done
 ```
 
-The scripts are idempotent. `scripts/selfhost/eks-proof-install.sh
-hoopdb-roles` does the same in-cluster on EKS.
+The scripts are idempotent. On Cloud SQL (`values-gcp.yaml`) a fresh install
+runs the full set as the migration owner, in order:
+`cloudsql_migration_roles.sql`, `session_directory_search_worker.sql`,
+`session_token_verifier.sql`, `session_ingest_roles.sql`,
+`cloudsql_owner_function_default_revoke.sql` (all in the same image
+directory). An upgrade from 0.3.6 already ran the first, second and last at
+install.
 
 Proof: the EKS proof passed all 15 end-to-end cases with services `070fe6fd`,
-RelayHistory `d3166bb1` and the interim bearer off. The GKE proof ran the same
-API and dashboard revisions from private builds. Renders with your own
+RelayHistory `d3166bb1` and the interim bearer off, using earlier API and
+dashboard builds. The GKE proof also ran earlier proof builds of the API and
+dashboard. Neither proof has been re-run with the 0.3.10 selfhost-api and
+dashboard digests yet. Renders with your own
 `image.repository`/`image.digest` overrides are unchanged apart from the
 `helm.sh/chart` labels.
 

@@ -1,8 +1,8 @@
 # Release status: what is proven and what is preview
 
-Current release: `agent-relay` chart 0.3.10, published from the
-`agent-relay-0.3.10` tag by `release-agent-relay.yml` (pullable anonymously
-from `oci://ghcr.io/agentworkforce/charts/agent-relay`). Every image
+Current release: `agent-relay` chart 0.3.10. `release-agent-relay.yml`
+publishes it when the `agent-relay-0.3.10` tag is pushed; from then on it is
+pullable anonymously from `oci://ghcr.io/agentworkforce/charts/agent-relay`. Every image
 `values-gcp.yaml` renders is now a public GHCR release digest: the
 control-plane API (selfhost-api 0.3.0), the redesigned dashboard,
 RelayHistory and the Sessions services image join Relaycast, RelayAuth and
