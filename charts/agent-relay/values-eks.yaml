@@ -95,12 +95,15 @@ relayauth:
 sessions-pipeline:
   worker:
     image:
-        # Public GHCR (sessions-pipeline 7d7229b, audited with sessions-pipeline
-      # chart 0.6.0; newer main builds need roles that chart does not
-      # bootstrap). Mirror it by digest to
-      # your ECR to pull with the node role instead.
+        # Public GHCR (sessions-pipeline f1c2672, with #204: the ingest
+      # verifies the origin-bound History assertion with no interim bearer).
+      # Before its first migrate, run the privileged HoopDb role bootstraps
+      # the sessions-pipeline 0.6.0 chart does not (session_token_verifier,
+      # session ingest roles) as the Postgres superuser:
+      # scripts/selfhost/eks-proof-install.sh hoopdb-roles. Mirror it by
+      # digest to your ECR to pull with the node role instead.
       repository: ghcr.io/agentworkforce/96bulls-services
-      digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
+      digest: sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9
     # REQUIRED OVERRIDE: existing Secret name; see the chart README for keys.
     existingSecret: example-agent-relay-secrets
     summaryEncryption:
@@ -138,7 +141,7 @@ sessions-pipeline:
     image:
       # Same services image repository and digest as worker.
       repository: ghcr.io/agentworkforce/96bulls-services
-      digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
+      digest: sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9
     # REQUIRED OVERRIDE: existing Secret name; see the chart README for keys.
     existingSecret: example-agent-relay-secrets
     locker:
@@ -177,7 +180,7 @@ sessions-pipeline:
     sqlImage:
       # Same services image repository and digest as worker.
       repository: ghcr.io/agentworkforce/96bulls-services
-      digest: sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2
+      digest: sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9
   locker:
     enabled: false
 

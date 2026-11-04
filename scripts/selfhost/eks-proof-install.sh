@@ -7,6 +7,7 @@
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh prereqs
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh install
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh bootstrap-org
+#   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh hoopdb-roles   # newer services images
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh status
 #   pippen sandbox exec aws-proof -- scripts/selfhost/eks-proof-install.sh uninstall
 #
@@ -49,15 +50,17 @@ ORG_ID="${EKS_PROOF_ORG_ID:-org_eks_proof}"
 VPC_CIDR="${EKS_PROOF_VPC_CIDR:-10.42.0.0/16}"
 BUCKET="${NAME}-${ACCOUNT}"
 DOMAIN="${EKS_PROOF_DOMAIN:-aws-proof.agentrelay.com}"
-# Public GHCR images by digest: sessions-pipeline 7d7229b (the image
-# sessions-pipeline chart 0.6.0 is audited with; main 1247da7 needs a
-# session_token_verifier role that chart does not bootstrap) and
+# Public GHCR images by digest: sessions-pipeline f1c2672 (with #204,
+# no interim bearer needed; run hoopdb-roles before its first migrate, the
+# sessions-pipeline 0.6.0 chart does not bootstrap its newer roles) and
 # relayhistory-cloud 53c3333. No ECR copy or pull secret.
 SERVICES_REPO="${EKS_PROOF_SERVICES_REPO:-ghcr.io/agentworkforce/96bulls-services}"
-SERVICES_DIGEST="${EKS_PROOF_SERVICES_DIGEST:-sha256:6f22ea17dff336e1431664542759fd27958649388b90a0b2f0881883caa7c6b2}"
+SERVICES_DIGEST="${EKS_PROOF_SERVICES_DIGEST:-sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9}"
 HISTORY_REPO="${EKS_PROOF_HISTORY_REPO:-ghcr.io/agentworkforce/relayhistory}"
 HISTORY_DIGEST="${EKS_PROOF_HISTORY_DIGEST:-sha256:d3166bb14e1d6043426a4dd8cc05408b94574c8d79ad5fd6e789e0de00ab371b}"
 INTERIM_BEARER="${EKS_PROOF_INTERIM_BEARER:-false}"
+# Run hoopdb-roles during install (needed for the default services image).
+HOOPDB_ROLES="${EKS_PROOF_HOOPDB_ROLES:-true}"
 CNPG_CHART_VERSION="${EKS_PROOF_CNPG_CHART_VERSION:-0.26.1}"
 PG_IMAGE="ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3"
 STATE_DIR="${EKS_PROOF_STATE_DIR:-$ROOT/.eks-proof}"
@@ -273,7 +276,24 @@ cmd_install() {
     { log "no $STATE_DIR/acm-cert-arn: run eks-proof-dns.sh cert-request first"; exit 1; }
   proof_overlay
   log "helm upgrade --install $CHART $CHART_VERSION (domain $DOMAIN, interim bearer $INTERIM_BEARER)"
-  helm_apply
+  if [[ "$HOOPDB_ROLES" == true ]]; then
+    # The HoopDb cluster is created by this install; its migrate Job verifies
+    # the newer roles and retries only 3 times, so bootstrap them as soon as
+    # the cluster is Ready, and re-apply if the Job had already given up.
+    helm_apply & local hp=$!
+    for _ in $(seq 1 90); do kubectl -n "$NS" get cluster/hoopdb >/dev/null 2>&1 && break; sleep 10; done
+    cmd_hoopdb_roles
+    local rc=0; wait "$hp" || rc=$?
+    local failed
+    failed="$(kubectl -n "$NS" get jobs -o jsonpath='{range .items[?(@.status.failed)]}{.metadata.name}{"\n"}{end}' | grep -- '-worker-migrate-' || true)"
+    if ((rc != 0)) || [[ -n "$failed" ]]; then
+      [[ -n "$failed" ]] && kubectl -n "$NS" delete job $failed --ignore-not-found >/dev/null
+      log "re-apply after the role bootstrap (helm rc=$rc, failed migrate jobs: ${failed:-none})"
+      helm_apply
+    fi
+  else
+    helm_apply
+  fi
   EKS_ALB_DOMAIN="$DOMAIN" EKS_ALB_CERT_ARN="$cert" "$HERE/eks-alb-ingress.sh" "$NS" | kubectl apply -f -
   log "waiting for the ALB hostname"
   local alb=""
@@ -307,6 +327,25 @@ if ((list.organizations ?? []).length > 0) {
 JS
 }
 
+# hoopdb-roles: the privileged role bootstraps that services images newer
+# than sessions-pipeline 0.6.0's audited build (7d7229b) verify before they
+# migrate (session_token_verifier, the session ingest roles) and that the
+# sessions-pipeline 0.6.0 chart does not run. Each SQL file comes from the
+# services image itself and runs as the CNPG superuser over the hoopdb pod's
+# local socket; both are idempotent and never alter an existing role. Run it
+# after the HoopDb cluster exists and before an install or upgrade with such
+# an image (EKS_PROOF_SERVICES_DIGEST).
+cmd_hoopdb_roles() {
+  local f pod="hoopdb-roles-$$"
+  kubectl -n "$NS" wait cluster/hoopdb --for=condition=Ready --timeout=15m >/dev/null
+  for f in session_directory_search_worker session_token_verifier session_ingest_roles; do
+    log "HoopDb bootstrap $f.sql (services ${SERVICES_DIGEST:0:19}...) as the CNPG superuser"
+    kubectl -n "$NS" run "$pod" --rm -i --quiet --restart=Never --pod-running-timeout=10m --image="${SERVICES_REPO}@${SERVICES_DIGEST}" \
+      --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"c","image":"'"${SERVICES_REPO}@${SERVICES_DIGEST}"'","command":["cat","/app/supabase/bootstrap/'"$f"'.sql"],"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}' |
+      kubectl -n "$NS" exec -i hoopdb-1 -c postgres -- psql -X -q -v ON_ERROR_STOP=1 -d hoopdb
+  done
+}
+
 cmd_status() {
   helm -n "$NS" status "$RELEASE" 2>/dev/null | sed -n '1,8p' || true
   kubectl -n "$NS" get pods,ingress,cluster.postgresql.cnpg.io -o wide 2>/dev/null || true
@@ -327,7 +366,8 @@ case "${1:-}" in
   prereqs) cmd_prereqs ;;
   install) cmd_install ;;
   bootstrap-org) cmd_bootstrap_org ;;
+  hoopdb-roles) cmd_hoopdb_roles ;;
   status) cmd_status ;;
   uninstall) cmd_uninstall ;;
-  *) echo "usage: $0 prereqs|install|bootstrap-org|status|uninstall" >&2; exit 2 ;;
+  *) echo "usage: $0 prereqs|install|bootstrap-org|hoopdb-roles|status|uninstall" >&2; exit 2 ;;
 esac
