@@ -52,6 +52,11 @@ jobs:
           helm dependency build charts/sessions-pipeline >/dev/null
           ci/sessions-pipeline-search-worker-role/render.sh
 
+      # S3 artifact store of the relaycast and relayfile deploy Jobs and the
+      # durable-actors control plane's S3 env (charts/*/ci/durable-actors-s3-values.yaml).
+      - name: durable-actors S3 render assertions
+        run: ci/actors-s3/render.sh
+
       # The development-preview customer handoff builds, verifies, extracts,
       # and its umbrella resolves every file:// dependency and renders.
       - name: Customer handoff package smoke
