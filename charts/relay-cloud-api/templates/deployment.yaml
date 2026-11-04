@@ -45,8 +45,12 @@ spec:
             - { name: RELAYHISTORY_PUBLIC_URL, value: {{ .Values.services.relayhistoryPublicUrl | quote }} }
             {{- include "relay-cloud-api.runtimeEnv" . | nindent 12 }}
             {{- include "relay-cloud-api.secretEnv" . | nindent 12 }}
+            {{- include "relay-cloud-api.integrationEnv" . | nindent 12 }}
           volumeMounts:
             - { name: secrets, mountPath: /var/run/agent-relay/secrets, readOnly: true }
+            {{- range $provider := keys (.Values.integrations | default dict) | sortAlpha }}
+            - { name: {{ printf "oauth-%s" $provider | quote }}, mountPath: {{ printf "/var/run/agent-relay/integrations/%s" $provider | quote }}, readOnly: true }
+            {{- end }}
             - { name: tmp, mountPath: /tmp }
           startupProbe:
             {{- toYaml .Values.startupProbe | nindent 12 }}
@@ -64,6 +68,15 @@ spec:
               {{- include "relay-cloud-api.secretItems" . | nindent 14 }}
         - name: tmp
           emptyDir: { sizeLimit: 64Mi }
+        {{- range $provider := keys (.Values.integrations | default dict) | sortAlpha }}
+        {{- $app := index $.Values.integrations $provider }}
+        - name: {{ printf "oauth-%s" $provider | quote }}
+          secret:
+            secretName: {{ $app.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - { key: {{ $app.clientSecretKey | default "client-secret" | quote }}, path: client-secret }
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
       {{- end }}

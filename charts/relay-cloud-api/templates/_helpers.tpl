@@ -63,6 +63,7 @@ settings. */ -}}
 {{- include "relay-cloud-api.validateRuntime" . -}}
 {{- if and .Values.migrations.enabled (not (regexMatch "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" .Values.database.runtimeRole)) }}{{ fail "database.runtimeRole must be a valid PostgreSQL role name when migrations are enabled" }}{{ end -}}
 {{- include "relay-cloud-api.validateSingleHost" . -}}
+{{- include "relay-cloud-api.validateIntegrations" . -}}
 {{- if not (regexMatch "^https://[^/?#]+$" (include "relay-cloud-api.publicUrl" .)) }}{{ fail "publicUrl must be an HTTPS origin with no path" }}{{ end -}}
 {{- range $name, $url := dict "relayauthUrl" .Values.services.relayauthUrl "relaycastUrl" .Values.services.relaycastUrl "relayhistoryUrl" .Values.services.relayhistoryUrl }}{{ if not (regexMatch "^https?://[^/?#]+$" $url) }}{{ fail (printf "services.%s must be an HTTP(S) origin with no path" $name) }}{{ end }}{{ end -}}
 {{- $publicOriginPattern := "^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(:[0-9]{1,5})?$" -}}
@@ -270,4 +271,30 @@ spec:
             path: {{ .Values.secretKeys.databaseMigrationsUrl | quote }}
     - name: tmp
       emptyDir: { sizeLimit: 64Mi }
+{{- end -}}
+
+{{- /* Operator OAuth apps for just-in-time integration connects:
+SELFHOST_OAUTH_<PROVIDER>_CLIENT_ID from the Secret, the client secret as a
+mounted file (_CLIENT_SECRET_FILE), optional _SCOPES. */ -}}
+{{- define "relay-cloud-api.integrationEnv" -}}
+{{- range $provider := keys (.Values.integrations | default dict) | sortAlpha }}
+{{- $app := index $.Values.integrations $provider }}
+{{- $prefix := printf "SELFHOST_OAUTH_%s" (upper (replace "-" "_" $provider)) }}
+- name: {{ printf "%s_CLIENT_ID" $prefix }}
+  valueFrom:
+    secretKeyRef: { name: {{ $app.existingSecret | quote }}, key: {{ $app.clientIdKey | default "client-id" | quote }} }
+- { name: {{ printf "%s_CLIENT_SECRET_FILE" $prefix }}, value: {{ printf "/var/run/agent-relay/integrations/%s/client-secret" $provider | quote }} }
+{{- with $app.scopes }}
+- { name: {{ printf "%s_SCOPES" $prefix }}, value: {{ . | quote }} }
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{- define "relay-cloud-api.validateIntegrations" -}}
+{{- range $provider, $app := (.Values.integrations | default dict) }}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]{0,40}$" $provider) }}{{ fail (printf "integrations.%s: provider ids are lowercase letters, digits and -" $provider) }}{{ end }}
+{{- if not (kindIs "map" $app) }}{{ fail (printf "integrations.%s must be a map with existingSecret" $provider) }}{{ end }}
+{{- if empty $app.existingSecret }}{{ fail (printf "integrations.%s.existingSecret is required; client IDs and secrets are never inline" $provider) }}{{ end }}
+{{- range $field := list "clientIdKey" "clientSecretKey" }}{{ with index $app $field }}{{ if not (regexMatch "^[A-Za-z0-9._-]+$" (toString .)) }}{{ fail (printf "integrations.%s.%s must be a Kubernetes Secret data key" $provider $field) }}{{ end }}{{ end }}{{ end }}
+{{- end }}
 {{- end -}}
