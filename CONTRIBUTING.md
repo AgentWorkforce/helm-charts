@@ -14,13 +14,18 @@ are welcome.
 
 ## Development
 
+You need `helm`, `kubeconform`, `yq`, Python 3 and Node.js; see
+`.github/workflows/lint.yml` for the versions CI uses.
+
 ```sh
 scripts/ci/charts.sh static
 ci/agent-relay/render.sh
 scripts/ci/deps.sh
 ```
 
-Run the checks above before you open a pull request; CI runs the same ones.
+Run these checks before you open a pull request. CI runs these and more (see
+`.github/workflows/lint.yml`), including a chart version-bump check: bump a
+chart's `version` in `Chart.yaml` when you change it.
 
 ## Pull requests
 
@@ -30,8 +35,10 @@ Run the checks above before you open a pull request; CI runs the same ones.
 - Describe what changed and why, and how you tested it.
 - Never commit secrets, credentials, real customer data or production
   identifiers, including in tests and fixtures. Use obviously fake values.
-- CI from forks runs without repository secrets, so jobs that need them are
-  skipped on fork pull requests; a maintainer runs them before merge.
+- Pull request CI runs without repository secrets, including on forks. One
+  check, `search-worker-role-kind`, needs a repository secret: on a fork pull
+  request that touches the Sessions Pipeline charts it fails rather than skips,
+  and a maintainer re-runs it from a branch in this repository before merge.
 
 A maintainer reviews every pull request. We may ask for changes, or decline a
 change that doesn't fit the project's direction.
