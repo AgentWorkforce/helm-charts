@@ -57,8 +57,8 @@ relaycast:
   # Optional: RelayAuth-issued ar_ credentials (model B). RelayAuth owns the
   # ar_ tag keyring and pushes ar_ws_ workspace keys into Relaycast; Relaycast
   # verifies tags through RelayAuth's remote CredentialTagger. Requires a
-  # >=12.3.x relaycast engine image (newer than the chart default, so
-  # image.digest must name a >=12.3.x build) and components.relayauth=true.
+  # >=12.3.x relaycast engine image (the pinned default, engine 12.7.0,
+  # satisfies it) and components.relayauth=true.
   # credentials:
   #   format: ar
   #   authority: relayauth
