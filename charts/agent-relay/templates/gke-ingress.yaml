@@ -42,11 +42,33 @@ shape (hosts.files without components.relayfile fails further down). */ -}}
 {{- $hostApi := dig "hosts" "api" "" $gke -}}
 {{- $hostCast := dig "hosts" "cast" "" $gke -}}
 {{- $hostHistory := dig "hosts" "history" "" $gke -}}
+{{- /* Single-host mode (global.singleHost.host): the dashboard and the control
+API share one host, the root host. The API is routed there under /cloud/api,
+/login and /api (flows workers and the integrations OAuth callback use
+<publicUrl>/api/v1/...), so there is no api host. Relaycast and Relay History
+need app changes before they can live under a path prefix, so they keep their
+own hosts (README: Single-host mode). No service on the single host needs a
+path rewrite, so the GCE Ingress (with its BackendConfigs) still fits. */ -}}
+{{- $singleHost := dig "singleHost" "host" "" (.Values.global | default dict) -}}
+{{- if $singleHost }}
+{{- if and $hostRoot (ne $hostRoot $singleHost) }}{{ fail (printf "gkeIngress.hosts.root is global.singleHost.host (%s) in single-host mode; leave it empty" $singleHost) }}{{ end -}}
+{{- if $hostApi }}{{ fail "gkeIngress.hosts.api must be empty in single-host mode: the control API is served on global.singleHost.host under /cloud/api, /login and /api" }}{{ end -}}
+{{- $hostRoot = $singleHost -}}
+{{- range $name, $host := dict "cast" $hostCast "history" $hostHistory }}
+{{- $service := ternary "relaycast" "relayhistory" (eq $name "cast") -}}
+{{- if not $host }}{{ fail (printf "gkeIngress.hosts.%s is still required in single-host mode: %s cannot be served under a path prefix on the single host yet (%s)" $name $service (include "agent-relay.singleHostGap" (dict "root" $ "name" $service))) }}{{ end -}}
+{{- end }}
+{{- range $name, $host := dict "root" $hostRoot "cast" $hostCast "history" $hostHistory }}
+{{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
+{{- end }}
+{{- if ne (len (list $hostRoot $hostCast $hostHistory | uniq)) 3 }}{{ fail "global.singleHost.host and gkeIngress.hosts.cast/history must all be distinct" }}{{ end -}}
+{{- else }}
 {{- range $name, $host := dict "root" $hostRoot "api" $hostApi "cast" $hostCast "history" $hostHistory }}
 {{- if not $host }}{{ fail (printf "gkeIngress.hosts.%s is required when gkeIngress.enabled=true" $name) }}{{ end -}}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
 {{- end }}
 {{- if ne (len (list $hostRoot $hostApi $hostCast $hostHistory | uniq)) 4 }}{{ fail "gkeIngress.hosts.root/api/cast/history must all be distinct" }}{{ end -}}
+{{- end }}
 {{- /* Optional hosts: the durable-actors public origin and Relayfile. */ -}}
 {{- $hostActors := dig "hosts" "actors" "" $gke -}}
 {{- $hostFiles := dig "hosts" "files" "" $gke -}}
@@ -68,7 +90,7 @@ shape (hosts.files without components.relayfile fails further down). */ -}}
 {{- range $name, $host := dict "actors" $hostActors "files" $hostFiles }}
 {{- if and $host (not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $host)) }}{{ fail (printf "gkeIngress.hosts.%s must be a DNS hostname" $name) }}{{ end -}}
 {{- end }}
-{{- $allHosts := concat (list $hostRoot $hostApi $hostCast $hostHistory) $optionalHosts -}}
+{{- $allHosts := concat (ternary (list $hostRoot $hostCast $hostHistory) (list $hostRoot $hostApi $hostCast $hostHistory) (not (empty $singleHost))) $optionalHosts -}}
 {{- if ne (len ($allHosts | uniq)) (len $allHosts) }}{{ fail "gkeIngress.hosts must all be distinct" }}{{ end -}}
 {{- $actorsName := printf "%s-durable-actors" .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- $actorsTimeout := dig "actorsBackendTimeoutSec" 3600 $gke -}}
@@ -176,7 +198,9 @@ metadata:
 spec:
   domains:
     - {{ $hostRoot | quote }}
+    {{- if not $singleHost }}
     - {{ $hostApi | quote }}
+    {{- end }}
     - {{ $hostCast | quote }}
     - {{ $hostHistory | quote }}
     {{- range $optionalHosts }}
@@ -292,12 +316,24 @@ spec:
               service:
                 name: {{ index $backendNames "api" }}
                 port: { number: {{ $gke.backends.api.servicePort }} }
+          {{- if $singleHost }}
+          # Single-host mode: flows workers and the integrations OAuth
+          # callback call <publicUrl>/api/v1/...; the api BackendConfig
+          # timeout covers the worker queue SSE stream here too.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ index $backendNames "api" }}
+                port: { number: {{ $gke.backends.api.servicePort }} }
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: {{ index $backendNames "dashboard" }}
                 port: { number: {{ $gke.backends.dashboard.servicePort }} }
+    {{- if not $singleHost }}
     - host: {{ $hostApi | quote }}
       http:
         paths:
@@ -316,6 +352,7 @@ spec:
               service:
                 name: {{ index $backendNames "api" }}
                 port: { number: {{ $gke.backends.api.servicePort }} }
+    {{- end }}
     - host: {{ $hostCast | quote }}
       http:
         paths:

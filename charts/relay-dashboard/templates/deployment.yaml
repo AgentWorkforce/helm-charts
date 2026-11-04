@@ -55,7 +55,7 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            - { name: DASHBOARD_PUBLIC_URL, value: {{ .Values.runtime.publicUrl | quote }} }
+            - { name: DASHBOARD_PUBLIC_URL, value: {{ include "relay-dashboard.publicUrl" . | quote }} }
             - { name: DASHBOARD_APP_PATH, value: {{ .Values.runtime.appPath | quote }} }
             - { name: DASHBOARD_API_BASE_PATH, value: {{ .Values.runtime.apiBasePath | quote }} }
             - { name: DASHBOARD_LOGIN_PATH, value: {{ .Values.runtime.loginPath | quote }} }

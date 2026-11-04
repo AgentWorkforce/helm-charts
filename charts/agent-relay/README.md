@@ -151,6 +151,72 @@ For a base domain `relay.example.com`:
 Leaf ingresses are disabled and each ClusterIP backend uses a GKE standalone
 NEG. Sensitive Relaycast paths still route to an endpoint-less deny Service.
 
+## Single-host mode
+
+The per-service hosts above are the default. Single-host mode is opt-in: set
+`global.singleHost.host` and the dashboard and the self-host control API share
+that one host. `values-single-host-example.yaml` is an overlay for
+`values-gcp.yaml`:
+
+```sh
+helm template agent-relay . -n agent-relay -f values-gcp.yaml -f values-single-host-example.yaml
+```
+
+For `global.singleHost.host: relay.example.com`:
+
+- `relay.example.com`: `/cloud/api`, `/login` and `/api` to the control API,
+  then `/` to the dashboard. `/api` carries the flows worker endpoints and the
+  integrations OAuth callback, which relaycontrol hands out as
+  `<publicUrl>/api/v1/...`; it is not routed in the default mode, where the
+  api host serves them.
+- There is no api host. Point Desktop's custom origin and `agent-relay login`
+  at `https://relay.example.com`; Desktop derives `/cloud/api` from it.
+- `cast.relay.example.com` and `history.relay.example.com` (and
+  `gkeIngress.hosts.files`/`actors` when set) stay separate hosts, see below.
+  The ManagedCertificate covers the single host plus those hosts.
+
+Set the host once. `relay-cloud-api.publicUrl`, `relay-dashboard.runtime.publicUrl`
+and `relay-dashboard.ingress.host` are derived as `https://<host>`, and the
+chart fails if any of them is set to something else. `gkeIngress.hosts.root`
+must be empty (or equal the host) and `gkeIngress.hosts.api` must be empty.
+`relay-cloud-api.dashboardUrl` can stay empty: its default, `publicUrl + "/"`,
+is the dashboard in this mode. Without the GKE Ingress, enable the
+`relay-dashboard` leaf Ingress: it routes the same four paths on the derived
+host. `relay-cloud-api.ingress.enabled` must stay `false`.
+
+The api BackendConfig (flows worker queue SSE timeout) still binds the
+relay-cloud-api Service, so it covers `/cloud/api` and `/api` on the single
+host; the cast BackendConfig (WebSocket timeout) and the edge-deny routes on the
+cast host are unchanged. With `global.singleHost.host` empty, every default
+render is byte-identical to the previous release apart from the
+`helm.sh/chart` labels; `ci/agent-relay/subdomain-golden.sh` checks it in CI
+and `ci/agent-relay/subdomain-golden.sh diff origin/main` shows any change.
+
+### What can share the host
+
+| Service | Under a path prefix on the single host | Why |
+| --- | --- | --- |
+| relay-dashboard | Works as is, at `/` | Assets are built for `/`; it calls only same-origin `/cloud/api`. |
+| relaycontrol (relay-cloud-api) | Works as is, at `/cloud/api`, `/login`, `/api` | It serves those paths natively (`/cloud/api/v1/*` aliases `/api/v1/*`), so nothing is stripped. `publicUrl` is the single host. `/internal` is not routed. |
+| Relaycast | Needs an app change; stays on its own host | The relaycast-self-host entrypoint refuses a `--base-url` with a path. The TypeScript SDK joins with `new URL('/v1/...', base)`, which drops `/cast`. relaycontrol (`RELAYCAST_PUBLIC_URL`) and Desktop (`validated_base_url`, which silently falls back to `cast.agentrelay.com`) refuse a path-prefixed URL. The A2A, inbound-hook and relayfile-inbound URLs are built from the request origin. Prefix stripping alone fixes none of these. |
+| Relay History | Needs an app change; stays on its own host | The server would work behind prefix stripping, but `relayhistoryPublicUrl` is both the History assertion audience (a bare origin) and the base URL relaycontrol hands clients, and relaycontrol and Desktop refuse a path. |
+| Relayfile | Needs an app change; stays on its own host | The server and actors gateway would work behind prefix stripping, but the mount and `listen` clients build WebSocket URLs by replacing the path, which drops `/files`. |
+| durable-actors | Needs an app change; stays on its own host | The control plane refuses a `publicUrl` with a path and issues actor sockets at `<origin>/v1/socket`; the SDK refuses a base path. |
+
+The chart enforces the last four rows: in single-host mode `gkeIngress.hosts.cast`
+and `history` are still required, and rendering fails when `relaycast.baseUrl`,
+`relayhistory.relayauth.historyOrigin`, `relay-cloud-api.services.*PublicUrl`,
+`sessions-pipeline.alleyoop.auth.historyOrigin`, `durable-actors.publicUrl` or
+a Relaycast, Relay History or Relayfile leaf ingress host uses the single host.
+
+GCE Ingress cannot rewrite paths. GKE Gateway API (`HTTPRoute` with a
+`URLRewrite` `ReplacePrefixMatch` filter) can, but it would mean replacing the
+ManagedCertificate, FrontendConfig and BackendConfigs with Certificate Manager,
+an HTTP redirect route and `GCPBackendPolicy`. Nothing that can share the host
+today needs a rewrite, so single-host mode keeps the GCE Ingress. Once the app
+changes above land, a Gateway API variant can strip `/cast`, `/history`,
+`/files` and `/actors`.
+
 All application credentials come from existing Secrets. The deployment values
 contain no credentials and no imagePullSecret reference. Rendering fails until
 all required immutable digests are present. The live proof

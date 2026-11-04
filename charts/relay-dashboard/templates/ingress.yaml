@@ -20,7 +20,7 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host | quote }}
+    - host: {{ include "relay-dashboard.ingressHost" . | quote }}
       http:
         paths:
           # Must precede "/" for ingress controllers that preserve declaration
@@ -39,6 +39,17 @@ spec:
                 name: {{ .Values.api.serviceName }}
                 port:
                   number: {{ .Values.api.servicePort }}
+          {{- if include "relay-dashboard.singleHost" . }}
+          # Single-host mode: flows workers and the integrations OAuth
+          # callback use <publicUrl>/api/v1/... on this host.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.api.serviceName }}
+                port:
+                  number: {{ .Values.api.servicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

@@ -364,9 +364,20 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
+    - id: agent-relay-0.3.5
+      status: unreleased
+      current: true
+      charts: { agent-relay: 0.3.5, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.1 }
+      app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
+      depends:
+        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.1, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+      images:
+        relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
+        relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
+        relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
+      notes: 'Not tagged; the release lane cuts the tag. Adds opt-in single-host mode (global.singleHost.host, off by default): the dashboard and the control API share one host (/, /cloud/api, /login, /api), relay-cloud-api 0.2.2 derives publicUrl and relay-dashboard 0.1.1 derives runtime.publicUrl and ingress.host from it, and the GKE Ingress drops the api host. Relaycast, Relay History, Relayfile and durable-actors keep their own hosts (app changes needed; README Single-host mode). With single-host mode off every default render is byte-identical to 0.3.4 apart from the helm.sh/chart labels (ci/agent-relay/subdomain-golden.sh). Images unchanged from 0.3.4.'
     - id: agent-relay-0.3.4
       status: shipped
-      current: true
       charts: { agent-relay: 0.3.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
@@ -1784,6 +1795,49 @@ entries:
     sources:
       - "charts/relayhistory/values.yaml"
       - "charts/relayhistory/templates/migrate-job.yaml"
+
+  - id: opt.agent-relay.single-host
+    kind: option
+    title: Single-host mode for the dashboard and the control API
+    description: |
+      global.singleHost.host (off when empty) puts the dashboard and the
+      self-host control API on one host: / to the dashboard and /cloud/api,
+      /login and /api to relay-cloud-api (flows workers and the integrations
+      OAuth callback use <publicUrl>/api/v1/...). relay-cloud-api.publicUrl,
+      relay-dashboard.runtime.publicUrl and relay-dashboard.ingress.host are
+      derived as https://<host> and must be left empty (or equal it). The GKE
+      Ingress then renders no api host and its ManagedCertificate drops it;
+      the api and cast BackendConfigs are unchanged. The leaf dashboard
+      Ingress (non-GKE edges) adds the /api route. Relaycast, Relay History,
+      Relayfile and durable-actors cannot run under a path prefix without app
+      changes, so they keep their own hosts and the chart fails when any of
+      their public URLs or leaf ingress hosts uses the single host. No service
+      on the single host needs a path rewrite, so the GCE Ingress is kept
+      rather than Gateway API.
+    chart: [agent-relay, relay-cloud-api, relay-dashboard]
+    values:
+      - global.singleHost.host
+      - "relay-cloud-api:global.singleHost.host"
+      - "relay-cloud-api:publicUrl"
+      - "relay-dashboard:global.singleHost.host"
+      - "relay-dashboard:runtime.publicUrl"
+      - "relay-dashboard:ingress.host"
+    env: [SELFHOST_PUBLIC_URL, DASHBOARD_PUBLIC_URL]
+    profiles: [agent-relay]
+    status: shipped
+    provided_by: operator
+    default: disabled
+    choices:
+      - { value: disabled, note: "per-service hosts (gkeIngress.hosts.root/api/cast/history)" }
+      - { value: enabled, note: "global.singleHost.host plus gkeIngress.hosts.cast/history" }
+    verify: render has one rule for the single host (/cloud/api, /login, /api to relay-cloud-api, / to the dashboard), no api host, and SELFHOST_PUBLIC_URL = DASHBOARD_PUBLIC_URL = https://<host>
+    sources:
+      - "charts/agent-relay/templates/gke-ingress.yaml"
+      - "charts/agent-relay/templates/_helpers.tpl"
+      - "charts/agent-relay/values-single-host-example.yaml"
+      - "charts/relay-dashboard/templates/ingress.yaml"
+      - "ci/agent-relay/render.sh"
+      - "ci/agent-relay/subdomain-golden.sh"
 
   - id: opt.relay-dashboard.ingress
     kind: option

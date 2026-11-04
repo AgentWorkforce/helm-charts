@@ -17,6 +17,19 @@ components:
   # decided; runtime.backend durable-actors needs components.durableActors.
   relayfile: false
 
+# Single-host mode (off when empty): the dashboard and the control API share
+# this one host. The dashboard is served at /, the API under /cloud/api,
+# /login and /api, and relay-cloud-api.publicUrl, relay-dashboard
+# runtime.publicUrl and relay-dashboard ingress.host are derived from it
+# (https://<host>), so leave those empty. There is no api host. Relaycast,
+# Relay History, Relayfile and durable-actors cannot run under a path prefix
+# without app changes, so they keep their own hosts (gkeIngress.hosts.cast,
+# history, files, actors) and the chart refuses to put them on this host. See
+# README "Single-host mode" and values-single-host-example.yaml.
+global:
+  singleHost:
+    host: ""
+
 gkeIngress:
   enabled: false
   name: agent-relay

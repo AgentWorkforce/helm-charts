@@ -13,10 +13,10 @@ dependencies:
   version: 0.1.1
 - name: relay-cloud-api
   repository: file://../relay-cloud-api
-  version: 0.2.1
+  version: 0.2.2
 - name: relay-dashboard
   repository: file://../relay-dashboard
-  version: 0.1.0
+  version: 0.1.1
 - name: relayflows
   repository: file://../relayflows
   version: 0.2.4
@@ -26,5 +26,5 @@ dependencies:
 - name: relayfile
   repository: file://../relayfile
   version: 0.2.0
-digest: sha256:95f1999a9fbf856bdb3b96ccda98fa100f54fbd803171499c02d4fc5cca7039d
-generated: "2026-11-03T17:16:42.583853-08:00"
+digest: sha256:e32bc26dc8910419f863535253e4967ff2663878848a49886876a83dcefd8dde
+generated: "2026-11-03T19:06:35.808381-08:00"

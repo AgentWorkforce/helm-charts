@@ -1,0 +1,43 @@
+# Single-host mode: an overlay for values-gcp.yaml (or any subdomain profile).
+#
+#   helm template agent-relay . -n agent-relay \
+#     -f values-gcp.yaml -f values-single-host-example.yaml
+#
+# The dashboard and the self-host control API share one host:
+#
+#   https://relay.placeholder.company/            dashboard
+#   https://relay.placeholder.company/cloud/api   control API (dashboard, Desktop, CLI)
+#   https://relay.placeholder.company/login       control API (device login page)
+#   https://relay.placeholder.company/api         control API (flows workers, OAuth callback)
+#
+# There is no api host: point Desktop's custom origin and `agent-relay login`
+# at https://relay.placeholder.company. relay-cloud-api.publicUrl and
+# relay-dashboard.runtime.publicUrl are derived from global.singleHost.host,
+# so they are cleared below.
+#
+# Relaycast and Relay History stay on their own hosts: neither can be served
+# under a path prefix without app changes (README: Single-host mode). The
+# ManagedCertificate covers the single host plus those two hosts (and
+# gkeIngress.hosts.files/actors when set).
+global:
+  # REQUIRED OVERRIDE: the one public DNS name for the dashboard and the API.
+  singleHost:
+    host: relay.placeholder.company
+
+gkeIngress:
+  hosts:
+    # Derived from global.singleHost.host; the api host is not used.
+    root: ""
+    api: ""
+    # REQUIRED OVERRIDE: still separate hosts (see above).
+    cast: cast.placeholder.company
+    history: history.placeholder.company
+
+relay-cloud-api:
+  # Derived: https://<global.singleHost.host>.
+  publicUrl: ""
+
+relay-dashboard:
+  runtime:
+    # Derived: https://<global.singleHost.host>.
+    publicUrl: ""

@@ -4,6 +4,7 @@
 {{- end }}
 {{- include "agent-relay.validateHistoryOrigin" . }}
 {{- include "agent-relay.validateDurableActors" . }}
+{{- include "agent-relay.validateSingleHost" . }}
 {{- end }}
 
 {{/*
@@ -60,5 +61,60 @@ and its actor-mode consumers (relaycast, relayfile).
 {{- end }}
 {{- if and $actorsOn (not $consumers) }}
 {{- fail "components.durableActors=true has no consumer: set relaycast.runtime.backend or relayfile.runtime.backend to durable-actors without controlPlaneUrl (devRuntime consumers and consumers with an external controlPlaneUrl do not use the in-umbrella control plane)" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Single-host mode (global.singleHost.host): the dashboard and the control API
+share one host (/ and /cloud/api, /login, /api). Relaycast, Relay History,
+Relayfile and the durable-actors control plane cannot be served under a path
+prefix on that host without app changes, so they stay on their own hosts and
+the chart refuses to put them on the single host.
+*/}}
+{{- define "agent-relay.singleHostGaps" -}}
+relaycast: the relaycast-self-host entrypoint refuses a --base-url with a path, the TypeScript SDK drops a base path, and relaycontrol and Desktop refuse a path-prefixed Relaycast URL
+relayhistory: relaycontrol and Desktop require relayhistoryPublicUrl to be a bare origin (it is both the History assertion audience and the base URL handed to clients), so a /history prefix cannot be expressed
+relayfile: the relayfile mount and listen clients build their WebSocket URLs by replacing the path, which drops a server base path
+durable-actors: the control plane refuses a publicUrl with a path and issues actor WebSocket URLs at <origin>/v1/socket, and the SDK refuses a base path
+{{- end -}}
+{{- define "agent-relay.singleHostGap" -}}
+{{- $name := .name -}}
+{{- range $line := splitList "\n" (include "agent-relay.singleHostGaps" .root) }}{{ if hasPrefix (printf "%s: " $name) $line }}{{ trimPrefix (printf "%s: " $name) $line }}{{ end }}{{ end -}}
+{{- end -}}
+{{- define "agent-relay.validateSingleHost" -}}
+{{- $single := dig "singleHost" "host" "" (.Values.global | default dict) -}}
+{{- if $single }}
+{{- if not (regexMatch "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$" $single) }}{{ fail "global.singleHost.host must be a DNS hostname (no scheme, port or path)" }}{{ end -}}
+{{- $components := .Values.components | default dict -}}
+{{- $cloudApi := index .Values "relay-cloud-api" | default dict -}}
+{{- $sessions := index .Values "sessions-pipeline" | default dict -}}
+{{- $urls := list
+  (list "relaycast" "relaycast.baseUrl" (dig "baseUrl" "" (.Values.relaycast | default dict)) (dig "relaycast" true $components))
+  (list "relaycast" "relay-cloud-api.services.relaycastPublicUrl" (dig "services" "relaycastPublicUrl" "" $cloudApi) (dig "cloudApi" true $components))
+  (list "relayhistory" "relayhistory.relayauth.historyOrigin" (dig "relayauth" "historyOrigin" "" (.Values.relayhistory | default dict)) (dig "relayhistory" true $components))
+  (list "relayhistory" "relay-cloud-api.services.relayhistoryPublicUrl" (dig "services" "relayhistoryPublicUrl" "" $cloudApi) (dig "cloudApi" true $components))
+  (list "relayhistory" "sessions-pipeline.alleyoop.auth.historyOrigin" (dig "alleyoop" "auth" "historyOrigin" "" $sessions) (dig "sessionsPipeline" true $components))
+  (list "durable-actors" "durable-actors.publicUrl" (dig "publicUrl" "" (index .Values "durable-actors" | default dict)) (dig "durableActors" false $components))
+-}}
+{{- range $u := $urls }}
+{{- $url := index $u 2 | toString -}}
+{{- if and (index $u 3) $url (eq (lower (urlParse $url).hostname) $single) }}
+{{- fail (printf "%s must not use global.singleHost.host (%s): %s cannot share the single host yet (%s). Keep it on its own host" (index $u 1) $single (index $u 0) (include "agent-relay.singleHostGap" (dict "root" $ "name" (index $u 0)))) }}
+{{- end -}}
+{{- end }}
+{{- $leafHosts := list
+  (list "relaycast" "relaycast.ingress.hosts" (dig "ingress" "hosts" (list) (.Values.relaycast | default dict)) (dig "relaycast" true $components))
+  (list "relayhistory" "relayhistory.ingress.hosts" (dig "ingress" "hosts" (list) (.Values.relayhistory | default dict)) (dig "relayhistory" true $components))
+-}}
+{{- range $l := $leafHosts }}
+{{- if and (index $l 3) (has $single (index $l 2)) }}
+{{- fail (printf "%s must not include global.singleHost.host (%s): %s cannot share the single host yet (%s). Keep it on its own host" (index $l 1) $single (index $l 0) (include "agent-relay.singleHostGap" (dict "root" $ "name" (index $l 0)))) }}
+{{- end -}}
+{{- end }}
+{{- if dig "relayfile" false $components }}
+{{- range $h := dig "ingress" "hosts" (list) (.Values.relayfile | default dict) }}
+{{- if eq (dig "host" "" $h) $single }}{{ fail (printf "relayfile.ingress.hosts must not include global.singleHost.host (%s): relayfile cannot share the single host yet (%s). Keep it on its own host" $single (include "agent-relay.singleHostGap" (dict "root" $ "name" "relayfile"))) }}{{ end -}}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

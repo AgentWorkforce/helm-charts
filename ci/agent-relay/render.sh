@@ -655,4 +655,60 @@ for d in relaycast relayfile-server; do
     || { echo "kind proof shape: $d lacks the durable-actors dev sidecar" >&2; exit 1; }
 done
 
+# Single-host mode (global.singleHost.host): one host for the dashboard and the
+# control API, no api host; Relaycast and Relay History keep their hosts.
+sh_fail() { echo "single-host: $*" >&2; exit 1; }
+sh_args=(-f charts/agent-relay/values-gcp-proof.yaml -f charts/agent-relay/ci/single-host-values.yaml)
+sh_host=relay.gcp-proof.agentrelay.com
+sh_out=$(helm template proof charts/agent-relay -n agent-relay --no-hooks "${sh_args[@]}")
+sh_paths() { yq "select(.kind == \"Ingress\") | .spec.rules[] | select(.host == \"$1\") | .http.paths[] | .path + \" \" + .backend.service.name" <<<"$sh_out"; }
+test "$(sh_paths "$sh_host")" = "$(printf '%s\n' '/cloud/api relay-cloud-api' '/login relay-cloud-api' '/api relay-cloud-api' '/ relay-dashboard')" \
+  || sh_fail "unexpected routes on $sh_host: $(sh_paths "$sh_host")"
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[].host' <<<"$sh_out" | sort | tr '\n' ' ')" = \
+  "cast.gcp-proof.agentrelay.com history.gcp-proof.agentrelay.com $sh_host " || sh_fail "unexpected Ingress hosts (an api host must not render)"
+test "$(yq 'select(.kind == "ManagedCertificate") | .spec.domains[]' <<<"$sh_out" | tr '\n' ' ')" = \
+  "$sh_host cast.gcp-proof.agentrelay.com history.gcp-proof.agentrelay.com " || sh_fail "ManagedCertificate domains"
+sh_env() { yq "select(.kind == \"Deployment\" and .metadata.name == \"$1\") | .spec.template.spec.containers[0].env[] | select(.name == \"$2\") | .value" <<<"$sh_out"; }
+test "$(sh_env relay-cloud-api SELFHOST_PUBLIC_URL)" = "https://$sh_host" || sh_fail "relay-cloud-api publicUrl is not derived"
+test "$(sh_env relay-dashboard DASHBOARD_PUBLIC_URL)" = "https://$sh_host" || sh_fail "dashboard publicUrl is not derived"
+# The api and cast BackendConfigs (SSE and WebSocket timeouts) are unchanged.
+test "$(yq 'select(.kind == "BackendConfig" and .metadata.name == "agent-relay-gcp-proof-api") | .spec.timeoutSec' <<<"$sh_out")" = 3600 || sh_fail "api BackendConfig"
+test "$(yq 'select(.kind == "BackendConfig" and .metadata.name == "agent-relay-gcp-proof-cast") | .spec.timeoutSec' <<<"$sh_out")" = 3600 || sh_fail "cast BackendConfig"
+test "$(yq 'select(.kind == "Service" and .metadata.name == "relay-cloud-api") | .metadata.annotations["cloud.google.com/backend-config"]' <<<"$sh_out")" = '{"default":"agent-relay-gcp-proof-api"}' || sh_fail "api Service lost its BackendConfig"
+test "$(sh_paths cast.gcp-proof.agentrelay.com | head -1)" = "/internal agent-relay-gcp-proof-cast-edge-deny" || sh_fail "cast /internal edge deny"
+# The overlay example renders on the customer-neutral template.
+helm template ar charts/agent-relay -n agent-relay --no-hooks -f charts/agent-relay/values-gcp.yaml \
+  -f charts/agent-relay/values-single-host-example.yaml >/dev/null || sh_fail "values-single-host-example.yaml does not render on values-gcp.yaml"
+expect_sh_failure() { # expected-error helm-args...
+  local expected=$1 output; shift
+  if output=$(helm template proof charts/agent-relay -n agent-relay --no-hooks "${sh_args[@]}" "$@" 2>&1); then
+    sh_fail "rendered despite expected failure: $expected"
+  fi
+  grep -Fq "$expected" <<<"$output" || { echo "$output" >&2; sh_fail "failed without expected error: $expected"; }
+}
+expect_sh_failure "gkeIngress.hosts.api must be empty in single-host mode" --set gkeIngress.hosts.api=api.gcp-proof.agentrelay.com
+expect_sh_failure "gkeIngress.hosts.root is global.singleHost.host" --set gkeIngress.hosts.root=other.gcp-proof.agentrelay.com
+expect_sh_failure "gkeIngress.hosts.cast is still required in single-host mode: relaycast cannot be served under a path prefix" --set gkeIngress.hosts.cast=
+expect_sh_failure "gkeIngress.hosts.history is still required in single-host mode: relayhistory cannot be served under a path prefix" --set gkeIngress.hosts.history=
+expect_sh_failure "global.singleHost.host and gkeIngress.hosts.cast/history must all be distinct" --set gkeIngress.hosts.cast=$sh_host
+expect_sh_failure "global.singleHost.host must be a DNS hostname" --set global.singleHost.host=https://$sh_host
+expect_sh_failure "relaycast.baseUrl must not use global.singleHost.host" --set relaycast.baseUrl=https://$sh_host
+expect_sh_failure "relayhistory.relayauth.historyOrigin must not use global.singleHost.host" \
+  --set relayhistory.relayauth.historyOrigin=https://$sh_host --set sessions-pipeline.alleyoop.auth.historyOrigin=https://$sh_host
+expect_sh_failure "relay-cloud-api.services.relaycastPublicUrl must not use global.singleHost.host" --set relay-cloud-api.services.relaycastPublicUrl=https://$sh_host
+expect_sh_failure "relaycast.ingress.hosts must not include global.singleHost.host" --set-json "relaycast.ingress.hosts=[\"$sh_host\"]"
+expect_sh_failure "publicUrl is derived from global.singleHost.host" --set relay-cloud-api.publicUrl=https://api.gcp-proof.agentrelay.com
+expect_sh_failure "runtime.publicUrl is derived from global.singleHost.host" --set relay-dashboard.runtime.publicUrl=https://gcp-proof.agentrelay.com
+# Leaf charts on their own (non-GKE edge): the dashboard Ingress carries /api.
+leaf_sh=$(helm template ci charts/relay-dashboard -n ci --no-hooks -f charts/relay-dashboard/ci/single-host-values.yaml)
+test "$(yq 'select(.kind == "Ingress") | .spec.rules[] | .host + " " + ([.http.paths[].path] | join(","))' <<<"$leaf_sh")" = "$sh_host /cloud/api,/login,/api,/" \
+  || sh_fail "relay-dashboard leaf Ingress in single-host mode"
+if out=$(helm template ci charts/relay-cloud-api -n ci --no-hooks -f charts/relay-cloud-api/ci/single-host-values.yaml --set ingress.enabled=true --set-json "ingress.hosts=[\"$sh_host\"]" --set ingress.externalTls=true 2>&1); then
+  sh_fail "relay-cloud-api rendered its own Ingress in single-host mode"
+fi
+grep -Fq "global.singleHost.host serves the API through the dashboard host" <<<"$out" || { echo "$out" >&2; sh_fail "relay-cloud-api ingress error"; }
+
+# With single-host mode off, every default (subdomain) render is unchanged.
+ci/agent-relay/subdomain-golden.sh check
+
 echo "agent-relay GCP proof render contract: ok"

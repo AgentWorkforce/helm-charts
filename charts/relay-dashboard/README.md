@@ -14,6 +14,13 @@ fullname (`<release>-relay-cloud-api`, or its `fullnameOverride`; for example
 `api-relay-cloud-api` after `helm install api charts/relay-cloud-api`). The separate
 `relay-cloud-api` ingress can expose that same Service on an `api.` host.
 
+Single-host mode: with `global.singleHost.host` set (normally once on the
+agent-relay umbrella), `runtime.publicUrl` and `ingress.host` are derived as
+`https://<host>` and `<host>` (leave them empty), and the Ingress also routes
+`/api` to the API, because flows workers and the integrations OAuth callback
+call `<publicUrl>/api/v1/...` there. Keep the `relay-cloud-api` ingress
+disabled in that mode. See the agent-relay README, "Single-host mode".
+
 The current dashboard image is a single static replica. This chart makes no HA
 claim. Publish and verify the dashboard image before replacing the digest in a
 deployment values file.

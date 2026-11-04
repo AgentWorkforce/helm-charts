@@ -1,7 +1,7 @@
 relay-cloud-api {{ include "relay-cloud-api.fullname" . }} is configured as one replica (Recreate).
 
   Service:   {{ include "relay-cloud-api.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
-  PublicURL: {{ .Values.publicUrl }}
+  PublicURL: {{ include "relay-cloud-api.publicUrl" . }}
 {{- if .Values.ingress.enabled }}
   Ingress:   {{ range .Values.ingress.hosts }}https://{{ . }} {{ end }}
 {{- end }}
