@@ -25,6 +25,48 @@ The current dashboard image is a single static replica. This chart makes no HA
 claim. Publish and verify the dashboard image before replacing the digest in a
 deployment values file.
 
+## Customer profile (branding)
+
+`customerProfile` rebrands the dashboard for an enterprise customer without a
+new image. The chart renders it as JSON into `DASHBOARD_CUSTOMER_PROFILE`; the
+image writes it into `/runtime-config.js`, and the browser validates each field
+and ignores any it can't use. Leave it empty (the default) to keep the Agent
+Relay look. It needs a dashboard image built from relay-dashboard
+[#84](https://github.com/AgentWorkforce/relay-dashboard/pull/84) or later (the
+image's `/runtime-config.js` then contains a `customerProfile` key); older
+images ignore the value.
+
+| key | meaning |
+| --- | --- |
+| `customerProfile.productName` | Product name shown instead of "Agent Relay" (sidebar text when there is no logo, labels, device page). |
+| `customerProfile.title` | Browser tab title (defaults to `productName`). |
+| `customerProfile.logo` | Either a map with `light` and `dark` URLs, or one URL string used for both themes. Replaces the mark and wordmark. |
+| `customerProfile.logo.light` / `.dark` | Logo URL for the light and dark themes when `logo` is a map. |
+| `customerProfile.favicon` | Favicon URL. |
+| `customerProfile.accentColor` | Accent for links, focus rings and active navigation (`#hex`, `rgb()`, `hsl()`, `oklch()`). |
+| `customerProfile.brandColor` | Solid primary button color. |
+| `customerProfile.supportUrl` | Support link in the account menu and on the device page (`https://…` or `mailto:`). |
+| `customerProfile.poweredByAgentRelay` | `false` hides the "Powered by Agent Relay" line shown under a custom brand. |
+
+URLs may be `https`/`http`, same-origin paths or `data:image/…`. Example
+customer values:
+
+```yaml
+relay-dashboard:            # under the agent-relay umbrella; top level for this chart
+  customerProfile:
+    productName: Acme Relay
+    logo:
+      light: https://acme.example/brand/logo-on-light.svg
+      dark: https://acme.example/brand/logo-on-dark.svg
+    favicon: https://acme.example/brand/favicon.svg
+    accentColor: "#7c3aed"
+    brandColor: "#5b21b6"
+    supportUrl: mailto:support@acme.example
+    poweredByAgentRelay: true
+```
+
+The same JSON object is the customer profile for other Agent Relay clients.
+
 ```sh
 helm lint --strict charts/relay-dashboard \
   -f charts/relay-dashboard/ci/default-values.yaml

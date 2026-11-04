@@ -364,18 +364,18 @@ compatibility:
       images:
         relayauth: { repository: ghcr.io/agentworkforce/relayauth, digest: sha256:eb71daa28e30eb7305f666d0bccc5a4002e53e8a574e3c4c32163d907a1b71df }
       notes: superseded by 0.1.1.
-    - id: agent-relay-0.3.5
+    - id: agent-relay-0.3.6
       status: unreleased
       current: true
-      charts: { agent-relay: 0.3.5, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.1 }
+      charts: { agent-relay: 0.3.6, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.1, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: 'Not tagged; the release lane cuts the tag. Adds opt-in single-host mode (global.singleHost.host, off by default): the dashboard and the control API share one host (/, /cloud/api, /login, /api), relay-cloud-api 0.2.2 derives publicUrl and relay-dashboard 0.1.1 derives runtime.publicUrl and ingress.host from it, and the GKE Ingress drops the api host. Relaycast, Relay History, Relayfile and durable-actors keep their own hosts (app changes needed; README Single-host mode). With single-host mode off every default render is byte-identical to 0.3.4 apart from the helm.sh/chart labels (ci/agent-relay/subdomain-golden.sh). Images unchanged from 0.3.4.'
+      notes: '0.3.6 (tag agent-relay-0.3.6) releases the never-tagged 0.3.5 together with dashboard branding. From 0.3.5: opt-in single-host mode (global.singleHost.host, off by default): the dashboard and the control API share one host (/, /cloud/api, /login, /api), relay-cloud-api 0.2.2 derives publicUrl and the dashboard derives runtime.publicUrl and ingress.host from it, and the GKE Ingress drops the api host; Relaycast, Relay History, Relayfile and durable-actors keep their own hosts (README Single-host mode). New in 0.3.6: relay-dashboard chart 0.1.2 adds the optional customerProfile (enterprise branding: product name and title, light/dark logo, favicon, accent and button colors, support link, Powered by Agent Relay) rendered into DASHBOARD_CUSTOMER_PROFILE and served in /runtime-config.js; values-gcp.yaml carries a commented example. Branding needs a dashboard image built from relay-dashboard 8eac2bd or later (which also fixes the sessions sidebar facets); the pinned customer dashboard digest predates it and ignores the value. With single-host mode off and no customerProfile every default render is byte-identical to 0.3.4 apart from the helm.sh/chart labels. Images unchanged from 0.3.4.'
     - id: agent-relay-0.3.4
       status: shipped
       charts: { agent-relay: 0.3.4, relayhistory: 0.1.1, relay-cloud-api: 0.2.1, relay-dashboard: 0.1.0 }
@@ -1866,6 +1866,34 @@ entries:
     sources:
       - "charts/relay-dashboard/templates/ingress.yaml"
       - "ci/agent-relay/render.sh"
+
+  - id: opt.relay-dashboard.customer-profile
+    kind: option
+    title: Dashboard customer profile (enterprise branding)
+    description: |
+      customerProfile rebrands the dashboard without a new image: product
+      name and title, light and dark logos, favicon, accent and primary
+      button colors, a support link and the "Powered by Agent Relay" line.
+      The chart renders the map as JSON into DASHBOARD_CUSTOMER_PROFILE and
+      the image serves it in /runtime-config.js; the browser ignores invalid
+      fields. Empty (the default) keeps the Agent Relay look. Requires a
+      dashboard image built from relay-dashboard #84 or later (its
+      /runtime-config.js has a customerProfile key); older images ignore it.
+    chart: relay-dashboard
+    values: [customerProfile]
+    env: [DASHBOARD_CUSTOMER_PROFILE]
+    profiles: [relay-dashboard]
+    status: shipped
+    provided_by: operator
+    default: none
+    choices:
+      - { value: none }
+      - { value: customer profile }
+    verify: with customerProfile set, /runtime-config.js has customerProfile and the dashboard shows the product name and logo; without it, customerProfile is null
+    sources:
+      - "charts/relay-dashboard/templates/deployment.yaml"
+      - "charts/relay-dashboard/README.md"
+      - "charts/relay-dashboard/ci/branding.profile.yaml"
 
   - id: opt.agent-relay.gke-ingress
     kind: option

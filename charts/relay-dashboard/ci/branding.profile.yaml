@@ -1,0 +1,16 @@
+# CI render (scripts/ci/charts.sh): an enterprise customer profile. Not a
+# *-values.yaml file, so the generic per-fixture lint loop skips it.
+image:
+  digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+runtime:
+  publicUrl: https://gcp-proof.agentrelay.com
+customerProfile:
+  productName: Acme Relay
+  logo:
+    light: https://acme.example/brand/logo-on-light.svg
+    dark: https://acme.example/brand/logo-on-dark.svg
+  favicon: https://acme.example/brand/favicon.svg
+  accentColor: "#7c3aed"
+  brandColor: "#5b21b6"
+  supportUrl: mailto:support@acme.example
+  poweredByAgentRelay: true

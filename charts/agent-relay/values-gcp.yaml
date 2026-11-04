@@ -281,6 +281,20 @@ relay-dashboard:
     appPath: /
     apiBasePath: /cloud/api
     loginPath: /login
+  # Optional enterprise branding (relay-dashboard customerProfile; README
+  # "Customer profile"). Empty keeps the Agent Relay look. It needs a
+  # dashboard image built from relay-dashboard 8eac2bd or later; older images
+  # ignore it.
+  # customerProfile:
+  #   productName: Acme Relay
+  #   logo:
+  #     light: https://acme.example/brand/logo-on-light.svg
+  #     dark: https://acme.example/brand/logo-on-dark.svg
+  #   favicon: https://acme.example/brand/favicon.svg
+  #   accentColor: "#7c3aed"
+  #   brandColor: "#5b21b6"
+  #   supportUrl: mailto:support@acme.example
+  #   poweredByAgentRelay: true
   api:
     serviceName: relay-cloud-api
   service:

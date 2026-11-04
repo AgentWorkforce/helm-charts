@@ -37,6 +37,40 @@ Desktop setup. Relayflows, durable actors and Relayfile are optional preview
 components, off by default. Billing, provider integrations and hosted fleet
 are out of scope.
 
+## agent-relay 0.3.6 (2026-11-04): single-host mode and dashboard branding
+
+To be published from the `agent-relay-0.3.6` tag
+(`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.6). 0.3.5 was
+never tagged; its changes ship here. The leaf charts are relay-cloud-api 0.2.2
+and relay-dashboard 0.1.2.
+
+- **Single-host mode** (opt-in, `global.singleHost.host`, off by default). The
+  dashboard and the control-plane API share one host (`/`, `/cloud/api`,
+  `/login`, `/api`): relay-cloud-api derives its `publicUrl` and the dashboard
+  derives `runtime.publicUrl` and `ingress.host` from it, and the GKE Ingress
+  drops the `api.` host. Relaycast, Relay History, Relayfile and
+  durable-actors keep their own hosts (see the agent-relay README "Single-host
+  mode" and `values-single-host-example.yaml`).
+- **Enterprise branding.** The new optional `relay-dashboard.customerProfile`
+  (product name and title, light and dark logos, favicon, accent and primary
+  button colors, a support link, and the "Powered by Agent Relay" line) is
+  rendered into `DASHBOARD_CUSTOMER_PROFILE` and served in
+  `/runtime-config.js`, so a customer brand needs no per-customer image, but
+  it requires a dashboard image built from relay-dashboard `8eac2bd` or later
+  (see below). It is empty by default; `values-gcp.yaml` carries a commented
+  example, and the relay-dashboard README documents every field.
+- **Sessions sidebar facets** (dashboard image). Picking a project or harness
+  no longer collapses the sidebar to that option. Each facet's options and
+  counts ignore its own selection and respect the other filters, and a
+  project is sent to the server only as an exact project id.
+
+Branding and the facet fix need a dashboard image built from relay-dashboard
+`8eac2bd` or later. The customer profile's pinned dashboard digest predates it:
+it ignores `customerProfile` and keeps the earlier sessions sidebar until a
+new release image is published and pinned. With single-host mode off and no
+`customerProfile`, every default render is byte-identical to 0.3.4 apart from
+the `helm.sh/chart` labels; images are unchanged from 0.3.4.
+
 ## agent-relay 0.3.4 (2026-11-03): documentation patch
 
 Published from the `agent-relay-0.3.4` tag
