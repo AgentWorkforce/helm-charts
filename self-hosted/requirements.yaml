@@ -367,15 +367,15 @@ compatibility:
     - id: agent-relay-0.3.7
       status: unreleased
       current: true
-      charts: { agent-relay: 0.3.7, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2 }
+      charts: { agent-relay: 0.3.7, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.3 }
       app_versions: { agent-relay: 0.1.0, relayhistory: 0.1.0, relay-cloud-api: 0.1.0, relay-dashboard: 0.1.0 }
       depends:
-        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
+        agent-relay: { relaycast: 0.3.3, relayauth: 0.1.3, sessions-pipeline: 0.6.0, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.3, relayflows: 0.2.4, durable-actors: 0.14.6, relayfile: 0.2.0 }
       images:
         relayhistory: { repository: ghcr.io/agentworkforce/relayhistory, digest_required: true }
         relay-cloud-api: { repository: ghcr.io/agentworkforce/selfhost-api, digest_required: true }
         relay-dashboard: { repository: ghcr.io/agentworkforce/relay-dashboard, digest_required: true }
-      notes: '0.3.7 (tag agent-relay-0.3.7) is a GKE proof-overlay patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme agentrelay-gcpproof, siteUrl https://gcp-proof.agentrelay.com) for the proof''s custom Desktop build, which the dashboard''s Connect your agents link uses (relay-dashboard #88; folds helm-charts #46). Templates, images, the customer profile (values-gcp.yaml) and every default render are unchanged from 0.3.6.'
+      notes: '0.3.7 is to be published from the tag agent-relay-0.3.7 (not tagged yet). A GKE proof-overlay and documentation patch of 0.3.6: values-gcp-proof-live.yaml sets relay-dashboard.customerProfile.desktop (urlScheme agentrelay-gcpproof, siteUrl https://gcp-proof.agentrelay.com) for the proof''s custom Desktop build (folds helm-charts #46), and relay-dashboard chart 0.1.3 documents customerProfile.desktop in its README. The Connect your agents link needs a dashboard image from relay-dashboard #88 or later; the overlay''s own dashboard digest (53d484b) predates it, and the live proof deploy overrides that digest. Templates, images and values-gcp.yaml are unchanged from 0.3.6; renders differ only in the helm.sh/chart labels, plus DASHBOARD_CUSTOMER_PROFILE in the gcp-proof-live render.'
     - id: agent-relay-0.3.6
       status: shipped
       charts: { agent-relay: 0.3.6, relayhistory: 0.1.1, relay-cloud-api: 0.2.2, relay-dashboard: 0.1.2 }

@@ -14,7 +14,7 @@ the pinned customer dashboard digest, which predates it and ignores
 `customerProfile`; it needs a dashboard image built from relay-dashboard
 `8eac2bd` or later to be published and pinned.
 
-Published versions of the umbrella chart:
+Versions of the umbrella chart (published, plus the untagged candidate):
 
 | Version | Tag | Notes |
 |---|---|---|

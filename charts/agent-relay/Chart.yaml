@@ -37,7 +37,7 @@ dependencies:
     repository: file://../relay-cloud-api
     condition: components.cloudApi
   - name: relay-dashboard
-    version: 0.1.2
+    version: 0.1.3
     repository: file://../relay-dashboard
     condition: components.dashboard
   - name: relayflows
