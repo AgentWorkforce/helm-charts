@@ -48,16 +48,27 @@ API_CIDR="${EKS_ACTORS_API_CIDR:-}"
 INSTANCE_TYPE="${EKS_ACTORS_INSTANCE_TYPE:-t3.large}"
 GENERAL_NODES="${EKS_ACTORS_GENERAL_NODES:-2}"
 ACTOR_NODES="${EKS_ACTORS_ACTOR_NODES:-1}"
+# The actor node group lives in ONE zone, the zone durable-actors places actors in
+# (chart value durable-actors.placement.zone must equal it), so a replacement node
+# can never land where actors cannot be scheduled.
+ACTOR_ZONE="${EKS_ACTORS_ACTOR_ZONE:-${REGION}a}"
 BUCKET="${NAME}-${ACCOUNT}"
 BOUNDARY="arn:aws:iam::${ACCOUNT}:policy/pippen-agent-session-boundary"
 ROLE_PATH="/pippen/workload/"
 ROLE_ARN_PREFIX="arn:aws:iam::${ACCOUNT}:role${ROLE_PATH}"
 CLUSTER_ROLE="${NAME}-cluster"
 NODE_ROLE="${NAME}-node"
-CP_ROLE="pippen-sbx-actors-cp"
-STORAGE_ROLE="pippen-sbx-actors-storage"
-DEPLOYER_ROLE="pippen-sbx-actors-deployer"
-FILES_ROLE="pippen-sbx-actors-files"
+# Workload roles are per proof, so two proofs in one account never share or delete
+# each other's roles. EKS_ACTORS_ROLE_PREFIX exists only to reach roles made by an
+# older copy of this script (prefix pippen-sbx-actors).
+ROLE_PREFIX="${EKS_ACTORS_ROLE_PREFIX:-$NAME}"
+CP_ROLE="${ROLE_PREFIX}-cp"
+STORAGE_ROLE="${ROLE_PREFIX}-storage"
+DEPLOYER_ROLE="${ROLE_PREFIX}-deployer"
+FILES_ROLE="${ROLE_PREFIX}-files"
+for r in "$CLUSTER_ROLE" "$NODE_ROLE" "$CP_ROLE" "$STORAGE_ROLE" "$DEPLOYER_ROLE" "$FILES_ROLE"; do
+  ((${#r} <= 64)) || { echo "IAM role name $r is longer than 64 characters: shorten EKS_ACTORS_NAME" >&2; exit 2; }
+done
 LAUNCH_TEMPLATE="${NAME}-nodes"
 TAG_KEY="pippen:sandbox"
 TAG_SPEC_TAGS="{Key=${TAG_KEY},Value=true},{Key=Name,Value=${NAME}}"
@@ -149,7 +160,11 @@ ensure_vpc() {
 ensure_bucket() {
   if ! aws_ s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
     log "create bucket $BUCKET"
-    aws_ s3api create-bucket --bucket "$BUCKET" --create-bucket-configuration "LocationConstraint=${REGION}" >/dev/null
+    if [[ "$REGION" == us-east-1 ]]; then
+      aws_ s3api create-bucket --bucket "$BUCKET" >/dev/null  # us-east-1 rejects an explicit LocationConstraint
+    else
+      aws_ s3api create-bucket --bucket "$BUCKET" --create-bucket-configuration "LocationConstraint=${REGION}" >/dev/null
+    fi
   fi
   aws_ s3api put-public-access-block --bucket "$BUCKET" \
     --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
@@ -180,6 +195,12 @@ ensure_addon() {
     log "create add-on $addon"
     aws_ eks create-addon --cluster-name "$NAME" --addon-name "$addon" \
       --resolve-conflicts OVERWRITE --tags "${TAG_KEY}=true" "$@" >/dev/null
+  elif (($#)); then
+    # An existing add-on gets the requested configuration too (e.g. vpc-cni
+    # enableNetworkPolicy), so a reused cluster cannot run without it.
+    log "update add-on $addon configuration"
+    aws_ eks update-addon --cluster-name "$NAME" --addon-name "$addon" --resolve-conflicts OVERWRITE "$@" >/dev/null
+    aws_ eks wait addon-active --cluster-name "$NAME" --addon-name "$addon"
   fi
 }
 
@@ -208,17 +229,30 @@ ensure_nodegroup() {
 }
 
 kubeconfig() {
-  KUBECONFIG_FILE="${KUBECONFIG_FILE:-$(mktemp)}"
+  if [[ -z "${KUBECONFIG_FILE:-}" ]]; then KUBECONFIG_FILE="$(mktemp)"; KUBECONFIG_TEMP=1; fi
   aws_ eks update-kubeconfig --name "$NAME" --alias actors-proof --kubeconfig "$KUBECONFIG_FILE" >/dev/null
   export KUBECONFIG="$KUBECONFIG_FILE"
 }
 
+# Removes the kubeconfig only when this script created it (never a caller's file).
+drop_kubeconfig() {
+  [[ -n "${KUBECONFIG_TEMP:-}" && -z "${KEEP_KUBECONFIG:-}" ]] && rm -f "$KUBECONFIG_FILE"
+  return 0
+}
+
 cmd_up() {
   [[ -n "$API_CIDR" ]] || { echo "EKS_ACTORS_API_CIDR=<operator egress>/32 is required" >&2; exit 2; }
-  local vpc subnets
+  local vpc subnets actor_subnet
   vpc="$(ensure_vpc)"
   subnets="$(aws_ ec2 describe-subnets --filters "Name=vpc-id,Values=${vpc}" --query 'Subnets[].SubnetId' --output text)"
-  log "vpc $vpc subnets $subnets"
+  actor_subnet="$(aws_ ec2 describe-subnets --filters "Name=vpc-id,Values=${vpc}" "Name=availability-zone,Values=${ACTOR_ZONE}" \
+    --query 'Subnets[0].SubnetId' --output text | none_empty)"
+  # A VPC left by a failed earlier run can lack its subnets; ensure_vpc only
+  # creates them with the VPC, so stop here (run `down`, then `up`).
+  if [[ $(wc -w <<<"$subnets") -lt 2 || -z "$actor_subnet" ]]; then
+    echo "VPC $vpc lacks its two subnets (or one in $ACTOR_ZONE): partial earlier run; run down, then up" >&2; exit 1
+  fi
+  log "vpc $vpc subnets $subnets (actors: $actor_subnet in $ACTOR_ZONE)"
   ensure_roles
   ensure_bucket
   ensure_cluster "$subnets"
@@ -227,7 +261,7 @@ cmd_up() {
   ensure_addon eks-pod-identity-agent
   ensure_launch_template
   ensure_nodegroup general "$GENERAL_NODES" "$subnets" --labels durable-actors/role=general
-  ensure_nodegroup actors "$ACTOR_NODES" "$subnets" --labels durable-actors/role=actor-host \
+  ensure_nodegroup actors "$ACTOR_NODES" "$actor_subnet" --labels durable-actors/role=actor-host \
     --taints "key=durable-actors/actor-host,value=true,effect=NO_SCHEDULE"
   ensure_addon coredns
   log "waiting for node groups ACTIVE"
@@ -235,7 +269,7 @@ cmd_up() {
   aws_ eks wait nodegroup-active --cluster-name "$NAME" --nodegroup-name actors
   kubeconfig
   kubectl get nodes -L durable-actors/role,topology.kubernetes.io/zone
-  [[ -n "${KEEP_KUBECONFIG:-}" ]] || rm -f "$KUBECONFIG_FILE"
+  drop_kubeconfig
   cmd_status
 }
 
@@ -248,12 +282,19 @@ cmd_assoc() {
     files) role="$FILES_ROLE" ;;
     *) echo "role kind must be cp, deployer or files" >&2; exit 2 ;;
   esac
-  if [[ -n "$(aws_ eks list-pod-identity-associations --cluster-name "$NAME" --namespace "$ns" \
-      --service-account "$sa" --query 'associations[0].associationId' --output text | none_empty)" ]]; then
-    log "pod identity ${ns}/${sa} already associated"; return
+  local want="${ROLE_ARN_PREFIX}${role}" id have
+  id="$(aws_ eks list-pod-identity-associations --cluster-name "$NAME" --namespace "$ns" \
+    --service-account "$sa" --query 'associations[0].associationId' --output text | none_empty)"
+  if [[ -n "$id" ]]; then
+    have="$(aws_ eks describe-pod-identity-association --cluster-name "$NAME" --association-id "$id" \
+      --query association.roleArn --output text)"
+    if [[ "$have" == "$want" ]]; then log "pod identity ${ns}/${sa} already -> ${role}"; return; fi
+    log "pod identity ${ns}/${sa} was ${have}; repointing to ${role}"
+    aws_ eks update-pod-identity-association --cluster-name "$NAME" --association-id "$id" --role-arn "$want" >/dev/null
+    return
   fi
   aws_ eks create-pod-identity-association --cluster-name "$NAME" --namespace "$ns" \
-    --service-account "$sa" --role-arn "${ROLE_ARN_PREFIX}${role}" --tags "${TAG_KEY}=true" >/dev/null
+    --service-account "$sa" --role-arn "$want" --tags "${TAG_KEY}=true" >/dev/null
   log "pod identity ${ns}/${sa} -> ${role}"
 }
 
@@ -271,7 +312,7 @@ cmd_down() {
     kubectl delete ingress --all -A --wait=true --timeout=10m || true
     kubectl delete svc -A --field-selector spec.type=LoadBalancer --wait=true --timeout=10m || true
     kubectl delete pvc --all -A --wait=true --timeout=10m || true
-    rm -f "$KUBECONFIG_FILE"
+    drop_kubeconfig
     for assoc in $(aws_ eks list-pod-identity-associations --cluster-name "$NAME" --query 'associations[].associationId' --output text); do
       aws_ eks delete-pod-identity-association --cluster-name "$NAME" --association-id "$assoc" >/dev/null
     done
