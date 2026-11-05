@@ -48,8 +48,8 @@ variable "soft_delete_retention_seconds" {
   default     = 604800
 
   validation {
-    condition     = var.soft_delete_retention_seconds == 0 || (var.soft_delete_retention_seconds >= 604800 && var.soft_delete_retention_seconds <= 7776000)
-    error_message = "soft_delete_retention_seconds must be 0 or 604800-7776000 (7-90 days)."
+    condition     = floor(var.soft_delete_retention_seconds) == var.soft_delete_retention_seconds && (var.soft_delete_retention_seconds == 0 || (var.soft_delete_retention_seconds >= 604800 && var.soft_delete_retention_seconds <= 7776000))
+    error_message = "soft_delete_retention_seconds must be a whole number: 0 or 604800-7776000 (7-90 days)."
   }
 }
 

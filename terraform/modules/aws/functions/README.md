@@ -12,7 +12,7 @@ sessions bucket --(S3 notification, <key_prefix>/**/manifest.json puts and delet
 
 Self-host normally runs these stages as long-running worker pods (the hoopdb-indexer reconcile tick, referee, and the bob-costas sweep). This module is an alternative, not a requirement. No chart value consumes it.
 
-- **Package:** `package.image_uri` (ECR), `package.s3_bucket` + `s3_key`, or `package.filename`. The hosted handler is `src/session-pipeline/lambda.ts`, export `handler`, on `nodejs24.x` / `arm64`.
+- **Package:** `package.image_uri` (ECR, pinned by digest: `<repository>@sha256:<64 hex>`; tags are refused), `package.s3_bucket` + `s3_key`, or `package.filename`. The hosted handler is `src/session-pipeline/lambda.ts`, export `handler`, on `nodejs24.x` / `arm64`.
 - **No Function URL.** Only the two EventBridge rules (by source ARN) and the function's own role may invoke it.
 - **Execution role:** logs to its own log group, unconditional `s3:ListBucket`, and `s3:GetObject` on `<bucket>/<key_prefix>/*/<layout_version>/*` only. It may consume and re-enqueue its queue, read its one secret, invoke itself, and decrypt through S3 for the bucket key. It gets ENI permissions only in a VPC.
 - **Secret:** an empty Secrets Manager container (`SESSION_PIPELINE_SECRET_ARN`). Set its JSON value out of band: the HoopDb URL and, with `search_index_enabled`, the search backend credentials.
@@ -106,7 +106,7 @@ Self-host normally runs these stages as long-running worker pods (the hoopdb-ind
 | secret\_kms\_key\_arn | KMS key for the created secret. null uses aws/secretsmanager. | `string` | `null` | no |
 | secret\_recovery\_window\_days | Recovery window when the secret is deleted. | `number` | `7` | no |
 | tags | Tags applied to every resource. | `map(string)` | `{}` | no |
-| timeout\_seconds | Function timeout. The queue's visibility timeout is six times this (AWS guidance for SQS sources). | `number` | `300` | no |
+| timeout\_seconds | Function timeout. The queue's visibility timeout is six times this (AWS guidance for SQS sources) plus maximum\_batching\_window\_seconds. | `number` | `300` | no |
 | tracing\_mode | X-Ray tracing (PassThrough or Active). | `string` | `"PassThrough"` | no |
 | vpc\_security\_group\_ids | Security groups for the function ENIs (egress to Postgres 5432 and HTTPS). | `list(string)` | `[]` | no |
 | vpc\_subnet\_ids | Private subnets for the function ENIs. Needed to reach a private HoopDb (RDS/Aurora); the subnets need a route to S3, SQS, Secrets Manager and CloudWatch (NAT or VPC endpoints). Empty runs outside a VPC. | `list(string)` | `[]` | no |

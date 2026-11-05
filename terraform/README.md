@@ -139,7 +139,7 @@ master secret, or from per-role Secrets Manager / Secret Manager entries.
 | `aws/search.url`, `gcp/search.url` | No chart value yet. It becomes the sessions-pipeline OpenSearch backend's URL once that backend exists |
 | `aws/functions.*`, `gcp/functions.*` | No chart value. The pipeline secret's JSON holds the same HoopDb URL as `HOOPDB_URL` |
 
-The example roots print the non-secret values as a `chart_values` output.
+The example roots print the non-secret values-file paths as a `chart_values` output. `CLOUD_SQL_CONNECTION_NAME` is an `extraEnv` entry, not a values path, so the GCP example prints it as `postgres.connection_name` instead.
 
 ## Postgres bootstrap (before the first migrate)
 

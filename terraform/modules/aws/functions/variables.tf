@@ -111,7 +111,7 @@ variable "memory_size" {
 }
 
 variable "timeout_seconds" {
-  description = "Function timeout. The queue's visibility timeout is six times this (AWS guidance for SQS sources)."
+  description = "Function timeout. The queue's visibility timeout is six times this (AWS guidance for SQS sources) plus maximum_batching_window_seconds."
   type        = number
   default     = 300
 

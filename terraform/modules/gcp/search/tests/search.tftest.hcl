@@ -58,3 +58,13 @@ run "security_config_secret_required" {
 
   expect_failures = [var.security_config_secret_name]
 }
+
+run "name_cannot_end_with_hyphen" {
+  command = plan
+
+  variables {
+    name = "relay-search-"
+  }
+
+  expect_failures = [var.name]
+}

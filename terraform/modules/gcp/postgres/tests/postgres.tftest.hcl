@@ -96,3 +96,47 @@ run "unencrypted_ssl_mode_refused" {
 
   expect_failures = [var.ssl_mode]
 }
+
+run "iam_authentication_off_wins_over_flags" {
+  command = plan
+
+  variables {
+    iam_authentication = false
+    database_flags     = { "cloudsql.iam_authentication" = "on" }
+  }
+
+  assert {
+    condition     = one([for f in google_sql_database_instance.this.settings[0].database_flags : f.value if f.name == "cloudsql.iam_authentication"]) == "off"
+    error_message = "iam_authentication = false yields cloudsql.iam_authentication off, whatever database_flags says."
+  }
+}
+
+run "enterprise_refuses_perf_optimized_tier" {
+  command = plan
+
+  variables {
+    tier = "db-perf-optimized-N-2"
+  }
+
+  expect_failures = [google_sql_database_instance.this]
+}
+
+run "enterprise_plus_refuses_custom_tier" {
+  command = plan
+
+  variables {
+    edition = "ENTERPRISE_PLUS"
+  }
+
+  expect_failures = [google_sql_database_instance.this]
+}
+
+run "enterprise_pitr_window_capped" {
+  command = plan
+
+  variables {
+    transaction_log_retention_days = 8
+  }
+
+  expect_failures = [google_sql_database_instance.this]
+}

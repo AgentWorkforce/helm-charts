@@ -154,14 +154,16 @@ resource "aws_s3_bucket_policy" "this" {
 # ---------------------------------------------------------------------------
 
 locals {
-  trust_statements = local.create_role ? concat(
-    [{
+  # Each group is its own conditional list, so no conditional has to unify
+  # differently shaped statement objects.
+  trust_statements = concat(
+    local.create_role ? [{
       Sid       = "EksPodIdentity"
       Effect    = "Allow"
       Principal = { Service = "pods.eks.amazonaws.com" }
       Action    = ["sts:AssumeRole", "sts:TagSession"]
-    }],
-    local.oidc_host == null || length(var.access_role.irsa_service_accounts) == 0 ? [] : [{
+    }] : [],
+    local.create_role && local.oidc_host != null && length(try(var.access_role.irsa_service_accounts, [])) > 0 ? [{
       Sid       = "Irsa"
       Effect    = "Allow"
       Principal = { Federated = var.access_role.oidc_provider_arn }
@@ -172,34 +174,32 @@ locals {
           "${local.oidc_host}:sub" = [for sa in var.access_role.irsa_service_accounts : "system:serviceaccount:${sa.namespace}:${sa.service_account}"]
         }
       }
-    }],
-  ) : []
+    }] : [],
+  )
 
-  access_statements = local.create_role ? concat(
-    [
-      {
-        # Unconditional on purpose: S3 answers 404 (not 403) for a missing key
-        # only with ListBucket, and the sessions services detect deletes that way.
-        Sid      = "ListBucket"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
-        Resource = [local.bucket_arn]
-      },
-      {
-        Sid      = "ReadWriteObjects"
-        Effect   = "Allow"
-        Action   = concat(["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"], var.access_role.allow_delete ? ["s3:DeleteObject"] : [])
-        Resource = local.object_arns
-      },
-    ],
-    var.kms_key_arn == null ? [] : [{
+  access_statements = concat(
+    local.create_role ? [{
+      # Unconditional on purpose: S3 answers 404 (not 403) for a missing key
+      # only with ListBucket, and the sessions services detect deletes that way.
+      Sid      = "ListBucket"
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
+      Resource = [local.bucket_arn]
+    }] : [],
+    local.create_role ? [{
+      Sid      = "ReadWriteObjects"
+      Effect   = "Allow"
+      Action   = concat(["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"], var.access_role.allow_delete ? ["s3:DeleteObject"] : [])
+      Resource = local.object_arns
+    }] : [],
+    local.create_role && var.kms_key_arn != null ? [{
       Sid       = "UseBucketKey"
       Effect    = "Allow"
       Action    = ["kms:Decrypt", "kms:GenerateDataKey"]
       Resource  = [var.kms_key_arn]
       Condition = { StringEquals = { "kms:ViaService" = "s3.${data.aws_region.current.region}.${data.aws_partition.current.dns_suffix}" } }
-    }],
-  ) : []
+    }] : [],
+  )
 }
 
 resource "aws_iam_role" "access" {

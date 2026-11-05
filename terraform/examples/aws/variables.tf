@@ -9,8 +9,8 @@ variable "name" {
   default     = "agent-relay"
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{0,20}$", var.name))
-    error_message = "name must be 1-21 lowercase letters, digits and hyphens, starting with a letter."
+    condition     = length(var.name) <= 21 && can(regex("^[a-z]([a-z0-9]|-[a-z0-9])*$", var.name))
+    error_message = "name must be 1-21 lowercase letters, digits and single hyphens, starting with a letter and not ending with a hyphen (RDS identifier rules)."
   }
 }
 

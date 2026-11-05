@@ -131,3 +131,34 @@ run "object_lock_requires_versioning" {
 
   expect_failures = [aws_s3_bucket_versioning.this]
 }
+
+run "bucket_key_grant_is_partition_aware" {
+  command = plan
+
+  variables {
+    kms_key_arn = "arn:aws:kms:us-west-2:111111111111:key/abc"
+    access_role = { name = "relay-sessions" }
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_role_policy.access[0].policy).Statement : s.Condition.StringEquals["kms:ViaService"] if s.Sid == "UseBucketKey"]) == "s3.us-west-2.amazonaws.com"
+    error_message = "kms:ViaService is s3.<region>.<partition dns suffix>."
+  }
+}
+
+run "irsa_trust" {
+  command = plan
+
+  variables {
+    access_role = {
+      name                  = "relay-sessions"
+      oidc_provider_arn     = "arn:aws:iam::111111111111:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/ABC"
+      irsa_service_accounts = [{ namespace = "agent-relay", service_account = "agent-relay-worker" }]
+    }
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_role.access[0].assume_role_policy).Statement : s.Condition.StringEquals["oidc.eks.us-west-2.amazonaws.com/id/ABC:sub"] if s.Sid == "Irsa"]) == ["system:serviceaccount:agent-relay:agent-relay-worker"]
+    error_message = "IRSA trust names the service account subject."
+  }
+}

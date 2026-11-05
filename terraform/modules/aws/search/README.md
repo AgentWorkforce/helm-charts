@@ -8,7 +8,7 @@
 - Sized for per-event transcript text: 3 `r7g.large.search` data nodes (4 with two subnets, a multiple of the AZ count) with 200 GiB gp3 each, plus 3 dedicated `m7g.large.search` cluster managers. Every size is a variable.
 - **Destroy guard:** OpenSearch has no API deletion protection, so the domain has `prevent_destroy`: Terraform refuses to destroy or replace it. To delete it on purpose, `terraform state rm` the domain resource and delete it with the AWS CLI or console.
 - Two workload roles trusted by EKS Pod Identity (and IRSA): **indexer** (the sessions-pipeline search stage: `ESHttpGet/Head/Post/Put/Delete/Patch`) and **reader** (the session read API: `ESHttpGet/Head/Post`). With the master user, map them as `backend_roles` to OpenSearch roles scoped to the transcript indices.
-- Pod Identity allows one role per ServiceAccount. When the pod already has a role, set `workload_roles = { create = false }`, attach `indexer_policy_json` / `reader_policy_json` to that role, and list it in `additional_principal_arns` (as `examples/aws` does).
+- Pod Identity allows one role per ServiceAccount. When the pod already has a role, set `workload_roles = { create = false }`, attach `indexer_policy_json` / `reader_policy_json` to that role, and list it in `additional_principal_arns`. Do not attach the indexer policy to a role shared with pods that only read: `examples/aws` makes no workload grant for that reason, because the worker and alleyoop share the sessions role.
 - Application, search-slow and index-slow logs go to CloudWatch. Add `AUDIT_LOGS` once audit logging is configured in the security plugin.
 - Prerequisite: the `AWSServiceRoleForAmazonOpenSearchService` service-linked role.
 

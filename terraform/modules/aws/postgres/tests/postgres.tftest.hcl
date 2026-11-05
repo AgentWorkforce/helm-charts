@@ -174,3 +174,23 @@ run "aurora_monitoring_needs_a_role" {
 
   expect_failures = [aws_rds_cluster_instance.this]
 }
+
+run "allowed_extensions_parameter_cannot_be_repeated" {
+  command = plan
+
+  variables {
+    parameters = [{ name = "rds.allowed_extensions", value = "pgcrypto" }]
+  }
+
+  expect_failures = [var.parameters]
+}
+
+run "parameter_count_capped" {
+  command = plan
+
+  variables {
+    parameters = [for i in range(19) : { name = "custom.p${i}", value = "1" }]
+  }
+
+  expect_failures = [var.parameters]
+}
