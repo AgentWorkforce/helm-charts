@@ -38,10 +38,79 @@ components, off by default. Billing, hosted (Nango) provider integrations and
 hosted fleet are out of scope; operator-configured integration OAuth apps
 (relay-cloud-api `integrations`, 0.2.3, in agent-relay 0.3.8) are a preview.
 
+## agent-relay 0.3.12 (2026-11-04): durable actors on AWS EKS
+
+Released by `release-agent-relay.yml` when the `agent-relay-0.3.12` tag is
+pushed (`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.12).
+It adds durable actors on AWS (helm-charts #53, #55). **The actor components
+stay off by default.** With none of the new values set, every render is
+byte-identical to 0.3.11 apart from the `helm.sh/chart` labels. The customer
+images and the `values-gcp.yaml` and `values-eks.yaml` pins are unchanged
+from 0.3.11.
+
+- **S3 actor storage.** `durable-actors` 0.14.6-awf.1 adds
+  `storage.provider: s3` and `storage.s3.{region, actorCredentials,
+  actorRoleArn, endpoint, forcePathStyle}`, AWS availability zones in
+  `placement.zone`, `sandbox.{runtimeClassName, nodeSelector, tolerations}`
+  for a tainted actor node group, and `serviceAccount.annotations` for IRSA.
+  It needs a control-plane image from the AgentWorkforce durable-actors fork
+  (`charts/durable-actors/UPSTREAM.md` patches 10 and 11). relaycast 0.3.4 and
+  relayfile 0.2.1 add an S3 artifact store for their actor deploy Jobs
+  (`runtime.durableActors.deployer.artifactStore`).
+- **Per-actor STS is the default.** With `storage.s3.actorCredentials:
+  assume-role`, the control plane assumes `storage.s3.actorRoleArn` (on
+  Pippen, a `/pippen/workload/` storage role) with an inline session policy
+  narrowed to one actor, so an actor host cannot read another actor's state.
+  The control-plane role needs `sts:AssumeRole` and `sts:TagSession` on that
+  role. **`actorCredentials: control-plane` is an opt-in fallback** for an
+  account that forbids `sts:AssumeRole`: actor hosts then share the control
+  plane's S3 credentials, isolated by prefix only (first-party actors only).
+  The chart's NOTES warn when it is set.
+- **`values-eks-actors.yaml`**, a standalone profile: Relaycast and Relayfile
+  in actor mode on durable actors with S3 storage, runc actor hosts on a
+  tainted node group, and EKS Pod Identity (IRSA works through the service
+  account annotations). Every other component is off. To run actors next to
+  the suite, layer it over `values-eks.yaml` and turn the other components
+  back on. It pins six images by digest, all **public on GHCR** (anonymous
+  pulls verified 2026-11-04):
+
+| Image | Pinned digest (`values-eks-actors.yaml`) | Source | Platforms |
+|---|---|---|---|
+| `ghcr.io/agentworkforce/durable-actors-control-plane` | `sha256:0dc76905554055c8f063d764799410e2a2f385c2274661dd07d8fd9b12117971` | AgentWorkforce/durable-actors (fork of TerseAI) tag `awf-v0.14.6-aws.2` (`a5a7e245`), [run 41800410035](https://github.com/AgentWorkforce/durable-actors/actions/runs/41800410035), MIT | linux/amd64 only |
+| `ghcr.io/agentworkforce/durable-actors-typescript` | `sha256:b7118ed1377ccc20f0389d194dd589bcd4845394f72f91410cbaf0f62d4a2ed9` | same fork tag and run, MIT | linux/amd64 only |
+| `ghcr.io/agentworkforce/relaycast-actors-gateway` | `sha256:6d4f77c4285becac66f56601a36ac3580b19ad37331db4ad2b87f68b2a68abe4` | relaycast main `4e90b169` (#626), [run 41805228035](https://github.com/AgentWorkforce/relaycast/actions/runs/41805228035), Apache-2.0 | linux/amd64, linux/arm64 |
+| `ghcr.io/agentworkforce/relaycast-actors-deployer` | `sha256:f539982442305c61f2c7a7d979cb110e18f3be83fed69befd8755b6ad5476b51` | same relaycast revision and run, Apache-2.0 | linux/amd64, linux/arm64 |
+| `ghcr.io/agentworkforce/relayfile-actors` | `sha256:27dfc8d5bbceb7161af9aa4c4923c0efd5045b2d332f60c30492fd599b434522` | relayfile main `30a5e007` (#559), [run 41805271012](https://github.com/AgentWorkforce/relayfile/actions/runs/41805271012), Apache-2.0 | linux/amd64, linux/arm64 |
+| `ghcr.io/agentworkforce/relayfile-actors-workspace` | `sha256:6845272aa103724e4da8d6f29653e4ea06ab57b71900b807e4a38b8f41c11d32` | same relayfile revision and run, Apache-2.0 | linux/amd64, linux/arm64 |
+
+  The file's header comment still says these packages may be private, and
+  that the install script uses the control-plane fallback. Both are out of
+  date: the packages are public, and the script defaults to per-actor STS
+  (#55). Changing the comment would need a chart version bump, so it is
+  fixed in the next chart change.
+- **`scripts/selfhost/eks-actors-install.sh`** (`prereqs`, `prepull`,
+  `install`, `actor-env`, `status`, `uninstall`) and `eks-actors-sandbox.sh`
+  build the proof in a Pippen sandbox. The install defaults to per-actor STS
+  with the derived storage role ARN (`EKS_ACTORS_ACTOR_ROLE_ARN` overrides
+  it), and `EKS_ACTORS_ACTOR_CREDENTIALS=control-plane` opts in to the
+  fallback. `prepull` is only needed for a private mirror.
+- **Proof.** In the `actors-proof` Pippen sandbox (EKS, standard mode, runc
+  actor hosts) in per-actor STS mode: actor activation, the Relaycast
+  harness 18/18, the Relayfile mount e2e, and a cross-actor negative check
+  15/15 (one actor's session policy denies another actor's snapshots and
+  ownership records and a bucket-wide list, and create-only writes are
+  enforced). Proof Postgres and secrets are proof-only (see the script
+  header); use a managed Postgres with TLS for a real install.
+- Images and licenses are recorded in `self-hosted/customer-images.yaml` as
+  inactive entries and in the image supply-chain guide. They are not part of
+  the gated customer matrix and need owner approval before they join one.
+  The two durable-actors images are linux/amd64 only.
+
 ## agent-relay 0.3.11 (2026-11-04): current images, every pin public
 
-Released by `release-agent-relay.yml` when the `agent-relay-0.3.11` tag is
-pushed (`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.11). It
+Published from the `agent-relay-0.3.11` tag by `release-agent-relay.yml`
+([run 41812609280](https://github.com/AgentWorkforce/helm-charts/actions/runs/41812609280);
+`oci://ghcr.io/agentworkforce/charts/agent-relay`, version 0.3.11). It
 supersedes the never-tagged 0.3.7, 0.3.8, 0.3.9 and 0.3.10 and includes their
 changes (below), so it covers everything since 0.3.6. The leaf charts are
 unchanged from 0.3.9 (relay-cloud-api 0.2.4, relay-dashboard 0.1.3,

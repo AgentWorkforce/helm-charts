@@ -4,7 +4,7 @@ This archive is the complete current Helm-chart and agent-prompt engineering
 handoff. It is provided for architecture and integration review, not
 installation or production use.
 
-Hard blockers as of 2026-11-04 (agent-relay 0.3.11; details in [STATUS.md](STATUS.md)):
+Hard blockers as of 2026-11-04 (agent-relay 0.3.12; details in [STATUS.md](STATUS.md)):
 
 - None for images: since 0.3.11 every image in `values-gcp.yaml` is a public
   GHCR release digest (control-plane API, dashboard, RelayHistory, Sessions

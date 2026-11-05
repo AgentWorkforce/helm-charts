@@ -61,7 +61,7 @@
   "operationalReadiness": {
     "loadTest": {
       "artifactSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-      "chartVersion": "0.3.11",
+      "chartVersion": "0.3.12",
       "evidence": "Not yet done; planned. The supported-100 ramp, 24-hour steady run, burst, drain and fault phases in docs/operations/capacity-and-load-test.md have not run. No capacity or SLO claim is made.",
       "imageManifestSha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       "result": "not-run",
@@ -116,14 +116,14 @@
       "requiredStatusChecks": [],
       "requiresPullRequest": false
     },
-    "chartVersion": "0.3.11",
+    "chartVersion": "0.3.12",
     "environmentControls": {
       "name": "customer-release",
       "preventsSelfReview": false,
       "protected": false,
       "requiredApprovals": 0
     },
-    "imageManifestSha256": "sha256:ee8a1ff3fe8b4290547d40a26711465c4ccd1027cd0579f634bcc29a990c8cf0",
+    "imageManifestSha256": "sha256:03c09da6152e1a331b839c23009f233d4b309bc025fdf6da150399373f8cc6e6",
     "valuesFile": "charts/agent-relay/values-gcp.yaml"
   },
   "releaseDecision": "blocked",
@@ -153,7 +153,7 @@
         "desktopVersion": "unreleased-custom-origin",
         "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
         "result": "not-run",
-        "serverVersion": "0.3.11",
+        "serverVersion": "0.3.12",
         "testedPlatforms": [
           "linux/amd64"
         ]
@@ -163,7 +163,7 @@
         "desktopVersion": "none",
         "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
         "result": "not-run",
-        "serverVersion": "0.3.11",
+        "serverVersion": "0.3.12",
         "testedPlatforms": [
           "linux/amd64"
         ]
@@ -173,7 +173,7 @@
         "desktopVersion": "unreleased-custom-origin",
         "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
         "result": "not-run",
-        "serverVersion": "0.3.6",
+        "serverVersion": "0.3.11",
         "testedPlatforms": [
           "linux/amd64"
         ]
@@ -183,13 +183,13 @@
         "desktopVersion": "none",
         "evidence": "Not yet done; planned. The server N/N-1 x Desktop current/previous matrix has not run; testedPlatforms lists the planned customer platform only.",
         "result": "not-run",
-        "serverVersion": "0.3.6",
+        "serverVersion": "0.3.11",
         "testedPlatforms": [
           "linux/amd64"
         ]
       }
     },
-    "serverCurrentVersion": "0.3.11",
-    "serverPreviousVersion": "0.3.6"
+    "serverCurrentVersion": "0.3.12",
+    "serverPreviousVersion": "0.3.11"
   }
 }

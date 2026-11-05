@@ -10,7 +10,7 @@ metadata:
   auditedAt: "2026-11-04"
   chart:
     name: agent-relay
-    version: 0.3.11
+    version: 0.3.12
     values:
       - charts/agent-relay/values-gcp.yaml
 
@@ -20,7 +20,10 @@ scope:
     (charts/agent-relay/values-gcp.yaml) with all six product components
     enabled. Durable actors, Relayfile and Relayflows are optional preview
     components, off in this profile, and are not part of this matrix. Every
-    row is the digest values-gcp.yaml renders.
+    active row is the digest values-gcp.yaml renders. The inactive rows
+    (active: false) record the optional durable-actors images that
+    values-eks-actors.yaml pins; they are not rendered by values-gcp.yaml and
+    are not approved for the gated profile.
   activeUniqueImages: 7
   excludedConditionalImages:
     - image: cgr.dev/chainguard/minio
@@ -29,6 +32,36 @@ scope:
       reason: sessions-pipeline.otel.enabled=false
     - image: docker.io/alpine/k8s
       reason: all three privileged SQL bootstrap Jobs are disabled
+    - image: ghcr.io/agentworkforce/durable-actors-control-plane
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/durable-actors-typescript
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relaycast-actors-gateway
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relaycast-actors-deployer
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relayfile-actors
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relayfile-actors-workspace
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
     - image: ghcr.io/cloudnative-pg/postgresql
       reason: >-
         The HoopDb Cluster is disabled, but this image is still active below
@@ -408,6 +441,259 @@ images:
         Public digest from the reviewed container workflow at the recorded
         main revision, with an SPDX SBOM, max-mode provenance, a GitHub
         build-provenance attestation, and amd64+arm64 verified anonymously.
+      blockingReasons: []
+
+  # Optional durable-actors images (agent-relay 0.3.12, values-eks-actors.yaml).
+  # Inactive here: the GCP customer profile keeps durable actors and the
+  # Relaycast/Relayfile actor modes off, so they are not in the gated matrix.
+  # Each is public on GHCR (anonymous token, index and per-platform manifest
+  # HEAD all 200, verified 2026-11-04) and pinned by digest in
+  # values-eks-actors.yaml.
+  - id: durable-actors-control-plane
+    active: false
+    firstParty: true
+    component: durable-actors
+    workloads:
+      - Deployment/<release>-durable-actors:control-plane
+    current:
+      repository: ghcr.io/agentworkforce/durable-actors-control-plane
+      digest: sha256:0dc76905554055c8f063d764799410e2a2f385c2274661dd07d8fd9b12117971
+      chartStatus: optional-preview
+      valuesFile: charts/agent-relay/values-eks-actors.yaml
+    source:
+      repository: https://github.com/AgentWorkforce/durable-actors
+      revision: a5a7e24551dd8373c8c83fffe6a60d2e436a2b6c
+      reproducibleReference: true
+      note: >-
+        durable-actors control plane from the AgentWorkforce fork of TerseAI/durable-actors (tag awf-v0.14.6-aws.2; UPSTREAM.md patch 10: S3 storage, per-actor STS). Image labels: revision a5a7e245, licenses MIT. linux/amd64 only.
+    license:
+      status: recorded
+      spdx: MIT
+      evidence: https://github.com/AgentWorkforce/durable-actors/blob/a5a7e24551dd8373c8c83fffe6a60d2e436a2b6c/LICENSE.md
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64]
+      status: amd64-only
+      verificationAccess: anonymous
+    release:
+      run: https://github.com/AgentWorkforce/durable-actors/actions/runs/41800410035
+      trigger: push (tag awf-v0.14.6-aws.2)
+      buildsCommittedRevision: true
+      publishedTags: [awf-v0.14.6-aws.2]
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: not-in-gated-profile
+      basis: >-
+        Optional preview component, off by default and outside the gated GCP
+        customer profile. Needs an owner approval before it joins one.
+      blockingReasons: []
+  - id: durable-actors-typescript
+    active: false
+    firstParty: true
+    component: durable-actors
+    workloads:
+      - actor host Pods in the sandbox namespace
+    current:
+      repository: ghcr.io/agentworkforce/durable-actors-typescript
+      digest: sha256:b7118ed1377ccc20f0389d194dd589bcd4845394f72f91410cbaf0f62d4a2ed9
+      chartStatus: optional-preview
+      valuesFile: charts/agent-relay/values-eks-actors.yaml
+    source:
+      repository: https://github.com/AgentWorkforce/durable-actors
+      revision: a5a7e24551dd8373c8c83fffe6a60d2e436a2b6c
+      reproducibleReference: true
+      note: >-
+        TypeScript actor host from the same fork tag (S3 storage support). Image labels: revision a5a7e245, licenses MIT. linux/amd64 only.
+    license:
+      status: recorded
+      spdx: MIT
+      evidence: https://github.com/AgentWorkforce/durable-actors/blob/a5a7e24551dd8373c8c83fffe6a60d2e436a2b6c/LICENSE.md
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64]
+      status: amd64-only
+      verificationAccess: anonymous
+    release:
+      run: https://github.com/AgentWorkforce/durable-actors/actions/runs/41800410035
+      trigger: push (tag awf-v0.14.6-aws.2)
+      buildsCommittedRevision: true
+      publishedTags: [awf-v0.14.6-aws.2]
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: not-in-gated-profile
+      basis: >-
+        Optional preview component, off by default and outside the gated GCP
+        customer profile. Needs an owner approval before it joins one.
+      blockingReasons: []
+  - id: relaycast-actors-gateway
+    active: false
+    firstParty: true
+    component: relaycast
+    workloads:
+      - Deployment/relaycast actors gateway
+    current:
+      repository: ghcr.io/agentworkforce/relaycast-actors-gateway
+      digest: sha256:6d4f77c4285becac66f56601a36ac3580b19ad37331db4ad2b87f68b2a68abe4
+      chartStatus: optional-preview
+      valuesFile: charts/agent-relay/values-eks-actors.yaml
+    source:
+      repository: https://github.com/AgentWorkforce/relaycast
+      revision: 4e90b169c60dc0948ac4d4fc86233fedd831fd80
+      reproducibleReference: true
+      note: >-
+        Relaycast actor-mode gateway, relaycast main 4e90b169 (#626). The image has no revision or license label; the source revision is the publish run's head.
+    license:
+      status: recorded
+      spdx: Apache-2.0
+      evidence: https://github.com/AgentWorkforce/relaycast/blob/4e90b169c60dc0948ac4d4fc86233fedd831fd80/LICENSE
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+      verificationAccess: anonymous
+    release:
+      run: https://github.com/AgentWorkforce/relaycast/actions/runs/41805228035
+      trigger: workflow_dispatch (main)
+      buildsCommittedRevision: true
+      publishedTags: [12.7.0-actors.1]
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: not-in-gated-profile
+      basis: >-
+        Optional preview component, off by default and outside the gated GCP
+        customer profile. Needs an owner approval before it joins one.
+      blockingReasons: []
+  - id: relaycast-actors-deployer
+    active: false
+    firstParty: true
+    component: relaycast
+    workloads:
+      - Job/relaycast actors deploy
+    current:
+      repository: ghcr.io/agentworkforce/relaycast-actors-deployer
+      digest: sha256:f539982442305c61f2c7a7d979cb110e18f3be83fed69befd8755b6ad5476b51
+      chartStatus: optional-preview
+      valuesFile: charts/agent-relay/values-eks-actors.yaml
+    source:
+      repository: https://github.com/AgentWorkforce/relaycast
+      revision: 4e90b169c60dc0948ac4d4fc86233fedd831fd80
+      reproducibleReference: true
+      note: >-
+        Relaycast actor deploy Job (S3 artifact store), relaycast main 4e90b169 (#626). Its OCI labels read revision 38afee6c and licenses NOASSERTION (inherited); the source revision is the publish run's head.
+    license:
+      status: recorded
+      spdx: Apache-2.0
+      evidence: https://github.com/AgentWorkforce/relaycast/blob/4e90b169c60dc0948ac4d4fc86233fedd831fd80/LICENSE
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+      verificationAccess: anonymous
+    release:
+      run: https://github.com/AgentWorkforce/relaycast/actions/runs/41805228035
+      trigger: workflow_dispatch (main)
+      buildsCommittedRevision: true
+      publishedTags: [12.7.0-actors.1]
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: not-in-gated-profile
+      basis: >-
+        Optional preview component, off by default and outside the gated GCP
+        customer profile. Needs an owner approval before it joins one.
+      blockingReasons: []
+  - id: relayfile-actors
+    active: false
+    firstParty: true
+    component: relayfile
+    workloads:
+      - Deployment/relayfile actors gateway and session broker
+    current:
+      repository: ghcr.io/agentworkforce/relayfile-actors
+      digest: sha256:27dfc8d5bbceb7161af9aa4c4923c0efd5045b2d332f60c30492fd599b434522
+      chartStatus: optional-preview
+      valuesFile: charts/agent-relay/values-eks-actors.yaml
+    source:
+      repository: https://github.com/AgentWorkforce/relayfile
+      revision: 30a5e00743c5676ab35b47718c7fb04315124d4e
+      reproducibleReference: true
+      note: >-
+        Relayfile actor-mode gateway and session broker, relayfile main 30a5e007 (#559). Image labels: revision 30a5e007, licenses Apache-2.0.
+    license:
+      status: recorded
+      spdx: Apache-2.0
+      evidence: https://github.com/AgentWorkforce/relayfile/blob/30a5e00743c5676ab35b47718c7fb04315124d4e/LICENSE
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+      verificationAccess: anonymous
+    release:
+      run: https://github.com/AgentWorkforce/relayfile/actions/runs/41805271012
+      trigger: workflow_dispatch (main)
+      buildsCommittedRevision: true
+      publishedTags: [sha-30a5e00]
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: not-in-gated-profile
+      basis: >-
+        Optional preview component, off by default and outside the gated GCP
+        customer profile. Needs an owner approval before it joins one.
+      blockingReasons: []
+  - id: relayfile-actors-workspace
+    active: false
+    firstParty: true
+    component: relayfile
+    workloads:
+      - Job/relayfile actors deploy
+    current:
+      repository: ghcr.io/agentworkforce/relayfile-actors-workspace
+      digest: sha256:6845272aa103724e4da8d6f29653e4ea06ab57b71900b807e4a38b8f41c11d32
+      chartStatus: optional-preview
+      valuesFile: charts/agent-relay/values-eks-actors.yaml
+    source:
+      repository: https://github.com/AgentWorkforce/relayfile
+      revision: 30a5e00743c5676ab35b47718c7fb04315124d4e
+      reproducibleReference: true
+      note: >-
+        Relayfile actor deploy Job and dev sidecar (S3 artifact store), relayfile main 30a5e007 (#559). Image labels: revision 30a5e007, licenses Apache-2.0.
+    license:
+      status: recorded
+      spdx: Apache-2.0
+      evidence: https://github.com/AgentWorkforce/relayfile/blob/30a5e00743c5676ab35b47718c7fb04315124d4e/LICENSE
+    platforms:
+      expected: [linux/amd64, linux/arm64]
+      verifiedFromRegistry: [linux/amd64, linux/arm64]
+      status: verified
+      verificationAccess: anonymous
+    release:
+      run: https://github.com/AgentWorkforce/relayfile/actions/runs/41805271012
+      trigger: workflow_dispatch (main)
+      buildsCommittedRevision: true
+      publishedTags: [sha-30a5e00]
+      verifiesAnonymousPull: true
+    customerAcquisition:
+      status: available-public
+      procedure: Mirror the public GHCR digest into the customer registry by digest and record the destination digest.
+    approval:
+      status: not-in-gated-profile
+      basis: >-
+        Optional preview component, off by default and outside the gated GCP
+        customer profile. Needs an owner approval before it joins one.
       blockingReasons: []
 
 promotionProcedure:
