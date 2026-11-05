@@ -62,7 +62,9 @@ client ──HTTPS──▶ cast.<domain> / files.<domain> (umbrella GKE Ingress
 - Storage: **one Standard GCS bucket** (ownership, compiled code under
   `durable-actors/v3/artifacts/<uuid>/`, state snapshots). Rapid
   (`storage.mode: rapid`, one or two RAPID buckets in distinct zones) is optional.
-  No lifecycle deletion on any of them. No S3, MinIO or PVC provider exists.
+  No lifecycle deletion on any of them. On AWS EKS the chart also has
+  `storage.provider: s3` (agent-relay 0.3.12, `values-eks-actors.yaml`; it needs
+  the AgentWorkforce fork's control-plane image). No MinIO or PVC provider exists.
 - `credentialsSecret` keys: `postgres-url`, `jwt-signing-key` (base64 Ed25519
   PKCS#8 DER, stable), `api-key`, plus `redis-url` (and `redis-ca`) when
   `replicaCount > 1`; more than one controller requires Redis.
@@ -260,7 +262,8 @@ runtime image ships only the actor host, not the compiler) and
   of the admin key (`invocationSecret.scope: admin`); Relayfile isolates it in
   the session broker. Socket grants (`find-websocket`) need the admin key.
 - No SQLite → actors migration tooling; actor mode is a fresh-install backend.
-- Non-GKE self-host (generic Kubernetes, S3/MinIO actor storage) is an upstream
-  gap.
+- AWS EKS with S3 actor storage ships as a proof profile in agent-relay 0.3.12
+  (`values-eks-actors.yaml`, `scripts/selfhost/eks-actors-install.sh`). Other
+  non-GKE self-host (generic Kubernetes, MinIO actor storage) is an upstream gap.
 - Changing an installation's `storage.mode` or bucket identities needs a data
   migration; a values change alone does not move actor state.

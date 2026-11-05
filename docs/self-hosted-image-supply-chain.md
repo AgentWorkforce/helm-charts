@@ -54,6 +54,28 @@ container copies static assets into a writable volume and the application
 container serves them), but it is one unique image. Product migration Jobs
 reuse their component image rather than adding another image.
 
+## Optional durable-actors images (agent-relay 0.3.12)
+
+`values-eks-actors.yaml` (durable actors on AWS EKS, off by default) pins six
+more images. All six are public on GHCR: an anonymous token, the image index
+and every platform manifest returned 200 on 2026-11-04. They are recorded in
+`self-hosted/customer-images.yaml` as inactive entries, because the gated GCP
+profile keeps durable actors off. They have no customer license or release
+approval yet; approve them before they join a gated profile.
+
+| Image | Pinned digest (`values-eks-actors.yaml`) | Source | Platforms |
+|---|---|---|---|
+| `ghcr.io/agentworkforce/durable-actors-control-plane` | `sha256:0dc76905554055c8f063d764799410e2a2f385c2274661dd07d8fd9b12117971` | AgentWorkforce/durable-actors (fork of TerseAI) tag `awf-v0.14.6-aws.2` (`a5a7e245`), [run 41800410035](https://github.com/AgentWorkforce/durable-actors/actions/runs/41800410035), MIT | linux/amd64 only |
+| `ghcr.io/agentworkforce/durable-actors-typescript` | `sha256:b7118ed1377ccc20f0389d194dd589bcd4845394f72f91410cbaf0f62d4a2ed9` | same fork tag and run, MIT | linux/amd64 only |
+| `ghcr.io/agentworkforce/relaycast-actors-gateway` | `sha256:6d4f77c4285becac66f56601a36ac3580b19ad37331db4ad2b87f68b2a68abe4` | relaycast main `4e90b169` (#626), [run 41805228035](https://github.com/AgentWorkforce/relaycast/actions/runs/41805228035), Apache-2.0 | linux/amd64, linux/arm64 |
+| `ghcr.io/agentworkforce/relaycast-actors-deployer` | `sha256:f539982442305c61f2c7a7d979cb110e18f3be83fed69befd8755b6ad5476b51` | same relaycast revision and run, Apache-2.0 | linux/amd64, linux/arm64 |
+| `ghcr.io/agentworkforce/relayfile-actors` | `sha256:27dfc8d5bbceb7161af9aa4c4923c0efd5045b2d332f60c30492fd599b434522` | relayfile main `30a5e007` (#559), [run 41805271012](https://github.com/AgentWorkforce/relayfile/actions/runs/41805271012), Apache-2.0 | linux/amd64, linux/arm64 |
+| `ghcr.io/agentworkforce/relayfile-actors-workspace` | `sha256:6845272aa103724e4da8d6f29653e4ea06ab57b71900b807e4a38b8f41c11d32` | same relayfile revision and run, Apache-2.0 | linux/amd64, linux/arm64 |
+
+The relaycast-actors-gateway image has no OCI revision or license label, and
+the deployer's labels read revision `38afee6c` and licenses `NOASSERTION`
+(inherited). The table records the publish run's head revision instead.
+
 ## Customer acquisition and promotion
 
 An image may enter customer values only after all of these gates pass:
