@@ -35,6 +35,18 @@ run "defaults_are_private" {
     condition     = length(google_storage_bucket_iam_member.this) == 0
     error_message = "No IAM bindings by default."
   }
+  assert {
+    condition     = one(google_storage_bucket.this.soft_delete_policy).retention_duration_seconds == 604800
+    error_message = "7-day soft delete by default."
+  }
+  assert {
+    condition     = contains([for r in google_storage_bucket.this.lifecycle_rule : one(r.condition).age if one(r.action).type == "AbortIncompleteMultipartUpload"], 7)
+    error_message = "Incomplete multipart uploads are aborted after 7 days."
+  }
+  assert {
+    condition     = contains([for r in google_storage_bucket.this.lifecycle_rule : one(r.condition).days_since_noncurrent_time if one(r.action).type == "Delete"], 30)
+    error_message = "Noncurrent versions are deleted after 30 days."
+  }
 }
 
 run "workload_identity" {

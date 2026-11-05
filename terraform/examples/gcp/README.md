@@ -64,12 +64,12 @@ terraform init && terraform plan
 | name | Name prefix for every resource. | `string` | `"agent-relay"` | no |
 | namespace | agent-relay release namespace. | `string` | `"agent-relay"` | no |
 | notification\_channels | Cloud Monitoring notification channels for the pipeline alerts. | `list(string)` | `[]` | no |
-| pipeline\_source\_archive | Function source zip in GCS. | ```object({ bucket = string object = string generation = optional(number) })``` | ```{ "bucket": "replace-me", "object": "session-pipeline.zip" }``` | no |
+| pipeline\_source\_archive | Function source zip in GCS. Required with enable\_functions. | ```object({ bucket = string object = string generation = optional(number) })``` | `null` | no |
 | release\_name | agent-relay Helm release name. | `string` | `"agent-relay"` | no |
 | search\_admin\_credentials\_secret\_name | Existing Secret (in the search namespace) with the OpenSearch admin username and password. | `string` | `"opensearch-admin"` | no |
 | search\_security\_config\_secret\_name | Existing Secret (in the search namespace) with the security plugin configuration. | `string` | `"opensearch-security-config"` | no |
 | search\_storage\_class | StorageClass for OpenSearch volumes. | `string` | `null` | no |
-| vpc\_connector | Existing Serverless VPC Access connector for the pipeline function (reaches Cloud SQL). | `string` | `null` | no |
+| vpc\_connector | Existing Serverless VPC Access connector for the pipeline function (reaches the private Cloud SQL). Required with enable\_functions. | `string` | `null` | no |
 
 ### Outputs
 
@@ -77,6 +77,6 @@ terraform init && terraform plan
 | ---- | ----------- |
 | chart\_values | Non-secret agent-relay chart values (values-gcp.yaml) these resources feed. Database URLs go in the release Secret, not here; see terraform/README.md. |
 | functions | Pipeline function, topics and secret (null unless enable\_functions). |
-| postgres | Cloud SQL private IP, admin secret and URL template. |
+| postgres | Cloud SQL private IP, admin secret and URL template. connection\_name feeds CLOUD\_SQL\_CONNECTION\_NAME in the sessions worker and alleyoop extraEnv. |
 | search\_url | In-cluster OpenSearch URL (null unless enable\_search). |
 <!-- END_TF_DOCS -->

@@ -60,7 +60,8 @@ resource "google_storage_bucket_iam_member" "function_reads" {
   member = google_service_account.function.member
 }
 
-# The reconcile re-enqueues recent manifests.
+# The reconcile re-enqueues recent manifests and publishes its own
+# continuation.
 resource "google_pubsub_topic_iam_member" "function_publishes" {
   project = var.project_id
   topic   = google_pubsub_topic.events.name
@@ -75,19 +76,16 @@ resource "google_secret_manager_secret_iam_member" "function_reads_secret" {
   member    = google_service_account.function.member
 }
 
-# Push subscription and scheduler jobs invoke as the invoker; the function
-# invokes itself to continue a reconcile past its deadline.
-resource "google_cloud_run_v2_service_iam_member" "invokers" {
-  for_each = {
-    invoker  = google_service_account.invoker.member
-    function = google_service_account.function.member
-  }
-
+# Only the invoker (push subscription, scheduler jobs) may call the function.
+# A reconcile that reaches its deadline continues by publishing
+# {"reconcile": true, "cursor": ...} to the events topic, not by an HTTP
+# self-call, which internal-only ingress would refuse without a VPC route.
+resource "google_cloud_run_v2_service_iam_member" "invoker" {
   project  = var.project_id
   location = var.region
   name     = google_cloudfunctions2_function.this.name
   role     = "roles/run.invoker"
-  member   = each.value
+  member   = google_service_account.invoker.member
 }
 
 # ---------------------------------------------------------------------------
@@ -182,7 +180,7 @@ resource "google_pubsub_subscription" "push" {
     ttl = ""
   }
 
-  depends_on = [google_cloud_run_v2_service_iam_member.invokers]
+  depends_on = [google_cloud_run_v2_service_iam_member.invoker]
 }
 
 # Dead-lettered messages are kept here for inspection and replay.
@@ -262,6 +260,10 @@ resource "google_cloudfunctions2_function" "this" {
     precondition {
       condition     = var.create_secret || var.secret_id != null
       error_message = "Set secret_id when create_secret is false."
+    }
+    precondition {
+      condition     = var.timeout_seconds <= var.ack_deadline_seconds
+      error_message = "timeout_seconds must not exceed ack_deadline_seconds, or Pub/Sub redelivers a message still being processed."
     }
     precondition {
       condition     = var.kms_key_name == null || var.docker_repository != null

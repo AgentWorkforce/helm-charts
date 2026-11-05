@@ -34,9 +34,14 @@ variable "network_self_link" {
 }
 
 variable "vpc_connector" {
-  description = "Existing Serverless VPC Access connector for the pipeline function (reaches Cloud SQL)."
+  description = "Existing Serverless VPC Access connector for the pipeline function (reaches the private Cloud SQL). Required with enable_functions."
   type        = string
   default     = null
+
+  validation {
+    condition     = !var.enable_functions || var.vpc_connector != null
+    error_message = "enable_functions needs vpc_connector: the function has no other route to the private Cloud SQL."
+  }
 }
 
 variable "gke_cluster_name" {
@@ -107,13 +112,18 @@ variable "enable_functions" {
 }
 
 variable "pipeline_source_archive" {
-  description = "Function source zip in GCS."
+  description = "Function source zip in GCS. Required with enable_functions."
   type = object({
     bucket     = string
     object     = string
     generation = optional(number)
   })
-  default = { bucket = "replace-me", object = "session-pipeline.zip" }
+  default = null
+
+  validation {
+    condition     = !var.enable_functions || var.pipeline_source_archive != null
+    error_message = "enable_functions needs pipeline_source_archive (bucket and object of the function zip)."
+  }
 }
 
 variable "notification_channels" {

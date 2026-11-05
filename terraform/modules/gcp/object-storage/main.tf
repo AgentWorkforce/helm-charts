@@ -1,4 +1,6 @@
 locals {
+  # Workloads get object access only; other roles go through iam_members.
+  wi_role       = "roles/storage.objectUser"
   wi            = var.workload_identity
   wi_pool       = local.wi == null ? null : coalesce(local.wi.workload_pool, "${var.project_id}.svc.id.goog")
   create_gsa    = local.wi != null && try(local.wi.google_service_account, null) != null
@@ -11,9 +13,9 @@ locals {
   # Static keys only: members such as the new GSA email are unknown at plan time.
   iam_members_flat = merge(
     merge([for role, members in var.iam_members : { for m in members : "extra/${role}/${m}" => { role = role, member = m } }]...),
-    local.create_gsa ? { "wi/gsa" = { role = local.wi.role, member = "serviceAccount:${google_service_account.workload[0].email}" } } : {},
+    local.create_gsa ? { "wi/gsa" = { role = local.wi_role, member = "serviceAccount:${google_service_account.workload[0].email}" } } : {},
     { for k in local.direct_ksas : "wi/direct/${k.namespace}/${k.name}" => {
-      role   = local.wi.role
+      role   = local.wi_role
       member = "principal://iam.googleapis.com/projects/${data.google_project.this[0].number}/locations/global/workloadIdentityPools/${local.wi_pool}/subject/ns/${k.namespace}/sa/${k.name}"
     } },
   )

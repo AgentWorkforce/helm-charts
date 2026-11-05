@@ -4,9 +4,14 @@ variable "region" {
 }
 
 variable "name" {
-  description = "Name prefix for every resource."
+  description = "Name prefix for every resource (lowercase; at most 21 characters, so <name>-search fits OpenSearch's 28)."
   type        = string
   default     = "agent-relay"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,20}$", var.name))
+    error_message = "name must be 1-21 lowercase letters, digits and hyphens, starting with a letter."
+  }
 }
 
 variable "tags" {
@@ -110,13 +115,15 @@ variable "enable_functions" {
 variable "pipeline_package" {
   description = "Pipeline Lambda package (see modules/aws/functions)."
   type = object({
-    image_uri        = optional(string)
-    s3_bucket        = optional(string)
-    s3_key           = optional(string)
-    filename         = optional(string)
-    source_code_hash = optional(string)
+    image_uri         = optional(string)
+    s3_bucket         = optional(string)
+    s3_key            = optional(string)
+    s3_object_version = optional(string)
+    filename          = optional(string)
+    source_code_hash  = optional(string)
   })
-  default = { s3_bucket = "replace-me", s3_key = "session-pipeline.zip" }
+  # Empty: with enable_functions the module refuses it until one source is set.
+  default = {}
 }
 
 variable "alarm_actions" {

@@ -122,8 +122,8 @@ Account-level prerequisites the modules assume:
 
 Database URLs are credentials, so they go into the release Secret (the
 `existingSecret` of each chart), never into values. Build them from the module
-outputs and the role passwords you create in the bootstrap. Every module
-outputs a `database_url_template`. The External Secrets Operator is the
+outputs and the role passwords you create in the bootstrap. Both Postgres
+modules output a `database_url_template`. The External Secrets Operator is the
 intended bridge: for example, template an ExternalSecret from the RDS-managed
 master secret, or from per-role Secrets Manager / Secret Manager entries.
 

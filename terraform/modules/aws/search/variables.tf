@@ -52,9 +52,9 @@ variable "instance_type" {
 }
 
 variable "instance_count" {
-  description = "Data nodes. Use a multiple of the subnet (AZ) count."
+  description = "Data nodes, a multiple of the subnet (AZ) count. null picks the smallest multiple that is at least 3 (3 for one or three AZs, 4 for two)."
   type        = number
-  default     = 3
+  default     = null
 }
 
 variable "dedicated_master_enabled" {

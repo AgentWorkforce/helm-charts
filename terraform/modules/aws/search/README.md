@@ -5,7 +5,8 @@
 - VPC domain in your subnets and security groups. Zone awareness follows the number of subnets (2 or 3).
 - Encryption at rest (customer key optional), node-to-node encryption, HTTPS enforced with `Policy-Min-TLS-1-2-PFS-2023-10`.
 - Fine-grained access control with an **IAM master user** (`master_user_arn`). There is no internal user database and no anonymous access.
-- Sized for per-event transcript text: 3 `r7g.large.search` data nodes with 200 GiB gp3 each, plus 3 dedicated `m7g.large.search` cluster managers. Every size is a variable.
+- Sized for per-event transcript text: 3 `r7g.large.search` data nodes (4 with two subnets, a multiple of the AZ count) with 200 GiB gp3 each, plus 3 dedicated `m7g.large.search` cluster managers. Every size is a variable.
+- **Destroy guard:** OpenSearch has no API deletion protection, so the domain has `prevent_destroy`: Terraform refuses to destroy or replace it. To delete it on purpose, `terraform state rm` the domain resource and delete it with the AWS CLI or console.
 - Two workload roles trusted by EKS Pod Identity (and IRSA): **indexer** (the sessions-pipeline search stage: `ESHttpGet/Head/Post/Put/Delete/Patch`) and **reader** (the session read API: `ESHttpGet/Head/Post`). With the master user, map them as `backend_roles` to OpenSearch roles scoped to the transcript indices.
 - Pod Identity allows one role per ServiceAccount. When the pod already has a role, set `workload_roles = { create = false }`, attach `indexer_policy_json` / `reader_policy_json` to that role, and list it in `additional_principal_arns` (as `examples/aws` does).
 - Application, search-slow and index-slow logs go to CloudWatch. Add `AUDIT_LOGS` once audit logging is configured in the security plugin.
@@ -61,7 +62,7 @@
 | ebs\_volume\_size | gp3 volume per data node in GiB. Size for the transcript text plus replicas plus ~25% headroom. | `number` | `200` | no |
 | ebs\_volume\_type | EBS volume type. | `string` | `"gp3"` | no |
 | engine\_version | Engine version (OpenSearch\_X.Y). | `string` | `"OpenSearch_2.19"` | no |
-| instance\_count | Data nodes. Use a multiple of the subnet (AZ) count. | `number` | `3` | no |
+| instance\_count | Data nodes, a multiple of the subnet (AZ) count. null picks the smallest multiple that is at least 3 (3 for one or three AZs, 4 for two). | `number` | `null` | no |
 | instance\_type | Data node type. Memory-optimized (r7g) fits a full-text index of transcript events; use or1/or2 (OpenSearch Optimized) for heavy ingest. | `string` | `"r7g.large.search"` | no |
 | kms\_key\_arn | Customer managed KMS key for encryption at rest. null uses the AWS managed aws/es key. | `string` | `null` | no |
 | log\_kms\_key\_arn | KMS key for the log groups (its key policy must allow CloudWatch Logs). null uses CloudWatch's default encryption. | `string` | `null` | no |

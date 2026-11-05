@@ -6,6 +6,7 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
   region     = data.aws_region.current.region
   partition  = data.aws_partition.current.partition
+  dns_suffix = data.aws_partition.current.dns_suffix
 
   function_name = "${var.name}-session-pipeline"
   queue_name    = "${var.name}-session-events"
@@ -47,9 +48,11 @@ resource "aws_sqs_queue" "dlq" {
 }
 
 resource "aws_sqs_queue" "events" {
-  name                              = local.queue_name
-  delay_seconds                     = var.delivery_delay_seconds
-  visibility_timeout_seconds        = 6 * var.timeout_seconds
+  name          = local.queue_name
+  delay_seconds = var.delivery_delay_seconds
+  # Six times the timeout (AWS guidance for SQS sources) plus the batching
+  # window, so no message reappears while its invocation still runs.
+  visibility_timeout_seconds        = 6 * var.timeout_seconds + var.maximum_batching_window_seconds
   message_retention_seconds         = var.queue_retention_seconds
   receive_wait_time_seconds         = 20
   sqs_managed_sse_enabled           = var.queue_kms_key_arn == null ? true : null
@@ -207,7 +210,7 @@ locals {
       Action   = ["kms:Decrypt"]
       Resource = [var.bucket_kms_key_arn]
       Condition = {
-        StringEquals = { "kms:ViaService" = "s3.${local.region}.amazonaws.com" }
+        StringEquals = { "kms:ViaService" = "s3.${local.region}.${local.dns_suffix}" }
         # With S3 Bucket Keys (aws/object-storage enables them) the encryption
         # context is the bucket ARN; without them it is the object ARN. Object
         # access stays limited by the s3:GetObject statement.
@@ -225,7 +228,7 @@ locals {
       Effect    = "Allow"
       Action    = ["kms:Decrypt"]
       Resource  = [var.secret_kms_key_arn]
-      Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.${local.region}.amazonaws.com" } }
+      Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.${local.region}.${local.dns_suffix}" } }
     }],
     # ENI management for VPC functions; these EC2 actions do not support
     # resource-level permissions.
@@ -259,7 +262,7 @@ resource "aws_cloudwatch_log_group" "this" {
 
 resource "aws_lambda_function" "this" {
   #checkov:skip=CKV_AWS_116:SQS-sourced: failed messages go to the session-events DLQ through the queue redrive policy.
-  #checkov:skip=CKV_AWS_272:Code signing is opt-in (code_signing_config_arn); container images are verified by digest.
+  #checkov:skip=CKV_AWS_272:Code signing is opt-in (code_signing_config_arn); container images must be pinned by digest (validated).
   #checkov:skip=CKV_AWS_117:VPC placement is opt-in (vpc_subnet_ids); needed only to reach a private HoopDb.
   function_name = local.function_name
   role          = aws_iam_role.this.arn

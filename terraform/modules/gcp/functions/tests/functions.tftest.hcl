@@ -35,16 +35,26 @@ variables {
 run "defaults_are_internal_and_authenticated" {
   command = apply
 
+  # A distinct invoker identity, so the OIDC and invoker asserts can tell the
+  # two service accounts apart.
+  override_resource {
+    target = google_service_account.invoker
+    values = {
+      email  = "invoker@proj.iam.gserviceaccount.com"
+      member = "serviceAccount:invoker@proj.iam.gserviceaccount.com"
+    }
+  }
+
   assert {
     condition     = google_cloudfunctions2_function.this.service_config[0].ingress_settings == "ALLOW_INTERNAL_ONLY"
     error_message = "The function is internal-only."
   }
   assert {
-    condition     = alltrue([for m in google_cloud_run_v2_service_iam_member.invokers : !contains(["allUsers", "allAuthenticatedUsers"], m.member)])
-    error_message = "No public invokers."
+    condition     = google_cloud_run_v2_service_iam_member.invoker.member == "serviceAccount:invoker@proj.iam.gserviceaccount.com"
+    error_message = "Only the invoker service account may invoke the function."
   }
   assert {
-    condition     = google_pubsub_subscription.push.push_config[0].oidc_token[0].service_account_email == google_service_account.invoker.email
+    condition     = google_pubsub_subscription.push.push_config[0].oidc_token[0].service_account_email == "invoker@proj.iam.gserviceaccount.com"
     error_message = "Push deliveries are OIDC-authenticated."
   }
   assert {
@@ -104,4 +114,15 @@ run "long_names_get_distinct_service_accounts" {
     condition     = google_service_account.function.account_id != google_service_account.invoker.account_id && length(google_service_account.invoker.account_id) <= 30 && length(google_service_account.function.account_id) <= 30
     error_message = "Service account IDs stay distinct and within 30 characters."
   }
+}
+
+run "timeout_cannot_exceed_ack_deadline" {
+  command = plan
+
+  variables {
+    timeout_seconds      = 600
+    ack_deadline_seconds = 300
+  }
+
+  expect_failures = [google_cloudfunctions2_function.this]
 }

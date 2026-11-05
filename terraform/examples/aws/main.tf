@@ -68,20 +68,14 @@ module "search" {
   security_group_ids = var.search_security_group_ids
   kms_key_arn        = var.kms_key_arn
   master_user_arn    = var.search_master_user_arn
-  # The worker and alleyoop ServiceAccounts already have the sessions role
-  # through Pod Identity (one association per ServiceAccount), so search access
-  # is attached to that role instead of new indexer/reader roles.
-  workload_roles            = { create = false }
-  additional_principal_arns = [module.sessions_bucket.access_role_arn]
-  tags                      = var.tags
-}
-
-resource "aws_iam_role_policy" "sessions_search" {
-  count = var.enable_search ? 1 : 0
-
-  name   = "opensearch-indexer"
-  role   = module.sessions_bucket.access_role_name
-  policy = module.search[0].indexer_policy_json
+  # Pod Identity allows one role per ServiceAccount, and the worker and
+  # alleyoop ServiceAccounts share the sessions bucket role. Attaching the
+  # indexer policy there would give both write access, so no workload grant is
+  # made here. Once the services have an OpenSearch backend, attach
+  # indexer_policy_json to the indexer's own role and reader_policy_json to the
+  # read API's, and list both in additional_principal_arns.
+  workload_roles = { create = false }
+  tags           = var.tags
 }
 
 # Optional: the sessions pipeline's event-driven mode (S3 -> SQS -> Lambda),

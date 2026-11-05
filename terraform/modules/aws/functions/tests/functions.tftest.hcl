@@ -6,7 +6,7 @@ mock_provider "aws" {
     defaults = { region = "us-west-2" }
   }
   mock_data "aws_partition" {
-    defaults = { partition = "aws" }
+    defaults = { partition = "aws", dns_suffix = "amazonaws.com" }
   }
   mock_resource "aws_sqs_queue" {
     defaults = {
@@ -41,8 +41,8 @@ run "hosted_pattern_defaults" {
   command = apply
 
   assert {
-    condition     = aws_sqs_queue.events.visibility_timeout_seconds == 6 * aws_lambda_function.this.timeout
-    error_message = "Visibility timeout is six times the function timeout."
+    condition     = aws_sqs_queue.events.visibility_timeout_seconds == 6 * aws_lambda_function.this.timeout + aws_lambda_event_source_mapping.events.maximum_batching_window_in_seconds
+    error_message = "Visibility timeout is six times the function timeout plus the batching window."
   }
   assert {
     condition     = jsondecode(aws_sqs_queue.events.redrive_policy).maxReceiveCount == 8
@@ -138,4 +138,14 @@ run "bucket_key_encryption_context" {
     condition     = contains(one([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s.Condition.StringLike["kms:EncryptionContext:aws:s3:arn"] if s.Sid == "DecryptSessionObjectsViaS3"]), "arn:aws:s3:::relay-sessions")
     error_message = "Decrypt must accept the bucket ARN context (S3 Bucket Keys)."
   }
+}
+
+run "image_must_be_digest_pinned" {
+  command = plan
+
+  variables {
+    package = { image_uri = "111111111111.dkr.ecr.us-west-2.amazonaws.com/pipeline:latest" }
+  }
+
+  expect_failures = [var.package]
 }

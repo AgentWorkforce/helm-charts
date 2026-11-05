@@ -69,6 +69,11 @@ variable "package" {
     condition     = (var.package.s3_bucket == null) == (var.package.s3_key == null)
     error_message = "package.s3_bucket and package.s3_key go together."
   }
+
+  validation {
+    condition     = var.package.image_uri == null || can(regex("@sha256:[0-9a-f]{64}$", var.package.image_uri))
+    error_message = "package.image_uri must be pinned by digest (<repository>@sha256:<64 hex>)."
+  }
 }
 
 variable "handler" {

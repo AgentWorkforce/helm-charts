@@ -22,6 +22,11 @@ variable "database_version" {
   description = "Cloud SQL database version. The agent-relay services are tested on PostgreSQL 17."
   type        = string
   default     = "POSTGRES_17"
+
+  validation {
+    condition     = can(regex("^POSTGRES_[0-9]+$", var.database_version))
+    error_message = "database_version must be a PostgreSQL version (POSTGRES_<major>)."
+  }
 }
 
 variable "edition" {

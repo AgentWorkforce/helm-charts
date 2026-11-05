@@ -46,6 +46,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 
 resource "aws_s3_bucket_versioning" "this" {
   bucket = aws_s3_bucket.this.id
+
+  lifecycle {
+    precondition {
+      condition     = var.versioning_enabled || !var.object_lock_enabled
+      error_message = "Object Lock requires versioning; versioning_enabled cannot be false with object_lock_enabled."
+    }
+  }
   versioning_configuration {
     status = var.versioning_enabled ? "Enabled" : "Suspended"
   }
@@ -190,7 +197,7 @@ locals {
       Effect    = "Allow"
       Action    = ["kms:Decrypt", "kms:GenerateDataKey"]
       Resource  = [var.kms_key_arn]
-      Condition = { StringEquals = { "kms:ViaService" = "s3.${data.aws_region.current.region}.amazonaws.com" } }
+      Condition = { StringEquals = { "kms:ViaService" = "s3.${data.aws_region.current.region}.${data.aws_partition.current.dns_suffix}" } }
     }],
   ) : []
 }
@@ -206,6 +213,7 @@ resource "aws_iam_role" "access" {
 }
 
 data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
 resource "aws_iam_role_policy" "access" {
   count = local.create_role ? 1 : 0

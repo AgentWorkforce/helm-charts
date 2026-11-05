@@ -140,9 +140,14 @@ variable "topic_kms_key_name" {
 }
 
 variable "ack_deadline_seconds" {
-  description = "Push subscription ack deadline."
+  description = "Push subscription ack deadline (10-600). Must be at least timeout_seconds."
   type        = number
   default     = 600
+
+  validation {
+    condition     = var.ack_deadline_seconds >= 10 && var.ack_deadline_seconds <= 600
+    error_message = "ack_deadline_seconds must be 10-600."
+  }
 }
 
 variable "max_delivery_attempts" {

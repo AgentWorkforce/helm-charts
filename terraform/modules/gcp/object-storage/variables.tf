@@ -46,6 +46,11 @@ variable "soft_delete_retention_seconds" {
   description = "Soft delete retention (0 disables; 604800 = 7 days is the GCS default)."
   type        = number
   default     = 604800
+
+  validation {
+    condition     = var.soft_delete_retention_seconds == 0 || (var.soft_delete_retention_seconds >= 604800 && var.soft_delete_retention_seconds <= 7776000)
+    error_message = "soft_delete_retention_seconds must be 0 or 604800-7776000 (7-90 days)."
+  }
 }
 
 variable "abort_incomplete_multipart_upload_days" {
@@ -88,7 +93,6 @@ variable "workload_identity" {
     principal (no Google service account, no annotation).
   EOT
   type = object({
-    role = optional(string, "roles/storage.objectUser")
     google_service_account = optional(object({
       account_id   = string
       display_name = optional(string)

@@ -4,8 +4,8 @@ variable "name" {
   default     = "relay-search"
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{0,40}$", var.name))
-    error_message = "name must be 1-41 lowercase letters, digits and hyphens, starting with a letter."
+    condition     = can(regex("^[a-z]([a-z0-9-]{0,39}[a-z0-9])?$", var.name))
+    error_message = "name must be 1-41 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit (it is a Service name)."
   }
 }
 

@@ -84,6 +84,30 @@ run "instance_count_follows_azs" {
   expect_failures = [aws_opensearch_domain.this]
 }
 
+run "standby_needs_three_azs" {
+  command = plan
+
+  variables {
+    subnet_ids                    = ["subnet-a", "subnet-b"]
+    multi_az_with_standby_enabled = true
+  }
+
+  expect_failures = [aws_opensearch_domain.this]
+}
+
+run "two_azs_default_to_four_nodes" {
+  command = plan
+
+  variables {
+    subnet_ids = ["subnet-a", "subnet-b"]
+  }
+
+  assert {
+    condition     = one(aws_opensearch_domain.this.cluster_config).instance_count == 4
+    error_message = "Two AZs default to four data nodes."
+  }
+}
+
 run "master_user_is_required" {
   command = plan
 

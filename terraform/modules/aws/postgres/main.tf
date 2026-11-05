@@ -235,4 +235,11 @@ resource "aws_rds_cluster_instance" "this" {
   monitoring_role_arn                   = var.monitoring_interval > 0 ? var.monitoring_role_arn : null
 
   tags = var.tags
+
+  lifecycle {
+    precondition {
+      condition     = var.monitoring_interval == 0 || var.monitoring_role_arn != null
+      error_message = "monitoring_interval > 0 needs monitoring_role_arn."
+    }
+  }
 }

@@ -8,6 +8,8 @@ locals {
   partition  = data.aws_partition.current.partition
   domain_arn = "arn:${local.partition}:es:${local.region}:${local.account_id}:domain/${var.domain_name}"
   az_count   = length(var.subnet_ids)
+  # Smallest multiple of the AZ count that is at least 3.
+  instance_count = coalesce(var.instance_count, local.az_count * ceil(3 / local.az_count))
 
   create_roles = var.workload_roles.create
   role_prefix  = coalesce(var.workload_roles.name_prefix, var.domain_name)
@@ -151,7 +153,7 @@ resource "aws_opensearch_domain" "this" {
 
   cluster_config {
     instance_type                 = var.instance_type
-    instance_count                = var.instance_count
+    instance_count                = local.instance_count
     dedicated_master_enabled      = var.dedicated_master_enabled
     dedicated_master_type         = var.dedicated_master_enabled ? var.dedicated_master_type : null
     dedicated_master_count        = var.dedicated_master_enabled ? var.dedicated_master_count : null
@@ -234,9 +236,18 @@ resource "aws_opensearch_domain" "this" {
 
   lifecycle {
     precondition {
-      condition     = var.instance_count % local.az_count == 0
+      condition     = local.instance_count % local.az_count == 0
       error_message = "instance_count must be a multiple of the number of subnet_ids (AZs)."
     }
+    precondition {
+      condition     = !var.multi_az_with_standby_enabled || (local.az_count == 3 && var.dedicated_master_enabled && var.dedicated_master_count == 3 && local.instance_count % 3 == 0)
+      error_message = "Multi-AZ with Standby needs three subnets (AZs), three dedicated masters and a multiple of three data nodes."
+    }
+    # OpenSearch domains have no API deletion protection: Terraform refuses to
+    # destroy or replace the transcript index. To delete it on purpose, run
+    # terraform state rm on this resource and delete the domain with the AWS
+    # CLI or console.
+    prevent_destroy = true
   }
 
   depends_on = [aws_cloudwatch_log_resource_policy.this]

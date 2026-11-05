@@ -1,16 +1,15 @@
 output "chart_values" {
   description = "Non-secret agent-relay chart values (values-gcp.yaml) these resources feed. Database URLs go in the release Secret, not here; see terraform/README.md."
   value = {
-    "sessions-pipeline.worker.locker.bucket"               = module.sessions_bucket.bucket_name
-    "sessions-pipeline.worker.locker.region"               = module.sessions_bucket.location
-    "sessions-pipeline.alleyoop.locker.bucket"             = module.sessions_bucket.bucket_name
-    "sessions-pipeline.alleyoop.locker.region"             = module.sessions_bucket.location
-    "CLOUD_SQL_CONNECTION_NAME (worker/alleyoop extraEnv)" = module.postgres.connection_name
+    "sessions-pipeline.worker.locker.bucket"   = module.sessions_bucket.bucket_name
+    "sessions-pipeline.worker.locker.region"   = module.sessions_bucket.location
+    "sessions-pipeline.alleyoop.locker.bucket" = module.sessions_bucket.bucket_name
+    "sessions-pipeline.alleyoop.locker.region" = module.sessions_bucket.location
   }
 }
 
 output "postgres" {
-  description = "Cloud SQL private IP, admin secret and URL template."
+  description = "Cloud SQL private IP, admin secret and URL template. connection_name feeds CLOUD_SQL_CONNECTION_NAME in the sessions worker and alleyoop extraEnv."
   value = {
     private_ip_address       = module.postgres.private_ip_address
     connection_name          = module.postgres.connection_name

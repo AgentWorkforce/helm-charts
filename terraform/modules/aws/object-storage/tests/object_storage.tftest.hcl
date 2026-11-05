@@ -15,6 +15,9 @@ mock_provider "aws" {
       region = "us-west-2"
     }
   }
+  mock_data "aws_partition" {
+    defaults = { partition = "aws", dns_suffix = "amazonaws.com" }
+  }
 }
 
 variables {
@@ -52,6 +55,10 @@ run "defaults_are_private_and_encrypted" {
   assert {
     condition     = contains([for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s.Sid], "DenyInsecureTransport")
     error_message = "The bucket policy must deny non-TLS requests."
+  }
+  assert {
+    condition     = one([for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s.Condition.NumericLessThan["s3:TlsVersion"] if s.Sid == "DenyTLSBelow12"]) == "1.2"
+    error_message = "The bucket policy must deny TLS below 1.2."
   }
   assert {
     condition     = length(aws_iam_role.access) == 0
@@ -99,4 +106,28 @@ run "bucket_name_is_validated" {
   }
 
   expect_failures = [var.bucket_name]
+}
+
+run "irsa_needs_an_oidc_provider" {
+  command = plan
+
+  variables {
+    access_role = {
+      name                  = "relay-sessions"
+      irsa_service_accounts = [{ namespace = "agent-relay", service_account = "agent-relay-worker" }]
+    }
+  }
+
+  expect_failures = [var.access_role]
+}
+
+run "object_lock_requires_versioning" {
+  command = plan
+
+  variables {
+    object_lock_enabled = true
+    versioning_enabled  = false
+  }
+
+  expect_failures = [aws_s3_bucket_versioning.this]
 }

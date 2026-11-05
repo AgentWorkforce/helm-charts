@@ -4,7 +4,7 @@ A thin root that composes the four AWS modules for one agent-relay install on an
 
 - `aws/postgres` (RDS by default; `postgres_engine_mode = "aurora"`).
 - `aws/object-storage` for the sessions Locker, with Pod Identity for `<release>-worker` and `<release>-alleyoop`.
-- `aws/search` (`enable_search`). Its indexer policy is attached to the sessions role, because Pod Identity allows one role per ServiceAccount.
+- `aws/search` (`enable_search`). No workload grant is made: the worker and alleyoop share the sessions role (Pod Identity allows one role per ServiceAccount), so attaching the indexer policy there would give both write access. The `search` output carries the indexer and reader policies to attach to dedicated roles once the services have an OpenSearch backend.
 - `aws/functions` (`enable_functions`).
 
 ```sh
@@ -22,12 +22,6 @@ terraform init && terraform plan
 | terraform | >= 1.6 |
 | aws | >= 6.0, < 7.0 |
 
-### Providers
-
-| Name | Version |
-| ---- | ------- |
-| aws | >= 6.0, < 7.0 |
-
 ### Modules
 
 | Name | Source | Version |
@@ -36,12 +30,6 @@ terraform init && terraform plan
 | postgres | ../../modules/aws/postgres | n/a |
 | search | ../../modules/aws/search | n/a |
 | sessions\_bucket | ../../modules/aws/object-storage | n/a |
-
-### Resources
-
-| Name | Type |
-| ---- | ---- |
-| [aws_iam_role_policy.sessions_search](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
 
 ### Inputs
 
@@ -58,9 +46,9 @@ terraform init && terraform plan
 | enable\_search | Create the optional OpenSearch domain. | `bool` | `false` | no |
 | function\_security\_group\_ids | Existing security groups for the pipeline function ENIs. | `list(string)` | `[]` | no |
 | kms\_key\_arn | Customer managed KMS key for every data store (null: AWS managed keys). | `string` | `null` | no |
-| name | Name prefix for every resource. | `string` | `"agent-relay"` | no |
+| name | Name prefix for every resource (lowercase; at most 21 characters, so <name>-search fits OpenSearch's 28). | `string` | `"agent-relay"` | no |
 | namespace | agent-relay release namespace. | `string` | `"agent-relay"` | no |
-| pipeline\_package | Pipeline Lambda package (see modules/aws/functions). | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | ```{ "s3_bucket": "replace-me", "s3_key": "session-pipeline.zip" }``` | no |
+| pipeline\_package | Pipeline Lambda package (see modules/aws/functions). | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) s3_object_version = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | `{}` | no |
 | postgres\_engine\_mode | rds or aurora. | `string` | `"rds"` | no |
 | release\_name | agent-relay Helm release name. | `string` | `"agent-relay"` | no |
 | search\_master\_user\_arn | IAM role that administers OpenSearch fine-grained access control. | `string` | `null` | no |
@@ -75,6 +63,6 @@ terraform init && terraform plan
 | chart\_values | Non-secret agent-relay chart values (values-eks.yaml) these resources feed. Database URLs go in the release Secret, not here; see terraform/README.md. |
 | functions | Pipeline function, queue, DLQ and secret (null unless enable\_functions). |
 | postgres | Postgres host, port, master secret and URL template. |
-| search | OpenSearch endpoint and workload roles (null unless enable\_search). |
+| search | OpenSearch endpoint and the workload policies to attach (null unless enable\_search). |
 | sessions\_role\_arn | Pod Identity role for the worker and alleyoop ServiceAccounts. |
 <!-- END_TF_DOCS -->

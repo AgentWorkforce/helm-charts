@@ -1,7 +1,8 @@
 locals {
+  # The module-controlled flag comes last, so iam_authentication always wins.
   database_flags = merge(
-    var.iam_authentication ? { "cloudsql.iam_authentication" = "on" } : {},
     var.database_flags,
+    { "cloudsql.iam_authentication" = var.iam_authentication ? "on" : "off" },
   )
 
   create_admin    = var.admin_user.create
@@ -32,6 +33,17 @@ resource "google_sql_database_instance" "this" {
   database_version    = var.database_version
   encryption_key_name = var.kms_key_name
   deletion_protection = var.deletion_protection
+
+  lifecycle {
+    precondition {
+      condition     = var.edition == "ENTERPRISE_PLUS" ? startswith(var.tier, "db-perf-optimized-") : !startswith(var.tier, "db-perf-optimized-")
+      error_message = "ENTERPRISE_PLUS needs a db-perf-optimized-N-<vCPU> tier; ENTERPRISE needs a shared-core or db-custom tier."
+    }
+    precondition {
+      condition     = var.transaction_log_retention_days >= 1 && var.transaction_log_retention_days <= (var.edition == "ENTERPRISE_PLUS" ? 35 : 7)
+      error_message = "transaction_log_retention_days must be 1-7 for ENTERPRISE or 1-35 for ENTERPRISE_PLUS."
+    }
+  }
 
   settings {
     edition                     = var.edition

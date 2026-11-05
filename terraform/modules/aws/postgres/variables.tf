@@ -227,6 +227,16 @@ variable "parameters" {
     apply_method = optional(string, "pending-reboot")
   }))
   default = []
+
+  validation {
+    condition     = length(setintersection(toset([for p in var.parameters : p.name]), toset(["rds.force_ssl", "rds.allowed_extensions"]))) == 0
+    error_message = "rds.force_ssl and rds.allowed_extensions are managed by force_ssl and allowed_extensions; do not repeat them in parameters."
+  }
+
+  validation {
+    condition     = length(var.parameters) <= 18
+    error_message = "At most 18 extra parameters: with the module's own two, a parameter group request carries at most 20."
+  }
 }
 
 variable "force_ssl" {

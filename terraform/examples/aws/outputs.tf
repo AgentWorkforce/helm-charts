@@ -24,11 +24,11 @@ output "sessions_role_arn" {
 }
 
 output "search" {
-  description = "OpenSearch endpoint and workload roles (null unless enable_search)."
+  description = "OpenSearch endpoint and the workload policies to attach (null unless enable_search)."
   value = var.enable_search ? {
-    url = module.search[0].url
-    # Map this role to the indexer (and reader) OpenSearch roles as backend_roles.
-    workload_role_arn = module.sessions_bucket.access_role_arn
+    url                 = module.search[0].url
+    indexer_policy_json = module.search[0].indexer_policy_json
+    reader_policy_json  = module.search[0].reader_policy_json
   } : null
 }
 

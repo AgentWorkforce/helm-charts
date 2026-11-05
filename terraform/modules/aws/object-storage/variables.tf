@@ -101,6 +101,11 @@ variable "access_role" {
     })), [])
   })
   default = null
+
+  validation {
+    condition     = var.access_role == null || length(try(var.access_role.irsa_service_accounts, [])) == 0 || try(var.access_role.oidc_provider_arn, null) != null
+    error_message = "access_role.irsa_service_accounts needs access_role.oidc_provider_arn."
+  }
 }
 
 variable "tags" {

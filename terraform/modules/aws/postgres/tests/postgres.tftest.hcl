@@ -152,3 +152,25 @@ run "one_subnet_is_refused" {
 
   expect_failures = [aws_db_subnet_group.this]
 }
+
+run "managed_parameters_cannot_be_repeated" {
+  command = plan
+
+  variables {
+    parameters = [{ name = "rds.force_ssl", value = "0" }]
+  }
+
+  expect_failures = [var.parameters]
+}
+
+run "aurora_monitoring_needs_a_role" {
+  command = plan
+
+  variables {
+    engine_mode         = "aurora"
+    engine_version      = "17.9"
+    monitoring_interval = 60
+  }
+
+  expect_failures = [aws_rds_cluster_instance.this]
+}

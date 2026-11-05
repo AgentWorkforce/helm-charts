@@ -11,7 +11,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TF_BIN="${TF_BIN:-terraform}"
 CHECKS=("$@")
-[ ${#CHECKS[@]} -gt 0 ] || CHECKS=(fmt validate tflint test docs checkov)
+KNOWN=(fmt validate tflint test docs checkov)
+[ ${#CHECKS[@]} -gt 0 ] || CHECKS=("${KNOWN[@]}")
+for c in "${CHECKS[@]}"; do
+  case " ${KNOWN[*]} " in *" $c "*) ;; *) echo "unknown check: $c (known: ${KNOWN[*]})" >&2; exit 2 ;; esac
+done
 export TF_IN_AUTOMATION=1 TF_INPUT=0
 export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-$HOME/.terraform.d/plugin-cache}"
 mkdir -p "$TF_PLUGIN_CACHE_DIR"

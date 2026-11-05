@@ -11,9 +11,11 @@ sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE / OBJECT_AR
 ```
 
 - GCS notifications filter on a prefix only, not a suffix, so the handler must ignore everything except `manifest.json`. On a versioned bucket, a delete of the live manifest arrives as `OBJECT_ARCHIVE` (and an overwrite also archives the previous generation), so the handler must check whether a live manifest still exists.
-- The function is HTTP with `ALLOW_INTERNAL_ONLY` ingress. Pub/Sub push and Cloud Scheduler in the same project count as internal. Only the invoker service account (push and scheduler) and the function's own service account (the reconcile chain) have `roles/run.invoker`. There is no public invoker.
+- The function is HTTP with `ALLOW_INTERNAL_ONLY` ingress. Pub/Sub push and Cloud Scheduler in the same project count as internal. Only the invoker service account (push and scheduler) has `roles/run.invoker`; there is no public invoker.
+- **Reconcile continuation:** a reconcile that reaches its deadline publishes `{"reconcile": true, "cursor": ...}` to the events topic (`SESSION_PIPELINE_TOPIC`), which pushes it back. It does not make an HTTP self-call, because internal-only ingress refuses one without a VPC route.
 - **Runtime service account:** `roles/storage.objectViewer` on the bucket, publisher on its topic (reconcile re-enqueue), and accessor on its one secret. Grant Cloud SQL or search access separately.
-- **Secret:** an empty Secret Manager container (`SESSION_PIPELINE_SECRET_ID`). Add its JSON value out of band.
+- **Secret:** an empty Secret Manager container (`SESSION_PIPELINE_SECRET_ID`). Add its JSON value out of band. The function's service account is granted `secretAccessor` on it; others with project-level Secret Manager access can still read it.
+- **Environment:** `PIPELINE_RAW_GCS_BUCKET`, `PIPELINE_KEY_PREFIX`, `PIPELINE_ORG_FROM_PREFIX=true`, `SESSION_PIPELINE_SECRET_ID`, `SESSION_PIPELINE_TOPIC`, `SEARCH_INDEX_ENABLED`, `PIPELINE_FANOUT=off`, `PIPELINE_RECONCILE_LOOKBACK_MINUTES` (twice `reconcile_minutes`), `HOOPDB_POOL_MAX=4`, `OTEL_SERVICE_NAME` and `SESSION_BRIEF_ENABLED`. `environment` merges over them.
 - **Alerts:** dead letters, backlog age over 15 minutes, and non-2xx responses (`notification_channels`).
 - **Handler contract:** the services ship no GCP entry point yet. One is needed that accepts Pub/Sub push envelopes and the scheduler bodies, as `src/session-pipeline/lambda.ts` does on AWS.
 - **CMEK:** `kms_key_name` plus a CMEK `docker_repository`. Topics take `topic_kms_key_name`.
@@ -37,7 +39,7 @@ sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE / OBJECT_AR
 
 | Name | Type |
 | ---- | ---- |
-| [google_cloud_run_v2_service_iam_member.invokers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_service_iam_member) | resource |
+| [google_cloud_run_v2_service_iam_member.invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_service_iam_member) | resource |
 | [google_cloud_scheduler_job.brief](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_scheduler_job) | resource |
 | [google_cloud_scheduler_job.reconcile](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_scheduler_job) | resource |
 | [google_cloudfunctions2_function.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudfunctions2_function) | resource |
@@ -70,7 +72,7 @@ sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE / OBJECT_AR
 | project\_id | Project for the function, topics, subscriptions and jobs. | `string` | n/a | yes |
 | region | Region for the function (and, unless scheduler\_region is set, the Cloud Scheduler jobs). | `string` | n/a | yes |
 | source\_archive | Function source: a zip in GCS (bucket, object, optional generation). Cloud Build builds it with the runtime's buildpack. | ```object({ bucket = string object = string generation = optional(number) })``` | n/a | yes |
-| ack\_deadline\_seconds | Push subscription ack deadline. | `number` | `600` | no |
+| ack\_deadline\_seconds | Push subscription ack deadline (10-600). Must be at least timeout\_seconds. | `number` | `600` | no |
 | available\_cpu | vCPU per instance. | `string` | `"1"` | no |
 | available\_memory | Memory per instance. | `string` | `"2Gi"` | no |
 | brief\_schedule | Brief tick cron. | `string` | `"* * * * *"` | no |
