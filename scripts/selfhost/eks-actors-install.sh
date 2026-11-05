@@ -58,8 +58,17 @@ ACTOR_CREDENTIALS="${EKS_ACTORS_ACTOR_CREDENTIALS:-assume-role}"
 HELM_SET=(--set "durable-actors.storage.s3.actorCredentials=${ACTOR_CREDENTIALS}")
 case "$ACTOR_CREDENTIALS" in
   assume-role)
-    ACTOR_ROLE_ARN="${EKS_ACTORS_ACTOR_ROLE_ARN:-arn:aws:iam::${PIPPEN_SANDBOX_ACCOUNT_ID}:role/pippen/workload/${EKS_ACTORS_ROLE_PREFIX:-$NAME}-storage}"
-    HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=${ACTOR_ROLE_ARN}") ;;
+    # Precedence: EKS_ACTORS_ACTOR_ROLE_ARN, then a real actorRoleArn from the
+    # values files, then the storage role eks-actors-sandbox.sh creates.
+    # (values-eks-actors.yaml only carries an <...> placeholder.)
+    configured_role_arn="$(helm template "$RELEASE" "$CHART_DIR" -n "$NS" -f "$CHART_DIR/values-eks-actors.yaml" ${VALUES:+-f "$VALUES"} \
+      --set durable-actors.storage.s3.actorCredentials=assume-role 2>/dev/null \
+      | grep -oE 'name: DURABLE_ACTORS_S3_ACTOR_ROLE_ARN, value: "[^"]*"' | head -1 | sed -E 's/.*value: "([^"]*)"/\1/')"
+    if [[ -n "${EKS_ACTORS_ACTOR_ROLE_ARN:-}" ]]; then
+      HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=${EKS_ACTORS_ACTOR_ROLE_ARN}")
+    elif [[ -z "$configured_role_arn" || "$configured_role_arn" == *"<"* ]]; then
+      HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=arn:aws:iam::${PIPPEN_SANDBOX_ACCOUNT_ID}:role/pippen/workload/${EKS_ACTORS_ROLE_PREFIX:-$NAME}-storage")
+    fi ;;
   control-plane) HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=") ;;
   *) echo "EKS_ACTORS_ACTOR_CREDENTIALS must be assume-role or control-plane" >&2; exit 2 ;;
 esac

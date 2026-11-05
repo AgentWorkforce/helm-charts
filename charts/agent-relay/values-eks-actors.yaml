@@ -21,11 +21,10 @@
 # Identity (EKS Pod Identity; IRSA works through serviceAccount annotations):
 # - <release>-durable-actors (control plane and pool manager): S3 Get/Put/List
 #   on the bucket, and sts:AssumeRole + sts:TagSession on storage.s3.actorRoleArn.
-# - Only in an account that forbids sts:AssumeRole, override
-#   storage.s3.actorCredentials: control-plane and leave actorRoleArn empty:
-#   actor hosts then share the control plane's S3 credentials, isolated by
-#   prefix only. First-party actors only. (Pippen sandboxes allow the per-actor
-#   default since pippen-tools #46; eks-actors-install.sh uses it.)
+# - In an account that forbids sts:AssumeRole (a Pippen sandbox), override
+#   storage.s3.actorCredentials: control-plane and leave actorRoleArn empty
+#   (eks-actors-install.sh does this): actor hosts then share the control
+#   plane's S3 credentials, isolated by prefix only. First-party actors only.
 # - storage.s3.actorRoleArn: trusted by the control-plane role, S3 Get/Put on
 #   <bucket>/durable-actors/v3/* and ListBucket. The control plane narrows it per
 #   actor with an inline session policy; actor hosts get nothing else.
