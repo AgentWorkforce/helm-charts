@@ -29,6 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-plugins-${{ hashFiles('terraform/**/versions.tf', 'terraform/examples/*/main.tf') }}
+          restore-keys: terraform-plugins-
+
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
@@ -66,6 +72,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: opentofu-plugins-${{ hashFiles('terraform/**/versions.tf', 'terraform/examples/*/main.tf') }}
+          restore-keys: opentofu-plugins-
 
       - uses: opentofu/setup-opentofu@v2
         with:

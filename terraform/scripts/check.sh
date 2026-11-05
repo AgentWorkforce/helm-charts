@@ -41,7 +41,13 @@ if want fmt; then run "$TF_BIN" fmt -check -recursive -diff "$ROOT"; fi
 for d in "${dirs[@]}"; do
   echo "== $d"
   if want validate || want test; then
-    (cd "$ROOT/$d" && "$TF_BIN" init -backend=false -input=false -no-color >/dev/null) || { echo "::error::init failed: $d"; fail=1; continue; }
+    # Provider downloads (GitHub release assets) occasionally time out: retry.
+    ok=0
+    for attempt in 1 2 3 4; do
+      if (cd "$ROOT/$d" && "$TF_BIN" init -backend=false -input=false -no-color >/dev/null); then ok=1; break; fi
+      echo "init failed in $d (attempt $attempt), retrying"; sleep $((attempt * 15))
+    done
+    [ $ok = 1 ] || { echo "::error::init failed: $d"; fail=1; continue; }
   fi
   if want validate; then run -C "$ROOT/$d" "$TF_BIN" validate -no-color; fi
   if want test && [ -d "$ROOT/$d/tests" ]; then run -C "$ROOT/$d" "$TF_BIN" test -no-color; fi

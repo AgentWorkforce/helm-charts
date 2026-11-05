@@ -11,7 +11,8 @@ mock_provider "google" {
   }
 }
 
-mock_provider "random" {}
+# random is the real provider: it is local, needs no credentials, and mock
+# providers do not support ephemeral resources before Terraform 1.17.
 
 variables {
   project_id        = "proj"
