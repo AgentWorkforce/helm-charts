@@ -57,6 +57,11 @@ jobs:
       - name: durable-actors S3 render assertions
         run: ci/actors-s3/render.sh
 
+      # Offline tests for scripts/selfhost (every external command mocked),
+      # including eks-actors-install.sh's actor credential mode and role ARN.
+      - name: Self-hosted operator script tests
+        run: scripts/selfhost/tests/run-tests.sh
+
       # The development-preview customer handoff builds, verifies, extracts,
       # and its umbrella resolves every file:// dependency and renders.
       - name: Customer handoff package smoke

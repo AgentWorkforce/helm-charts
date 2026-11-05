@@ -31,11 +31,15 @@
 #   values-eks-actors.yaml and the proof values file (VALUES).
 # Pod Identity associations come first: eks-actors-sandbox.sh assoc.
 #
-# Inside a Pippen sandbox the agent-session boundary allows no sts:AssumeRole,
-# so the per-actor credentials default cannot work there; this script therefore
-# passes durable-actors.storage.s3.actorCredentials=control-plane (weaker
-# isolation, first-party actors only; EKS_ACTORS_ACTOR_CREDENTIALS). Outside
-# Pippen set EKS_ACTORS_ACTOR_CREDENTIALS=assume-role and storage.s3.actorRoleArn.
+# Actor storage credentials default to per-actor STS (assume-role): the control
+# plane assumes eks-actors-sandbox.sh's actor-storage role
+# (role/pippen/workload/<EKS_ACTORS_ROLE_PREFIX or name>-storage, or
+# EKS_ACTORS_ACTOR_ROLE_ARN) with a session policy narrowed to one actor. The
+# Pippen boundary allows sts:AssumeRole + sts:TagSession between
+# /pippen/workload/ roles of the same account (pippen-tools #46).
+# EKS_ACTORS_ACTOR_CREDENTIALS=control-plane is the fallback for an account
+# without that permission (actor hosts share the control plane's S3
+# credentials, prefix isolation only; first-party actors only).
 
 set -euo pipefail
 
@@ -50,9 +54,28 @@ VALUES="${EKS_ACTORS_VALUES:-}"
 PG_IMAGE="${EKS_ACTORS_PG_IMAGE:-postgres:16.10-bookworm@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74}"
 [[ "$PG_IMAGE" == *@sha256:* ]] || { echo "EKS_ACTORS_PG_IMAGE must be pinned by digest (…@sha256:…)" >&2; exit 2; }
 OWNER_LABEL="agent-relay.dev/eks-actors-proof"
-ACTOR_CREDENTIALS="${EKS_ACTORS_ACTOR_CREDENTIALS:-control-plane}"
+ACTOR_CREDENTIALS="${EKS_ACTORS_ACTOR_CREDENTIALS:-assume-role}"
 HELM_SET=(--set "durable-actors.storage.s3.actorCredentials=${ACTOR_CREDENTIALS}")
-[[ "$ACTOR_CREDENTIALS" == control-plane ]] && HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=")
+case "$ACTOR_CREDENTIALS" in
+  assume-role)
+    # Precedence: EKS_ACTORS_ACTOR_ROLE_ARN, then a real actorRoleArn from the
+    # values files, then the storage role eks-actors-sandbox.sh creates.
+    # (values-eks-actors.yaml only carries an <...> placeholder.) The values
+    # lookup is best-effort: a render that fails here (e.g. an empty ARN) only
+    # means none is configured; the real render reports chart errors.
+    if [[ -n "${EKS_ACTORS_ACTOR_ROLE_ARN:-}" ]]; then
+      HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=${EKS_ACTORS_ACTOR_ROLE_ARN}")
+    else
+      configured_role_arn="$(helm template "$RELEASE" "$CHART_DIR" -n "$NS" -f "$CHART_DIR/values-eks-actors.yaml" ${VALUES:+-f "$VALUES"} \
+        --set durable-actors.storage.s3.actorCredentials=assume-role 2>/dev/null \
+        | grep -oE 'name: DURABLE_ACTORS_S3_ACTOR_ROLE_ARN, value: "[^"]*"' | head -1 | sed -E 's/.*value: "([^"]*)"/\1/' || true)"
+      if [[ -z "$configured_role_arn" || "$configured_role_arn" == *"<"* ]]; then
+        HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=arn:aws:iam::${PIPPEN_SANDBOX_ACCOUNT_ID}:role/pippen/workload/${EKS_ACTORS_ROLE_PREFIX:-$NAME}-storage")
+      fi
+    fi ;;
+  control-plane) HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=") ;;
+  *) echo "EKS_ACTORS_ACTOR_CREDENTIALS must be assume-role or control-plane" >&2; exit 2 ;;
+esac
 
 render() {
   helm template "$RELEASE" "$CHART_DIR" -n "$NS" -f "$CHART_DIR/values-eks-actors.yaml" ${VALUES:+-f "$VALUES"} "${HELM_SET[@]}"
