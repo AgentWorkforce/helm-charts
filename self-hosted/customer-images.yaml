@@ -20,7 +20,10 @@ scope:
     (charts/agent-relay/values-gcp.yaml) with all six product components
     enabled. Durable actors, Relayfile and Relayflows are optional preview
     components, off in this profile, and are not part of this matrix. Every
-    row is the digest values-gcp.yaml renders.
+    active row is the digest values-gcp.yaml renders. The inactive rows
+    (active: false) record the optional durable-actors images that
+    values-eks-actors.yaml pins; they are not rendered by values-gcp.yaml and
+    are not approved for the gated profile.
   activeUniqueImages: 7
   excludedConditionalImages:
     - image: cgr.dev/chainguard/minio
@@ -29,12 +32,36 @@ scope:
       reason: sessions-pipeline.otel.enabled=false
     - image: docker.io/alpine/k8s
       reason: all three privileged SQL bootstrap Jobs are disabled
-    - image: >-
-        ghcr.io/agentworkforce/{durable-actors-control-plane,durable-actors-typescript,relaycast-actors-gateway,relaycast-actors-deployer,relayfile-actors,relayfile-actors-workspace}
+    - image: ghcr.io/agentworkforce/durable-actors-control-plane
       reason: >-
         components.durableActors and the Relaycast/Relayfile actor modes are
-        off in the GCP profile. They are listed below as inactive entries
-        with their values-eks-actors.yaml digests.
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/durable-actors-typescript
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relaycast-actors-gateway
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relaycast-actors-deployer
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relayfile-actors
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
+    - image: ghcr.io/agentworkforce/relayfile-actors-workspace
+      reason: >-
+        components.durableActors and the Relaycast/Relayfile actor modes are
+        off in the GCP profile; recorded below as an inactive entry with its
+        values-eks-actors.yaml digest.
     - image: ghcr.io/cloudnative-pg/postgresql
       reason: >-
         The HoopDb Cluster is disabled, but this image is still active below

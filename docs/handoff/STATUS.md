@@ -58,7 +58,10 @@ This archive is therefore labelled a development preview.
   standalone profile, off by default): Relaycast and Relayfile in actor mode
   on S3 with per-actor STS credentials. Proven in a Pippen sandbox on
   2026-11-04: activation, the Relaycast harness 18/18, the Relayfile mount
-  e2e and a cross-actor negative check 15/15. Its six images are public, but
+  e2e and a cross-actor negative check 15/15. The proof's Postgres (a
+  single-replica, emptyDir, plaintext in-namespace database) and its
+  generated Secrets are proof-only, so it does not cover a production install;
+  use a managed Postgres with TLS. Its six images are public, but
   they are not in the gated matrix and have no customer approval yet. The
   two durable-actors images are linux/amd64 only.
 - **Relayflows in-cluster** (`components.relayflows`, off by default): see
@@ -81,7 +84,7 @@ These gate items are open. None of them is claimed.
   `docs/operations/capacity-and-load-test.md` have not run. Alerts, dashboards
   and runbooks evidence are not produced. No SLO or capacity claim is made.
 - **Version compatibility** (server N and N-1 x Desktop current and previous): not
-  run (server N is 0.3.11, N-1 is 0.3.6).
+  run (server N is 0.3.12, N-1 is 0.3.11).
 - **Desktop**: the custom-origin Desktop (self-hosted sign-in) passes CI on
   macOS arm64/x64, Linux x64/arm64 and Windows (relay-desktop CI run
   41606660810), but it is not merged or released yet.

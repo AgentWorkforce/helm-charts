@@ -1,7 +1,8 @@
 # Self-hosted customer image and source inventory
 
-Status: every image row is approved (agent-relay 0.3.11, audited
-2026-11-04). The customer release gate stays blocked on the non-image items
+Status: every image in the gated GCP profile (`values-gcp.yaml`) is approved
+(agent-relay 0.3.12, audited 2026-11-04). The six optional durable-actors
+images below are public but not approved; they are outside the gated profile. The customer release gate stays blocked on the non-image items
 in [`docs/handoff/STATUS.md`](handoff/STATUS.md).
 
 The machine-readable source of this audit is
@@ -72,6 +73,11 @@ approval yet; approve them before they join a gated profile.
 | `ghcr.io/agentworkforce/relayfile-actors` | `sha256:27dfc8d5bbceb7161af9aa4c4923c0efd5045b2d332f60c30492fd599b434522` | relayfile main `30a5e007` (#559), [run 41805271012](https://github.com/AgentWorkforce/relayfile/actions/runs/41805271012), Apache-2.0 | linux/amd64, linux/arm64 |
 | `ghcr.io/agentworkforce/relayfile-actors-workspace` | `sha256:6845272aa103724e4da8d6f29653e4ea06ab57b71900b807e4a38b8f41c11d32` | same relayfile revision and run, Apache-2.0 | linux/amd64, linux/arm64 |
 
+The header comment of `values-eks-actors.yaml` still says these packages may
+be private and need mirroring. It is out of date: they are public. Mirror them
+by digest anyway, like every other image. The comment is corrected with the
+next chart version bump, because chart files cannot change without one.
+
 The relaycast-actors-gateway image has no OCI revision or license label, and
 the deployer's labels read revision `38afee6c` and licenses `NOASSERTION`
 (inherited). The table records the publish run's head revision instead.
@@ -105,7 +111,8 @@ approved byte-for-byte third-party mirror.
 
 ## Exact blockers
 
-None for images. `IMG-BLOCK-001` and `IMG-BLOCK-005` (Sessions services),
+None for the gated profile's images. The optional durable-actors images still
+need a license and release approval before they join a gated profile. `IMG-BLOCK-001` and `IMG-BLOCK-005` (Sessions services),
 `IMG-BLOCK-002` (RelayHistory) and `IMG-BLOCK-003` (control API) were closed
 in agent-relay 0.3.11: each release image is public on GHCR, built by a
 reviewed workflow from a recorded `main` revision with an SBOM and max-mode
