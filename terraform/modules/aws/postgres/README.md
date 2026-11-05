@@ -103,6 +103,6 @@ module "postgres" {
 | master\_user\_secret\_arn | Secrets Manager secret (JSON keys username, password) that RDS manages and rotates for the master user. Read it from the bootstrap job or an External Secrets Operator ExternalSecret; the password never enters Terraform state. |
 | master\_username | Master (rds\_superuser) user. Use it only for the bootstrap SQL in the README, never as an application role. |
 | port | Database port. |
-| reader\_host | Aurora reader endpoint (null for RDS). No agent-relay component reads from replicas today. |
+| reader\_host | Aurora reader endpoint (null for RDS). No agent-relay component reads from replicas. |
 | resource\_arn | ARN of the RDS instance or Aurora cluster. |
 <!-- END_TF_DOCS -->

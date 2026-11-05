@@ -9,7 +9,7 @@ output "domain_arn" {
 }
 
 output "endpoint" {
-  description = "Private VPC HTTPS endpoint host (no scheme). The future sessions-pipeline OpenSearch search backend's URL is https://<endpoint>; no chart value consumes it yet (see the README)."
+  description = "Private VPC HTTPS endpoint host (no scheme). The sessions pipeline's OpenSearch SearchIndexAdapter uses https://<endpoint>."
   value       = aws_opensearch_domain.this.endpoint
 }
 

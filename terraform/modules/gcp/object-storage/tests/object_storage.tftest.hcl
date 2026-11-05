@@ -85,7 +85,7 @@ run "cross_project_pool_uses_pool_project" {
 
   # The pool's project gets a distinct number from the mock default.
   override_data {
-    target = data.google_project.this[0]
+    target = data.google_project.this
     values = { number = "999999999999" }
   }
 

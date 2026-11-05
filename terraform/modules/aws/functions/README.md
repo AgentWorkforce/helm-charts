@@ -10,7 +10,7 @@ sessions bucket --(S3 notification, <key_prefix>/**/manifest.json puts and delet
     EventBridge rate(1 minute), DISABLED unless briefs_enabled --> Lambda {"brief": true}
 ```
 
-Self-host normally runs these stages as long-running worker pods (the hoopdb-indexer reconcile tick, referee, and the bob-costas sweep). This module is an alternative, not a requirement. No chart value consumes it.
+By default the chart runs these stages as long-running worker pods (the hoopdb-indexer reconcile tick, referee, and the bob-costas sweep). This module is an alternative, not a requirement. No chart value consumes it.
 
 - **Package:** `package.image_uri` (ECR, pinned by digest: `<repository>@sha256:<64 hex>`; tags are refused), `package.s3_bucket` + `s3_key`, or `package.filename`. The hosted handler is `src/session-pipeline/lambda.ts`, export `handler`, on `nodejs24.x` / `arm64`.
 - **No Function URL.** Only the two EventBridge rules (by source ARN) and the function's own role may invoke it.
@@ -101,7 +101,7 @@ Self-host normally runs these stages as long-running worker pods (the hoopdb-ind
 | reserved\_concurrent\_executions | Reserved concurrency for the function (-1: unreserved). | `number` | `-1` | no |
 | role\_path | IAM path for the execution role. | `string` | `"/"` | no |
 | runtime | Runtime for zip packages (ignored for images). The hosted pipeline runs nodejs24.x. | `string` | `"nodejs24.x"` | no |
-| search\_index\_enabled | SEARCH\_INDEX\_ENABLED. Off: pointers only (Postgres pg\_trgm search). On needs a search backend in the pipeline secret (ClickHouse today; OpenSearch once the services ship that backend). | `bool` | `false` | no |
+| search\_index\_enabled | SEARCH\_INDEX\_ENABLED. Off: pointers only (Postgres pg\_trgm search). On: the pipeline also writes the search index (ClickHouse or OpenSearch), whose credentials go in the pipeline secret. | `bool` | `false` | no |
 | secret\_arn | Existing pipeline secret ARN, when create\_secret is false. | `string` | `null` | no |
 | secret\_kms\_key\_arn | KMS key for the created secret. null uses aws/secretsmanager. | `string` | `null` | no |
 | secret\_recovery\_window\_days | Recovery window when the secret is deleted. | `number` | `7` | no |

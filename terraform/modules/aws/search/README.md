@@ -1,6 +1,6 @@
 # aws/search
 
-**Optional.** An Amazon OpenSearch Service **VPC domain** as the transcript search index. It replaces ClickHouse; the default stays Postgres `pg_trgm`. Nothing in the charts consumes it yet, because the sessions-pipeline services have only a ClickHouse search vendor today. The OpenSearch backend is separate application work.
+**Optional.** An Amazon OpenSearch Service **VPC domain** as the transcript search index. It replaces ClickHouse; the default stays Postgres `pg_trgm`. The sessions pipeline reaches it through its OpenSearch `SearchIndexAdapter`; the charts set no value for it.
 
 - VPC domain in your subnets and security groups. Zone awareness follows the number of subnets (2 or 3).
 - Encryption at rest (customer key optional), node-to-node encryption, HTTPS enforced with `Policy-Min-TLS-1-2-PFS-2023-10`.
@@ -8,7 +8,7 @@
 - Sized for per-event transcript text: 3 `r7g.large.search` data nodes (4 with two subnets, a multiple of the AZ count) with 200 GiB gp3 each, plus 3 dedicated `m7g.large.search` cluster managers. Every size is a variable.
 - **Destroy guard:** OpenSearch has no API deletion protection, so the domain has `prevent_destroy`: Terraform refuses to destroy or replace it. To delete it on purpose, `terraform state rm` the domain resource and delete it with the AWS CLI or console.
 - Two workload roles trusted by EKS Pod Identity (and IRSA): **indexer** (the sessions-pipeline search stage: `ESHttpGet/Head/Post/Put/Delete/Patch`) and **reader** (the session read API: `ESHttpGet/Head/Post`). With the master user, map them as `backend_roles` to OpenSearch roles scoped to the transcript indices.
-- Pod Identity allows one role per ServiceAccount. When the pod already has a role, set `workload_roles = { create = false }`, attach `indexer_policy_json` / `reader_policy_json` to that role, and list it in `additional_principal_arns`. Do not attach the indexer policy to a role shared with pods that only read: `examples/aws` makes no workload grant for that reason, because the worker and alleyoop share the sessions role.
+- Pod Identity allows one role per ServiceAccount. When the pod already has a role, set `workload_roles = { create = false }`, attach `indexer_policy_json` / `reader_policy_json` to that role, and list it in `additional_principal_arns`. Do not attach the indexer policy to a role shared with pods that only read. `examples/aws` binds the two roles to their own `indexer_service_account` and `reader_service_account`.
 - Application, search-slow and index-slow logs go to CloudWatch. Add `AUDIT_LOGS` once audit logging is configured in the security plugin.
 - Prerequisite: the `AWSServiceRoleForAmazonOpenSearchService` service-linked role.
 
@@ -72,7 +72,7 @@
 | off\_peak\_window\_start | Off-peak window start (UTC) for service software updates and Auto-Tune. | ```object({ hours = number minutes = number })``` | ```{ "hours": 7, "minutes": 0 }``` | no |
 | tags | Tags applied to every resource. | `map(string)` | `{}` | no |
 | tls\_security\_policy | Minimum TLS policy for the HTTPS endpoint. | `string` | `"Policy-Min-TLS-1-2-PFS-2023-10"` | no |
-| workload\_roles | The two workload roles the module creates, trusted by EKS Pod Identity (and IRSA when oidc\_provider\_arn is set): indexer (the sessions-pipeline search stage: writes transcript events) and reader (the session read API: searches). Set create = false to skip them: attach indexer\_policy\_json / reader\_policy\_json to existing roles and list them in additional\_principal\_arns. EKS Pod Identity allows one association per ServiceAccount, so a ServiceAccount that already has a role (the sessions worker has the bucket role) must use that role. | ```object({ create = optional(bool, true) name_prefix = optional(string) path = optional(string, "/") permissions_boundary_arn = optional(string) oidc_provider_arn = optional(string) indexer_service_accounts = optional(list(object({ cluster_name = optional(string) namespace = string service_account = string })), []) reader_service_accounts = optional(list(object({ cluster_name = optional(string) namespace = string service_account = string })), []) })``` | `{}` | no |
+| workload\_roles | The two workload roles the module creates, trusted by EKS Pod Identity (and IRSA when oidc\_provider\_arn is set): indexer (the sessions-pipeline search stage: writes transcript events) and reader (the session read API: searches). Set create = false to skip them: attach indexer\_policy\_json / reader\_policy\_json to existing roles and list them in additional\_principal\_arns. EKS Pod Identity allows one association per ServiceAccount, so a ServiceAccount that already has a role (the sessions worker has the bucket role) needs a separate ServiceAccount for search. | ```object({ create = optional(bool, true) name_prefix = optional(string) path = optional(string, "/") permissions_boundary_arn = optional(string) oidc_provider_arn = optional(string) indexer_service_accounts = optional(list(object({ cluster_name = optional(string) namespace = string service_account = string })), []) reader_service_accounts = optional(list(object({ cluster_name = optional(string) namespace = string service_account = string })), []) })``` | `{}` | no |
 
 ### Outputs
 
@@ -81,7 +81,7 @@
 | dashboard\_endpoint | OpenSearch Dashboards host inside the VPC. |
 | domain\_arn | Domain ARN. |
 | domain\_name | Domain name. |
-| endpoint | Private VPC HTTPS endpoint host (no scheme). The future sessions-pipeline OpenSearch search backend's URL is https://<endpoint>; no chart value consumes it yet (see the README). |
+| endpoint | Private VPC HTTPS endpoint host (no scheme). The sessions pipeline's OpenSearch SearchIndexAdapter uses https://<endpoint>. |
 | indexer\_policy\_json | The indexer's IAM policy, to attach to an existing role (EKS Pod Identity allows one role per ServiceAccount, so a pod that already has a role gets this policy on that role). |
 | indexer\_role\_arn | Indexer workload role (Pod Identity). Map it to an OpenSearch role with write permissions on the transcript indices (backend\_roles) using the master user. |
 | pod\_identity\_association\_ids | Pod Identity associations created, keyed by role/cluster/namespace/service-account. |

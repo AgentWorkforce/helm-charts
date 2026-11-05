@@ -18,7 +18,7 @@ interfaces would slot in beside these.
 
 ## Cloud mapping
 
-| Capability | AWS module | GCP module | Used by the charts today? |
+| Capability | AWS module | GCP module | Required by the charts? |
 |---|---|---|---|
 | Postgres 17 | `aws/postgres`: RDS for PostgreSQL, or Aurora PostgreSQL (`engine_mode = "aurora"`) | `gcp/postgres`: Cloud SQL for PostgreSQL | **Yes, required** (relaycontrol, relayhistory, HoopDb, durable-actors) |
 | Object storage | `aws/object-storage`: S3, with an optional EKS Pod Identity / IRSA role | `gcp/object-storage`: GCS, with optional Workload Identity | **Yes, required** (sessions Locker; durable-actors) |
@@ -28,7 +28,7 @@ interfaces would slot in beside these.
 Every module stands alone. The examples compose them, but nothing forces you to
 use all four, or to use them together.
 
-### What the stack consumes today
+### What the stack consumes
 
 - **Postgres.** Every database is PostgreSQL 17:
   - relay-cloud-api (relaycontrol): Secret keys `database-url` (runtime role `control_api_runtime`) and `database-migrations-url` (owner).
@@ -38,15 +38,15 @@ use all four, or to use them together.
 - **Object storage.**
   - The sessions pipeline Locker: `sessions-pipeline.worker.locker` and `alleyoop.locker`, with provider `s3` or `gcs` and `credentials.mode: podIdentity`.
   - durable-actors `storage.bucket`, plus the relaycast and relayfile artifact and file buckets in the actor profiles (`values-eks-actors.yaml`, `values-gcp-proof-durable-actors.yaml`).
-- **OpenSearch.** Nothing in these charts consumes it. Transcript search
-  defaults to Postgres `pg_trgm`, in HoopDb and relayhistory. OpenSearch is
-  provided as an **optional replacement for ClickHouse as the transcript search
-  index**. It is sized for an index of per-event transcript text, with an
-  indexer role for the sessions-pipeline search stage and a reader role for the
-  session read API. The services do not have an OpenSearch backend yet: today
-  `src/session-pipeline/vendor/search-index` in AgentWorkforce/96BullSessions
-  ships only the ClickHouse vendor. That application work is separate and not
-  part of these modules.
+- **OpenSearch.** Optional. Transcript search defaults to Postgres `pg_trgm`,
+  in HoopDb and relayhistory. OpenSearch is an **optional replacement for
+  ClickHouse as the transcript search index**, which the sessions pipeline
+  reaches through its `SearchIndexAdapter` (the interfaces live in
+  sessions-pipeline, the OpenSearch adapter in sessions-pipeline-cloud). The
+  modules size it for an index of per-event transcript text, with a write role
+  for the indexer (the hoopdb-indexer worker, or the functions Lambda in event
+  mode) and a read-only role for the session read API. The charts set no
+  OpenSearch value of their own.
 - **Lambda / Cloud Run functions.** Nothing in these charts consumes them.
   The `functions` modules are the sessions pipeline's **optional event-driven
   mode**. They mirror the hosted AWS stack, AgentWorkforce/96BullSessions
@@ -57,11 +57,12 @@ use all four, or to use them together.
   - An EventBridge reconcile rule runs on a schedule, and an optional brief schedule is disabled by default.
   - There is no Function URL.
 
-  Self-host today runs the same stages as long-running worker pods (the
-  hoopdb-indexer reconcile tick, referee, and the bob-costas sweep). This is an
-  alternative to those pods, not a requirement. The AWS handler is the hosted
-  `src/session-pipeline/lambda.ts`. A GCP handler (an HTTP entry point for
-  Pub/Sub push envelopes and scheduler bodies) does not exist yet.
+  By default the chart runs the same stages as long-running worker pods (the
+  hoopdb-indexer reconcile tick, referee, and the bob-costas sweep). Event
+  mode is an alternative runtime, not a requirement. The AWS handler is
+  `src/session-pipeline/lambda.ts`. The GCP handler, a Cloud Run entry point
+  for Pub/Sub push envelopes and scheduler bodies, comes with the pipeline's
+  `PipelineRuntimeAdapter`.
 - **Not covered here.** The GCP sessions data path in `values-gcp.yaml` also
   needs Memorystore (Redis) and Pub/Sub settings (`REDIS_*`, `PUBSUB_*` in
   `extraEnv`). Those resources are outside this module set.
@@ -136,7 +137,8 @@ master secret, or from per-role Secrets Manager / Secret Manager entries.
 | `aws/object-storage.bucket_region` / `gcp/object-storage.region` (null for dual- and multi-regions) | `worker.locker.region` and `alleyoop.locker.region` (or `durable-actors.storage.s3.region`) |
 | `aws/object-storage.access_role_arn` | No chart value with Pod Identity: the module's `pod_identity_associations` bind it to `<release>-worker` and `<release>-alleyoop`. Keep `locker.credentials.mode: podIdentity`. With IRSA, set the `eks.amazonaws.com/role-arn` ServiceAccount annotation |
 | `gcp/object-storage.google_service_account_email` | `durable-actors.serviceAccount.googleServiceAccount`, or an `iam.gke.io/gcp-service-account` ServiceAccount annotation. With `direct_kubernetes_service_accounts`, no value is needed |
-| `aws/search.url`, `gcp/search.url` | No chart value yet. It becomes the sessions-pipeline OpenSearch backend's URL once that backend exists |
+| `aws/search.url`, `gcp/search.url` | The OpenSearch URL for the sessions pipeline's OpenSearch `SearchIndexAdapter` (in the pipeline secret or its own configuration; no chart value) |
+| `aws/search.indexer_role_arn`, `reader_role_arn` | Pod Identity roles for separate indexer and read API ServiceAccounts. The chart needs per-component `serviceAccount` names for them (see `examples/aws`) |
 | `aws/functions.*`, `gcp/functions.*` | No chart value. The pipeline secret's JSON holds the same HoopDb URL as `HOOPDB_URL` |
 
 The example roots print the non-secret values-file paths as a `chart_values` output. `CLOUD_SQL_CONNECTION_NAME` is an `extraEnv` entry, not a values path, so the GCP example prints it as `postgres.connection_name` instead.
@@ -164,7 +166,7 @@ user, `rds_superuser`, read from `master_user_secret_arn`; or the Cloud SQL
    - **Cloud SQL** (`migrations.databaseMode: cloudsql`, `roleBootstrap: false`, `values-gcp.yaml`): run `cloudsql_migration_roles.sql`, `session_directory_search_worker.sql` and `cloudsql_owner_function_default_revoke.sql` as the migration owner (`charts/sessions-pipeline/ci/gcp-cloudsql-values.yaml`).
    - **RDS / Aurora** (`databaseMode: selfhosted`, `charts/sessions-pipeline/profiles/external-selfhosted.yaml`): run `session_directory_search_worker.sql`, `hoopdb_runtime_role.sql` (`-v runtime_role`, `-v runtime_login`) and `hoopdb_function_default_revoke.sql` (`-v migration_owner`).
    - **Both:** images newer than 7d7229b also need `session_token_verifier.sql` and `session_ingest_roles.sql` (`docs/self-hosted-eks.md`; `scripts/selfhost/eks-proof-install.sh hoopdb-roles` does this for CNPG).
-   - **Caveat:** these files expect a superuser. RDS has only `rds_superuser`, and the profile warns that a platform with no superuser cannot run the function-default revoke. HoopDb on RDS/Aurora has not been proven yet (`docs/self-hosted-eks.md`, "Not yet proven"). Until it is, run HoopDb on the chart's in-cluster CloudNativePG (as `values-eks.yaml` does) and RDS for relaycontrol and relayhistory.
+   - **HoopDb on AWS:** these files expect a true superuser, and RDS and Aurora give you `rds_superuser` instead; the function-default revoke in particular cannot run without one. Run HoopDb on the chart's in-cluster CloudNativePG (as `values-eks.yaml` does), and use RDS or Aurora for relaycontrol and relayhistory, until the bootstrap is adapted to the `rds_superuser` model.
 4. Then `helm upgrade --install` the chart, whose migrate Jobs run as the owners.
 
 ## Validation

@@ -1,6 +1,6 @@
 # gcp/search
 
-**Optional.** OpenSearch on your existing **GKE** cluster through the [OpenSearch Kubernetes operator](https://github.com/opensearch-project/opensearch-k8s-operator), as the transcript search index. It replaces ClickHouse; the default stays Postgres `pg_trgm`. Nothing in the charts consumes it yet.
+**Optional.** OpenSearch on your existing **GKE** cluster through the [OpenSearch Kubernetes operator](https://github.com/opensearch-project/opensearch-k8s-operator), as the transcript search index. It replaces ClickHouse; the default stays Postgres `pg_trgm`. The sessions pipeline reaches it through its OpenSearch `SearchIndexAdapter`; the charts set no value for it.
 
 ## Why OpenSearch on GKE (and not Elastic Cloud)
 
@@ -89,5 +89,5 @@ Configure the `helm` and `kubernetes` providers in the root module against the c
 | namespace | Cluster namespace. |
 | service\_account\_name | Kubernetes service account the OpenSearch pods run as (bind it to a Google service account for GCS snapshots). |
 | service\_name | Cluster Service name. |
-| url | In-cluster HTTPS endpoint. The future sessions-pipeline OpenSearch search backend's URL; no chart value consumes it yet (see the README). Trust the operator-generated CA from the <name>-http-cert Secret (ca.crt). |
+| url | In-cluster HTTPS endpoint for the sessions pipeline's OpenSearch SearchIndexAdapter. Trust the operator-generated CA from the <name>-http-cert Secret (ca.crt). |
 <!-- END_TF_DOCS -->

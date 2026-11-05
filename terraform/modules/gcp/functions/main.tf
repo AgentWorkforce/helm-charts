@@ -189,7 +189,7 @@ resource "google_pubsub_subscription" "dlq" {
   name                       = "${local.dlq_name}-hold"
   topic                      = google_pubsub_topic.dlq.id
   ack_deadline_seconds       = 60
-  message_retention_duration = "604800s"
+  message_retention_duration = var.dead_letter_retention
   retain_acked_messages      = false
   labels                     = var.labels
 

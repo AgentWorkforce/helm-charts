@@ -162,9 +162,14 @@ variable "max_delivery_attempts" {
 }
 
 variable "dead_letter_retention" {
-  description = "Dead-letter topic retention (up to 31 days). The hold subscription keeps messages 7 days, the Pub/Sub maximum for a subscription; seek the topic for older ones."
+  description = "Retention of the dead-letter topic and of its hold subscription (up to 31 days for both)."
   type        = string
   default     = "1209600s"
+
+  validation {
+    condition     = can(regex("^[0-9]+s$", var.dead_letter_retention)) && tonumber(trimsuffix(var.dead_letter_retention, "s")) >= 600 && tonumber(trimsuffix(var.dead_letter_retention, "s")) <= 2678400
+    error_message = "dead_letter_retention must be <seconds>s between 600s and 2678400s (31 days)."
+  }
 }
 
 variable "reconcile_minutes" {

@@ -100,6 +100,18 @@ variable "enable_search" {
   default     = false
 }
 
+variable "indexer_service_account" {
+  description = "ServiceAccount (in namespace) of the search indexer (the hoopdb-indexer worker), bound to the write role. null creates the role without an association."
+  type        = string
+  default     = null
+}
+
+variable "reader_service_account" {
+  description = "ServiceAccount (in namespace) of the session read API, bound to the read-only role. null creates the role without an association."
+  type        = string
+  default     = null
+}
+
 variable "search_master_user_arn" {
   description = "IAM role that administers OpenSearch fine-grained access control."
   type        = string

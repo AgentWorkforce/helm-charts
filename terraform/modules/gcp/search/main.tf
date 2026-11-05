@@ -114,11 +114,19 @@ resource "kubernetes_network_policy_v1" "this" {
       }
     }
 
-    # The operator and the allowed namespaces: the HTTP API (9200) only.
+    # The operator and the allowed namespaces: the HTTP API (9200) and, with
+    # Dashboards on, the Dashboards port (5601) only.
     ingress {
       ports {
         port     = "9200"
         protocol = "TCP"
+      }
+      dynamic "ports" {
+        for_each = var.dashboards_enabled ? [1] : []
+        content {
+          port     = "5601"
+          protocol = "TCP"
+        }
       }
       from {
         namespace_selector {

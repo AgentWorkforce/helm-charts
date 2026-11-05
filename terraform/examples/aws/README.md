@@ -4,7 +4,7 @@ A thin root that composes the four AWS modules for one agent-relay install on an
 
 - `aws/postgres` (RDS by default; `postgres_engine_mode = "aurora"`).
 - `aws/object-storage` for the sessions Locker, with Pod Identity for `<release>-worker` and `<release>-alleyoop`.
-- `aws/search` (`enable_search`). No workload grant is made: the worker and alleyoop share the sessions role (Pod Identity allows one role per ServiceAccount), so attaching the indexer policy there would give both write access. The `search` output carries the indexer and reader policies to attach to dedicated roles once the services have an OpenSearch backend.
+- `aws/search` (`enable_search`), with a write role for the indexer and a read-only role for the session read API. Set `indexer_service_account` and `reader_service_account` to bind them through Pod Identity. Pod Identity allows one role per ServiceAccount, and the worker and alleyoop ServiceAccounts already carry the sessions bucket role, so these must be separate ServiceAccounts: the chart needs per-component `serviceAccount` names for the indexer and the read API. With `enable_functions` too, the pipeline Lambda gets the indexer permissions and is allowed by the domain policy.
 - `aws/functions` (`enable_functions`).
 
 ```sh
@@ -45,11 +45,13 @@ terraform init && terraform plan
 | enable\_functions | Create the optional event-driven pipeline (Lambda). | `bool` | `false` | no |
 | enable\_search | Create the optional OpenSearch domain. | `bool` | `false` | no |
 | function\_security\_group\_ids | Existing security groups for the pipeline function ENIs. | `list(string)` | `[]` | no |
+| indexer\_service\_account | ServiceAccount (in namespace) of the search indexer (the hoopdb-indexer worker), bound to the write role. null creates the role without an association. | `string` | `null` | no |
 | kms\_key\_arn | Customer managed KMS key for Postgres, the sessions bucket and OpenSearch (null: AWS managed keys). The optional pipeline keeps its module defaults (SQS-managed SSE, AWS managed keys); pass the functions module's *\_kms\_key\_arn inputs to change that. | `string` | `null` | no |
 | name | Name prefix for every resource (lowercase; at most 21 characters, so <name>-search fits OpenSearch's 28). | `string` | `"agent-relay"` | no |
 | namespace | agent-relay release namespace. | `string` | `"agent-relay"` | no |
 | pipeline\_package | Pipeline Lambda package (see modules/aws/functions). | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) s3_object_version = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | `{}` | no |
 | postgres\_engine\_mode | rds or aurora. | `string` | `"rds"` | no |
+| reader\_service\_account | ServiceAccount (in namespace) of the session read API, bound to the read-only role. null creates the role without an association. | `string` | `null` | no |
 | release\_name | agent-relay Helm release name. | `string` | `"agent-relay"` | no |
 | search\_master\_user\_arn | IAM role that administers OpenSearch fine-grained access control. | `string` | `null` | no |
 | search\_security\_group\_ids | Existing security groups for OpenSearch (443 from the indexer and read API). | `list(string)` | `[]` | no |
@@ -63,6 +65,6 @@ terraform init && terraform plan
 | chart\_values | Non-secret agent-relay chart values (values-eks.yaml) these resources feed. Database URLs go in the release Secret, not here; see terraform/README.md. |
 | functions | Pipeline function, queue, DLQ and secret (null unless enable\_functions). |
 | postgres | Postgres host, port, master secret and URL template. |
-| search | OpenSearch endpoint and the workload policies to attach (null unless enable\_search). |
+| search | OpenSearch endpoint and the indexer (write) and reader (read-only) roles; map both as backend\_roles with the master user (null unless enable\_search). |
 | sessions\_role\_arn | Pod Identity role for the worker and alleyoop ServiceAccounts. |
 <!-- END_TF_DOCS -->

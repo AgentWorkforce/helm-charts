@@ -132,7 +132,7 @@ variable "workload_roles" {
     indexer (the sessions-pipeline search stage: writes transcript events) and reader (the session read API: searches).
     Set create = false to skip them: attach indexer_policy_json / reader_policy_json to existing roles and list them in
     additional_principal_arns. EKS Pod Identity allows one association per ServiceAccount, so a ServiceAccount that
-    already has a role (the sessions worker has the bucket role) must use that role.
+    already has a role (the sessions worker has the bucket role) needs a separate ServiceAccount for search.
   EOT
   type = object({
     create                   = optional(bool, true)

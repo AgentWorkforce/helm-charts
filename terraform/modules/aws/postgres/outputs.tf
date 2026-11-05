@@ -15,7 +15,7 @@ output "host" {
 }
 
 output "reader_host" {
-  description = "Aurora reader endpoint (null for RDS). No agent-relay component reads from replicas today."
+  description = "Aurora reader endpoint (null for RDS). No agent-relay component reads from replicas."
   value       = local.reader_endpoint
 }
 

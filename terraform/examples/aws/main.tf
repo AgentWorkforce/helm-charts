@@ -68,14 +68,19 @@ module "search" {
   security_group_ids = var.search_security_group_ids
   kms_key_arn        = var.kms_key_arn
   master_user_arn    = var.search_master_user_arn
-  # Pod Identity allows one role per ServiceAccount, and the worker and
-  # alleyoop ServiceAccounts share the sessions bucket role. Attaching the
-  # indexer policy there would give both write access, so no workload grant is
-  # made here. Once the services have an OpenSearch backend, attach
-  # indexer_policy_json to the indexer's own role and reader_policy_json to the
-  # read API's, and list both in additional_principal_arns.
-  workload_roles = { create = false }
-  tags           = var.tags
+  # Separate roles for the indexer (write) and the session read API (read
+  # only), each bound to its own ServiceAccount: Pod Identity allows one role
+  # per ServiceAccount, and the worker and alleyoop ServiceAccounts already
+  # carry the sessions bucket role. The chart needs per-component
+  # serviceAccount names for these.
+  workload_roles = {
+    name_prefix              = "${var.name}-search"
+    indexer_service_accounts = var.indexer_service_account == null ? [] : [{ cluster_name = var.eks_cluster_name, namespace = var.namespace, service_account = var.indexer_service_account }]
+    reader_service_accounts  = var.reader_service_account == null ? [] : [{ cluster_name = var.eks_cluster_name, namespace = var.namespace, service_account = var.reader_service_account }]
+  }
+  # In event mode the pipeline Lambda is also an indexer.
+  additional_principal_arns = var.enable_functions ? [module.functions[0].execution_role_arn] : []
+  tags                      = var.tags
 }
 
 # Optional: the sessions pipeline's event-driven mode (S3 -> SQS -> Lambda),
@@ -91,5 +96,8 @@ module "functions" {
   vpc_subnet_ids         = var.private_subnet_ids
   vpc_security_group_ids = var.function_security_group_ids
   alarm_actions          = var.alarm_actions
-  tags                   = var.tags
+  # With search on, the Lambda writes the index like the indexer role.
+  search_index_enabled         = var.enable_search
+  additional_policy_statements = var.enable_search ? jsondecode(module.search[0].indexer_policy_json).Statement : []
+  tags                         = var.tags
 }
