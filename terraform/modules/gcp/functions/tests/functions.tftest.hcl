@@ -126,3 +126,13 @@ run "timeout_cannot_exceed_ack_deadline" {
 
   expect_failures = [google_cloudfunctions2_function.this]
 }
+
+run "malformed_dead_letter_retention" {
+  command = plan
+
+  variables {
+    dead_letter_retention = "10m"
+  }
+
+  expect_failures = [var.dead_letter_retention]
+}

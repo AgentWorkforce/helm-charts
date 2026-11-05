@@ -64,11 +64,24 @@ variables {
   pipeline_package            = { s3_bucket = "artifacts", s3_key = "session-pipeline.zip" }
 }
 
+run "search_service_accounts_must_be_distinct" {
+  command = plan
+
+  variables {
+    indexer_service_account = "agent-relay-worker"
+  }
+
+  expect_failures = [terraform_data.service_account_checks]
+}
+
 run "all_add_ons_plan" {
   command = plan
 
   assert {
-    condition     = length(module.search[0].pod_identity_association_ids) == 2
-    error_message = "The indexer and reader each get their own Pod Identity association."
+    condition = toset(keys(module.search[0].pod_identity_association_ids)) == toset([
+      "indexer/relay/agent-relay/agent-relay-search-indexer",
+      "reader/relay/agent-relay/agent-relay-session-read",
+    ])
+    error_message = "The indexer and reader ServiceAccounts each get their own role's Pod Identity association."
   }
 }

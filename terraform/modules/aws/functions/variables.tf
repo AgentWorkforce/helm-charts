@@ -128,7 +128,7 @@ variable "environment" {
 }
 
 variable "search_index_enabled" {
-  description = "SEARCH_INDEX_ENABLED. Off: pointers only (Postgres pg_trgm search). On: the pipeline also writes the search index (ClickHouse or OpenSearch), whose credentials go in the pipeline secret."
+  description = "SEARCH_INDEX_ENABLED. Off: pointers only (Postgres pg_trgm search). On: the pipeline also writes the search index through its SearchIndexAdapter (ClickHouse, or OpenSearch with that adapter), with credentials in the pipeline secret."
   type        = bool
   default     = false
 }

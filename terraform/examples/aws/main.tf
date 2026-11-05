@@ -29,6 +29,20 @@ locals {
   ]
 }
 
+# Each Pod Identity ServiceAccount takes one role: the search ServiceAccounts
+# must differ from each other and from the sessions worker and alleyoop.
+resource "terraform_data" "service_account_checks" {
+  lifecycle {
+    precondition {
+      condition = length(compact([var.indexer_service_account, var.reader_service_account])) == length(distinct(compact([var.indexer_service_account, var.reader_service_account]))) && length(setintersection(
+        toset(compact([var.indexer_service_account, var.reader_service_account])),
+        toset([for sa in local.sessions_service_accounts : sa.service_account]),
+      )) == 0
+      error_message = "indexer_service_account and reader_service_account must differ from each other and from <release>-worker / <release>-alleyoop (one Pod Identity association per ServiceAccount)."
+    }
+  }
+}
+
 # Postgres for relaycontrol (relay-cloud-api), relayhistory, HoopDb (sessions)
 # and, if used, durable-actors. One instance, one database per component.
 module "postgres" {

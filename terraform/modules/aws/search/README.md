@@ -1,6 +1,6 @@
 # aws/search
 
-**Optional.** An Amazon OpenSearch Service **VPC domain** as the transcript search index. It replaces ClickHouse; the default stays Postgres `pg_trgm`. The sessions pipeline reaches it through its OpenSearch `SearchIndexAdapter`; the charts set no value for it.
+**Optional.** An Amazon OpenSearch Service **VPC domain** as the transcript search index. It replaces ClickHouse; the default stays Postgres `pg_trgm`. It is meant for the sessions pipeline's OpenSearch `SearchIndexAdapter` (sessions-pipeline-cloud); the charts set no value for it.
 
 - VPC domain in your subnets and security groups. Zone awareness follows the number of subnets (2 or 3).
 - Encryption at rest (customer key optional), node-to-node encryption, HTTPS enforced with `Policy-Min-TLS-1-2-PFS-2023-10`.
@@ -81,7 +81,7 @@
 | dashboard\_endpoint | OpenSearch Dashboards host inside the VPC. |
 | domain\_arn | Domain ARN. |
 | domain\_name | Domain name. |
-| endpoint | Private VPC HTTPS endpoint host (no scheme). The sessions pipeline's OpenSearch SearchIndexAdapter uses https://<endpoint>. |
+| endpoint | Private VPC HTTPS endpoint host (no scheme). https://<endpoint> is meant for the sessions pipeline's OpenSearch SearchIndexAdapter (no chart value). |
 | indexer\_policy\_json | The indexer's IAM policy, to attach to an existing role (EKS Pod Identity allows one role per ServiceAccount, so a pod that already has a role gets this policy on that role). |
 | indexer\_role\_arn | Indexer workload role (Pod Identity). Map it to an OpenSearch role with write permissions on the transcript indices (backend\_roles) using the master user. |
 | pod\_identity\_association\_ids | Pod Identity associations created, keyed by role/cluster/namespace/service-account. |

@@ -5,7 +5,7 @@
 ```
 sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE / OBJECT_ARCHIVE under <key_prefix>/)--> Pub/Sub <name>-session-events
     <name>-session-events-push --(OIDC push, ack 600 s, retry 10-600 s)--> Cloud Run function <name>-session-pipeline (internal ingress)
-    after 8 delivery attempts --> Pub/Sub <name>-session-events-dlq (14 days) + pull subscription <name>-session-events-dlq-hold (same retention)
+    after 8 delivery attempts --> Pub/Sub <name>-session-events-dlq + pull subscription <name>-session-events-dlq-hold (dead_letter_retention: 14 days by default, up to 31)
     Cloud Scheduler every 30 minutes --> POST {"reconcile": true}
     Cloud Scheduler every minute, paused unless briefs_enabled --> POST {"brief": true}
 ```

@@ -1,5 +1,5 @@
 output "url" {
-  description = "In-cluster HTTPS endpoint for the sessions pipeline's OpenSearch SearchIndexAdapter. Trust the operator-generated CA from the <name>-http-cert Secret (ca.crt)."
+  description = "In-cluster HTTPS endpoint, meant for the sessions pipeline's OpenSearch SearchIndexAdapter (no chart value). Trust the operator-generated CA from the <name>-http-cert Secret (ca.crt)."
   value       = "https://${var.name}.${var.namespace}.svc:9200"
 }
 

@@ -45,13 +45,13 @@ variable "search_subnet_ids" {
 }
 
 variable "search_security_group_ids" {
-  description = "Existing security groups for OpenSearch (443 from the indexer and read API)."
+  description = "Existing security groups for OpenSearch. Allow TCP 443 from the indexer and read API pods and, with enable_functions, from function_security_group_ids."
   type        = list(string)
   default     = []
 }
 
 variable "function_security_group_ids" {
-  description = "Existing security groups for the pipeline function ENIs."
+  description = "Existing security groups for the pipeline function ENIs (egress to Postgres and, with enable_search, to the OpenSearch security groups on 443)."
   type        = list(string)
   default     = []
 }
@@ -101,7 +101,7 @@ variable "enable_search" {
 }
 
 variable "indexer_service_account" {
-  description = "ServiceAccount (in namespace) of the search indexer (the hoopdb-indexer worker), bound to the write role. null creates the role without an association."
+  description = "ServiceAccount (in namespace) of the search indexer (the hoopdb-indexer worker), bound to the write role. Must differ from reader_service_account and the sessions worker/alleyoop ServiceAccounts. null creates the role without an association."
   type        = string
   default     = null
 }

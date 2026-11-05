@@ -167,7 +167,7 @@ variable "dead_letter_retention" {
   default     = "1209600s"
 
   validation {
-    condition     = can(regex("^[0-9]+s$", var.dead_letter_retention)) && tonumber(trimsuffix(var.dead_letter_retention, "s")) >= 600 && tonumber(trimsuffix(var.dead_letter_retention, "s")) <= 2678400
+    condition     = can(regex("^[0-9]+s$", var.dead_letter_retention)) && try(tonumber(trimsuffix(var.dead_letter_retention, "s")) >= 600 && tonumber(trimsuffix(var.dead_letter_retention, "s")) <= 2678400, false)
     error_message = "dead_letter_retention must be <seconds>s between 600s and 2678400s (31 days)."
   }
 }

@@ -24,11 +24,14 @@ output "sessions_role_arn" {
 }
 
 output "search" {
-  description = "OpenSearch endpoint and the indexer (write) and reader (read-only) roles; map both as backend_roles with the master user (null unless enable_search)."
+  description = "OpenSearch endpoint and the roles to map as backend_roles with the master user: indexer_role_arn and lambda_indexer_role_arn (event mode) to the write role, reader_role_arn to the read-only role (null unless enable_search)."
   value = var.enable_search ? {
     url              = module.search[0].url
     indexer_role_arn = module.search[0].indexer_role_arn
     reader_role_arn  = module.search[0].reader_role_arn
+    # In event mode the pipeline Lambda writes the index too: map its role to
+    # the same OpenSearch write role as indexer_role_arn.
+    lambda_indexer_role_arn = var.enable_functions ? module.functions[0].execution_role_arn : null
   } : null
 }
 
