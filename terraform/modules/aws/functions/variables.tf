@@ -128,7 +128,7 @@ variable "environment" {
 }
 
 variable "search_index_enabled" {
-  description = "SEARCH_INDEX_ENABLED. Off: pointers only (Postgres pg_trgm search). On: the pipeline also writes the search index through its SearchIndexAdapter (ClickHouse, or OpenSearch with that adapter), with credentials in the pipeline secret."
+  description = "SEARCH_INDEX_ENABLED. Off: pointers only (Postgres pg_trgm search). On: the pipeline also writes the search index through its SearchIndexAdapter. ClickHouse credentials go in the pipeline secret; Amazon OpenSearch uses IAM instead: grant the execution role with additional_policy_statements and list it in the search module's additional_principal_arns."
   type        = bool
   default     = false
 }
