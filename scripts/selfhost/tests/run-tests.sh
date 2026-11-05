@@ -516,6 +516,8 @@ pass "backup evidence records sourceRevision and verified writesQuiesced"
 # ---------------------------------------------------------------------------
 # Restore-drill request, record, and audit
 # ---------------------------------------------------------------------------
+# The optional $1 (pod UID) defaults; older shellcheck flags the unused argument.
+# shellcheck disable=SC2120
 run_drill_request() {
   env POD_UID="${1:-req1}" GCS_ARCHIVE_BUCKET=relay-archive HELM_RELEASE=relay \
     "${TEST_BASH}" "${RECOVERY_DIR}/gcp-restore-drill-request.sh" >"${tmp_root}/request.out" 2>&1
