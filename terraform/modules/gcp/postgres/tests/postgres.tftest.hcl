@@ -57,6 +57,21 @@ run "defaults_are_private_and_protected" {
     condition     = length(google_sql_database.this) == 3
     error_message = "Requested databases are created."
   }
+  assert {
+    condition = alltrue([
+      for f in ["log_checkpoints", "log_connections", "log_disconnections", "log_lock_waits", "cloudsql.iam_authentication"] :
+      contains([for x in google_sql_database_instance.this.settings[0].database_flags : x.name if x.value == "on"], f)
+    ])
+    error_message = "Logging flags and IAM authentication are on by default."
+  }
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].insights_config[0].query_insights_enabled && !google_sql_database_instance.this.settings[0].insights_config[0].record_client_address
+    error_message = "Query Insights on, without client addresses."
+  }
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].backup_retention_settings[0].retained_backups == 14
+    error_message = "14 backups retained by default."
+  }
 }
 
 run "no_admin_user" {

@@ -31,7 +31,8 @@ have() {
 }
 
 fail=0
-# run [-C dir] cmd...: runs in the parent shell (no subshell), so a failure
+# run [-C dir] cmd...: the command runs in a temporary subshell (for the
+# directory change); its result is recorded in the parent shell, so a failure
 # always reaches $fail.
 run() {
   local dir="$ROOT"
@@ -45,11 +46,16 @@ if want fmt; then run "$TF_BIN" fmt -check -recursive -diff "$ROOT"; fi
 for d in "${dirs[@]}"; do
   echo "== $d"
   if want validate || want test; then
-    # Provider downloads (GitHub release assets) occasionally time out: retry.
+    # Provider downloads (GitHub release assets) occasionally time out: retry
+    # those, and fail at once on anything else.
     ok=0
     for attempt in 1 2 3 4; do
-      if (cd "$ROOT/$d" && "$TF_BIN" init -backend=false -input=false -no-color >/dev/null); then ok=1; break; fi
-      echo "init failed in $d (attempt $attempt), retrying"; sleep $((attempt * 15))
+      if out=$(cd "$ROOT/$d" && "$TF_BIN" init -backend=false -input=false -no-color 2>&1); then ok=1; break; fi
+      if [ $attempt -lt 4 ] && grep -qiE "504|502|503|timeout|timed out|connection reset|could not query provider registry|failed to install provider" <<<"$out"; then
+        echo "init in $d hit a transient download error (attempt $attempt), retrying"; sleep $((attempt * 15))
+      else
+        echo "$out"; break
+      fi
     done
     [ $ok = 1 ] || { echo "::error::init failed: $d"; fail=1; continue; }
   fi

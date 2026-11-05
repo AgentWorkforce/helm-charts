@@ -133,7 +133,7 @@ master secret, or from per-role Secrets Manager / Secret Manager entries.
 | `aws/postgres.master_user_secret_arn` / `gcp/postgres.admin_password_secret_id` | Bootstrap only (the SQL below). Never an application credential |
 | `gcp/postgres.connection_name` | `sessions-pipeline.worker.extraEnv` and `alleyoop.extraEnv` `CLOUD_SQL_CONNECTION_NAME` (`values-gcp.yaml`) |
 | `*/object-storage.bucket_name` | `sessions-pipeline.worker.locker.bucket` and `alleyoop.locker.bucket`; or `durable-actors.storage.bucket`, and relaycast/relayfile `artifactBucket`, `fileStore.bucket` and `blobStore.bucket` |
-| `aws/object-storage.bucket_region` / `gcp/object-storage.location` | `worker.locker.region` and `alleyoop.locker.region` (or `durable-actors.storage.s3.region`) |
+| `aws/object-storage.bucket_region` / `gcp/object-storage.region` (null for dual- and multi-regions) | `worker.locker.region` and `alleyoop.locker.region` (or `durable-actors.storage.s3.region`) |
 | `aws/object-storage.access_role_arn` | No chart value with Pod Identity: the module's `pod_identity_associations` bind it to `<release>-worker` and `<release>-alleyoop`. Keep `locker.credentials.mode: podIdentity`. With IRSA, set the `eks.amazonaws.com/role-arn` ServiceAccount annotation |
 | `gcp/object-storage.google_service_account_email` | `durable-actors.serviceAccount.googleServiceAccount`, or an `iam.gke.io/gcp-service-account` ServiceAccount annotation. With `direct_kubernetes_service_accounts`, no value is needed |
 | `aws/search.url`, `gcp/search.url` | No chart value yet. It becomes the sessions-pipeline OpenSearch backend's URL once that backend exists |

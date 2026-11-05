@@ -59,5 +59,6 @@ A GCS bucket for agent-relay objects: the sessions pipeline Locker (provider `gc
 | bucket\_name | Bucket name. Feeds sessions-pipeline worker.locker.bucket and alleyoop.locker.bucket (provider gcs, endpoint ""), or durable-actors storage.bucket. |
 | bucket\_url | gs://<bucket>. |
 | google\_service\_account\_email | Workload Google service account (null unless workload\_identity.google\_service\_account is set). Annotate the Kubernetes service accounts iam.gke.io/gcp-service-account=<email>; durable-actors takes it as serviceAccount.googleServiceAccount. |
-| location | Bucket location. Feeds worker.locker.region / alleyoop.locker.region when it is a region. |
+| location | Bucket location as given (a region, dual-region or multi-region). |
+| region | The bucket's region when its location is a single region (null for dual- and multi-regions). Feeds worker.locker.region / alleyoop.locker.region. |
 <!-- END_TF_DOCS -->

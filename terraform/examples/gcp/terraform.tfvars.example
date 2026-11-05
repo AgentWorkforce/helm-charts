@@ -1,5 +1,7 @@
-# Copy to terraform.tfvars and replace every value. Every ID here is an
-# existing resource: the example creates no network.
+# Copy to terraform.tfvars and replace every value. The network (and, for
+# the optional add-ons, the GKE cluster and VPC connector) must already exist;
+# the example creates no network. The bucket name must be globally unique and
+# free: the example creates that bucket.
 project_id           = "my-project"
 region               = "us-central1"
 name                 = "agent-relay"

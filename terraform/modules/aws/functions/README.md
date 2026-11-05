@@ -77,7 +77,7 @@ Self-host normally runs these stages as long-running worker pods (the hoopdb-ind
 | batch\_size | SQS messages per invocation. | `number` | `10` | no |
 | brief\_schedule\_expression | Brief tick schedule. | `string` | `"rate(1 minute)"` | no |
 | briefs\_enabled | Session briefs: enables the brief schedule and sets SESSION\_BRIEF\_ENABLED. Model calls also need openai\_api\_key in the pipeline secret. | `bool` | `false` | no |
-| bucket\_kms\_key\_arn | The bucket's customer managed KMS key, if any. The role may decrypt with it only through S3, for objects under key\_prefix. | `string` | `null` | no |
+| bucket\_kms\_key\_arn | The bucket's customer managed KMS key, if any. The role may decrypt with it only through S3. With S3 Bucket Keys the encryption context is the bucket ARN, so the grant covers the bucket; object reads stay limited to key\_prefix by s3:GetObject. | `string` | `null` | no |
 | code\_signing\_config\_arn | Lambda code signing configuration for zip packages (null: no signature check). | `string` | `null` | no |
 | create\_secret | Create an empty Secrets Manager secret (a container; set its JSON value out of band: HoopDb URL and, with search on, the search backend credentials). Only the pipeline role may read it. | `bool` | `true` | no |
 | delivery\_delay\_seconds | Queue delivery delay, so a burst of manifest writes coalesces. | `number` | `30` | no |

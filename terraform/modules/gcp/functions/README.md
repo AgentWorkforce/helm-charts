@@ -80,7 +80,7 @@ sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE / OBJECT_AR
 | build\_service\_account | Service account Cloud Build uses for the function build (projects/<p>/serviceAccounts/<email>). null uses the project default. | `string` | `null` | no |
 | create\_alerts | Create Cloud Monitoring alert policies (dead letters, backlog age, function errors). | `bool` | `true` | no |
 | create\_secret | Create an empty Secret Manager secret (a container; add its JSON value out of band). Its resource name is passed as SESSION\_PIPELINE\_SECRET\_ID. | `bool` | `true` | no |
-| dead\_letter\_retention | Dead-letter topic retention (up to 31 days) and its pull subscription's retention (capped at 7 days by Pub/Sub). | `string` | `"1209600s"` | no |
+| dead\_letter\_retention | Dead-letter topic retention (up to 31 days). The hold subscription keeps messages 7 days, the Pub/Sub maximum for a subscription; seek the topic for older ones. | `string` | `"1209600s"` | no |
 | docker\_repository | Artifact Registry repository for the built image (projects/<p>/locations/<r>/repositories/<repo>). null uses gcf-artifacts. | `string` | `null` | no |
 | entry\_point | Exported HTTP handler. It receives Pub/Sub push envelopes ({message: {data, attributes}, subscription}) and Cloud Scheduler bodies ({"reconcile": true} or {"brief": true}). | `string` | `"sessionPipeline"` | no |
 | environment | Extra non-secret environment variables, merged over the module's defaults. | `map(string)` | `{}` | no |

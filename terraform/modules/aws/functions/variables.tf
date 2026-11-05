@@ -16,7 +16,7 @@ variable "bucket_name" {
 }
 
 variable "bucket_kms_key_arn" {
-  description = "The bucket's customer managed KMS key, if any. The role may decrypt with it only through S3, for objects under key_prefix."
+  description = "The bucket's customer managed KMS key, if any. The role may decrypt with it only through S3. With S3 Bucket Keys the encryption context is the bucket ARN, so the grant covers the bucket; object reads stay limited to key_prefix by s3:GetObject."
   type        = string
   default     = null
 }
@@ -25,6 +25,11 @@ variable "key_prefix" {
   description = "Tenant key base the services write under (the services' TENANT_KEY_BASE, \"96bulls\")."
   type        = string
   default     = "96bulls"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]+$", var.key_prefix))
+    error_message = "key_prefix must be a non-empty run of letters, digits, dots, underscores and hyphens (no wildcards or slashes)."
+  }
 }
 
 variable "layout_version" {

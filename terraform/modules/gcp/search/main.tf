@@ -107,9 +107,18 @@ resource "kubernetes_network_policy_v1" "this" {
     pod_selector {}
     policy_types = ["Ingress"]
 
+    # The cluster's own pods: HTTP and node-to-node transport.
     ingress {
       from {
         pod_selector {}
+      }
+    }
+
+    # The operator and the allowed namespaces: the HTTP API (9200) only.
+    ingress {
+      ports {
+        port     = "9200"
+        protocol = "TCP"
       }
       from {
         namespace_selector {

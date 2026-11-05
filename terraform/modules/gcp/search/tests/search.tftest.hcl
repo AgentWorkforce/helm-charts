@@ -30,8 +30,8 @@ run "defaults_are_tls_and_private" {
     error_message = "Three nodes by default."
   }
   assert {
-    condition     = length(kubernetes_network_policy_v1.this) == 1 && length(kubernetes_network_policy_v1.this[0].spec[0].ingress[0].from) == 3
-    error_message = "NetworkPolicy admits the namespace, the operator and allowed namespaces only."
+    condition     = length(kubernetes_network_policy_v1.this[0].spec[0].ingress) == 2 && length(kubernetes_network_policy_v1.this[0].spec[0].ingress[1].from) == 2 && kubernetes_network_policy_v1.this[0].spec[0].ingress[1].ports[0].port == "9200"
+    error_message = "NetworkPolicy admits the namespace on all ports, and the operator and allowed namespaces on 9200 only."
   }
   assert {
     condition     = output.url == "https://relay-search.opensearch.svc:9200"
@@ -47,4 +47,14 @@ run "admin_secret_required" {
   }
 
   expect_failures = [var.admin_credentials_secret_name]
+}
+
+run "security_config_secret_required" {
+  command = plan
+
+  variables {
+    security_config_secret_name = ""
+  }
+
+  expect_failures = [var.security_config_secret_name]
 }

@@ -29,6 +29,11 @@ variable "key_prefix" {
   description = "Tenant key base the services write under (TENANT_KEY_BASE, \"96bulls\"). GCS notifications filter on this prefix; they cannot filter on the manifest.json suffix, so the handler ignores other objects."
   type        = string
   default     = "96bulls"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]+$", var.key_prefix))
+    error_message = "key_prefix must be a non-empty run of letters, digits, dots, underscores and hyphens (no wildcards or slashes)."
+  }
 }
 
 # --- Function ---------------------------------------------------------------
@@ -157,7 +162,7 @@ variable "max_delivery_attempts" {
 }
 
 variable "dead_letter_retention" {
-  description = "Dead-letter topic retention (up to 31 days) and its pull subscription's retention (capped at 7 days by Pub/Sub)."
+  description = "Dead-letter topic retention (up to 31 days). The hold subscription keeps messages 7 days, the Pub/Sub maximum for a subscription; seek the topic for older ones."
   type        = string
   default     = "1209600s"
 }

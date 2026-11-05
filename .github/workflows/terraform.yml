@@ -51,8 +51,13 @@ jobs:
 
       - name: Install terraform-docs
         run: |
-          curl -sSfL "https://github.com/terraform-docs/terraform-docs/releases/download/${TERRAFORM_DOCS_VERSION}/terraform-docs-${TERRAFORM_DOCS_VERSION}-linux-amd64.tar.gz" \
-            | sudo tar xz -C /usr/local/bin terraform-docs
+          base="https://github.com/terraform-docs/terraform-docs/releases/download/${TERRAFORM_DOCS_VERSION}"
+          tarball="terraform-docs-${TERRAFORM_DOCS_VERSION}-linux-amd64.tar.gz"
+          dir="$(mktemp -d)"
+          curl -sSfL -o "$dir/$tarball" "$base/$tarball"
+          curl -sSfL -o "$dir/sums" "$base/terraform-docs-${TERRAFORM_DOCS_VERSION}.sha256sum"
+          (cd "$dir" && grep " $tarball\$" sums | sha256sum --check --strict)
+          sudo tar xzf "$dir/$tarball" -C /usr/local/bin terraform-docs
 
       - uses: actions/setup-python@v5
         with:

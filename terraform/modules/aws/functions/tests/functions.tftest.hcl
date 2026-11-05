@@ -40,12 +40,21 @@ variables {
 run "hosted_pattern_defaults" {
   command = apply
 
+  # A distinct DLQ ARN, so the redrive assert checks the target's identity.
+  override_resource {
+    target = aws_sqs_queue.dlq
+    values = {
+      arn = "arn:aws:sqs:us-west-2:111111111111:relay-session-events-dlq"
+      url = "https://sqs.us-west-2.amazonaws.com/111111111111/relay-session-events-dlq"
+    }
+  }
+
   assert {
     condition     = aws_sqs_queue.events.visibility_timeout_seconds == 6 * aws_lambda_function.this.timeout + aws_lambda_event_source_mapping.events.maximum_batching_window_in_seconds
     error_message = "Visibility timeout is six times the function timeout plus the batching window."
   }
   assert {
-    condition     = jsondecode(aws_sqs_queue.events.redrive_policy).maxReceiveCount == 8
+    condition     = jsondecode(aws_sqs_queue.events.redrive_policy).maxReceiveCount == 8 && jsondecode(aws_sqs_queue.events.redrive_policy).deadLetterTargetArn == "arn:aws:sqs:us-west-2:111111111111:relay-session-events-dlq"
     error_message = "Messages move to the DLQ after 8 receives."
   }
   assert {
@@ -77,7 +86,7 @@ run "hosted_pattern_defaults" {
     error_message = "Only EventBridge rules (by ARN) may invoke the function; there is no Function URL."
   }
   assert {
-    condition     = contains(flatten([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s.Resource if s.Sid == "ReadSessionObjects"]), "arn:aws:s3:::relay-sessions/96bulls/*/v1/*")
+    condition     = flatten([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s.Resource if s.Sid == "ReadSessionObjects"]) == ["arn:aws:s3:::relay-sessions/96bulls/*/v1/*"]
     error_message = "The role reads only session objects."
   }
   assert {

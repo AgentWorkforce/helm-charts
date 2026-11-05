@@ -89,6 +89,11 @@ variable "disk_type" {
   description = "PD_SSD or PD_HDD."
   type        = string
   default     = "PD_SSD"
+
+  validation {
+    condition     = contains(["PD_SSD", "PD_HDD"], var.disk_type)
+    error_message = "disk_type must be PD_SSD or PD_HDD."
+  }
 }
 
 variable "disk_size_gb" {
@@ -137,6 +142,11 @@ variable "maintenance_window" {
   default = {
     day  = 7
     hour = 4
+  }
+
+  validation {
+    condition     = var.maintenance_window.day >= 1 && var.maintenance_window.day <= 7 && var.maintenance_window.hour >= 0 && var.maintenance_window.hour <= 23 && contains(["stable", "canary", "week5"], var.maintenance_window.update_track)
+    error_message = "maintenance_window: day 1-7, hour 0-23, update_track stable, canary or week5."
   }
 }
 

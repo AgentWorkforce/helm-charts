@@ -2,9 +2,9 @@ output "chart_values" {
   description = "Non-secret agent-relay chart values (values-gcp.yaml) these resources feed. Database URLs go in the release Secret, not here; see terraform/README.md."
   value = {
     "sessions-pipeline.worker.locker.bucket"   = module.sessions_bucket.bucket_name
-    "sessions-pipeline.worker.locker.region"   = module.sessions_bucket.location
+    "sessions-pipeline.worker.locker.region"   = module.sessions_bucket.region
     "sessions-pipeline.alleyoop.locker.bucket" = module.sessions_bucket.bucket_name
-    "sessions-pipeline.alleyoop.locker.region" = module.sessions_bucket.location
+    "sessions-pipeline.alleyoop.locker.region" = module.sessions_bucket.region
   }
 }
 

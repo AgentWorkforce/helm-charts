@@ -24,6 +24,11 @@ variable "noncurrent_version_expiration_days" {
   description = "Delete noncurrent object versions after this many days (0 keeps them forever)."
   type        = number
   default     = 30
+
+  validation {
+    condition     = var.noncurrent_version_expiration_days >= 0
+    error_message = "noncurrent_version_expiration_days must be 0 or more."
+  }
 }
 
 variable "abort_incomplete_multipart_upload_days" {

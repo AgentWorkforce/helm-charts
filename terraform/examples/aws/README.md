@@ -45,7 +45,7 @@ terraform init && terraform plan
 | enable\_functions | Create the optional event-driven pipeline (Lambda). | `bool` | `false` | no |
 | enable\_search | Create the optional OpenSearch domain. | `bool` | `false` | no |
 | function\_security\_group\_ids | Existing security groups for the pipeline function ENIs. | `list(string)` | `[]` | no |
-| kms\_key\_arn | Customer managed KMS key for every data store (null: AWS managed keys). | `string` | `null` | no |
+| kms\_key\_arn | Customer managed KMS key for Postgres, the sessions bucket and OpenSearch (null: AWS managed keys). The optional pipeline keeps its module defaults (SQS-managed SSE, AWS managed keys); pass the functions module's *\_kms\_key\_arn inputs to change that. | `string` | `null` | no |
 | name | Name prefix for every resource (lowercase; at most 21 characters, so <name>-search fits OpenSearch's 28). | `string` | `"agent-relay"` | no |
 | namespace | agent-relay release namespace. | `string` | `"agent-relay"` | no |
 | pipeline\_package | Pipeline Lambda package (see modules/aws/functions). | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) s3_object_version = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | `{}` | no |

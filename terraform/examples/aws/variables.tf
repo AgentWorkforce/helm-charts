@@ -21,7 +21,7 @@ variable "tags" {
 }
 
 variable "kms_key_arn" {
-  description = "Customer managed KMS key for every data store (null: AWS managed keys)."
+  description = "Customer managed KMS key for Postgres, the sessions bucket and OpenSearch (null: AWS managed keys). The optional pipeline keeps its module defaults (SQS-managed SSE, AWS managed keys); pass the functions module's *_kms_key_arn inputs to change that."
   type        = string
   default     = null
 }

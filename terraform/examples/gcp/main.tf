@@ -95,6 +95,7 @@ module "search" {
   admin_credentials_secret_name = var.search_admin_credentials_secret_name
   security_config_secret_name   = var.search_security_config_secret_name
   storage_class                 = var.search_storage_class
+  labels                        = var.labels
   network_policy = {
     allowed_namespaces = [var.namespace]
   }

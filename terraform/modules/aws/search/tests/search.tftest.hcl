@@ -33,8 +33,10 @@ variables {
   }
 }
 
+# Plan only: the domain has prevent_destroy, so an applied run could not be
+# torn down.
 run "defaults_are_private_and_encrypted" {
-  command = apply
+  command = plan
 
   assert {
     condition     = length(one(aws_opensearch_domain.this.vpc_options).subnet_ids) == 3
@@ -61,16 +63,26 @@ run "defaults_are_private_and_encrypted" {
     error_message = "Zone awareness follows the subnet count."
   }
   assert {
-    condition     = !contains(flatten([jsondecode(aws_opensearch_domain_policy.this.access_policies).Statement[0].Principal.AWS]), "*")
-    error_message = "The access policy must name principals, never *."
-  }
-  assert {
     condition     = length(aws_iam_role.workload) == 2 && length(aws_eks_pod_identity_association.workload) == 2
     error_message = "Indexer and reader roles with their Pod Identity associations."
   }
   assert {
     condition     = !contains(jsondecode(aws_iam_role_policy.workload["reader"].policy).Statement[0].Action, "es:ESHttpPut") && !contains(jsondecode(aws_iam_role_policy.workload["reader"].policy).Statement[0].Action, "es:ESHttpDelete")
     error_message = "The reader role must not write."
+  }
+}
+
+run "access_policy_names_principals" {
+  command = plan
+
+  variables {
+    workload_roles            = { create = false }
+    additional_principal_arns = ["arn:aws:iam::111111111111:role/indexer"]
+  }
+
+  assert {
+    condition     = toset(flatten([jsondecode(aws_opensearch_domain_policy.this.access_policies).Statement[0].Principal.AWS])) == toset(["arn:aws:iam::111111111111:role/indexer", "arn:aws:iam::111111111111:role/search-admin"])
+    error_message = "The access policy names exactly the listed principals and the master user, never *."
   }
 }
 

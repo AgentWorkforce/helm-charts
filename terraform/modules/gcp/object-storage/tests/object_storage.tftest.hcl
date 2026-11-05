@@ -83,6 +83,12 @@ run "workload_identity" {
 run "cross_project_pool_uses_pool_project" {
   command = plan
 
+  # The pool's project gets a distinct number from the mock default.
+  override_data {
+    target = data.google_project.this[0]
+    values = { number = "999999999999" }
+  }
+
   variables {
     workload_identity = {
       workload_pool                      = "cluster-proj.svc.id.goog"
@@ -91,7 +97,7 @@ run "cross_project_pool_uses_pool_project" {
   }
 
   assert {
-    condition     = data.google_project.this[0].project_id == "cluster-proj"
-    error_message = "The principal's project number comes from the pool's project."
+    condition     = data.google_project.this[0].project_id == "cluster-proj" && google_storage_bucket_iam_member.this["wi/direct/agent-relay/agent-relay-worker"].member == "principal://iam.googleapis.com/projects/999999999999/locations/global/workloadIdentityPools/cluster-proj.svc.id.goog/subject/ns/agent-relay/sa/agent-relay-worker"
+    error_message = "The principal names the pool project's number."
   }
 }

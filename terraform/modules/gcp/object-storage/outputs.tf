@@ -9,8 +9,13 @@ output "bucket_url" {
 }
 
 output "location" {
-  description = "Bucket location. Feeds worker.locker.region / alleyoop.locker.region when it is a region."
-  value       = lower(google_storage_bucket.this.location)
+  description = "Bucket location as given (a region, dual-region or multi-region)."
+  value       = google_storage_bucket.this.location
+}
+
+output "region" {
+  description = "The bucket's region when its location is a single region (null for dual- and multi-regions). Feeds worker.locker.region / alleyoop.locker.region."
+  value       = can(regex("^[a-z]+-[a-z]+[0-9]+$", lower(var.location))) ? lower(var.location) : null
 }
 
 output "google_service_account_email" {

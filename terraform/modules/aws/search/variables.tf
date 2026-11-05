@@ -73,6 +73,11 @@ variable "dedicated_master_count" {
   description = "Cluster manager nodes (3 or 5)."
   type        = number
   default     = 3
+
+  validation {
+    condition     = contains([3, 5], var.dedicated_master_count)
+    error_message = "dedicated_master_count must be 3 or 5."
+  }
 }
 
 variable "multi_az_with_standby_enabled" {
