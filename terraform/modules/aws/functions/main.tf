@@ -208,7 +208,10 @@ locals {
       Resource = [var.bucket_kms_key_arn]
       Condition = {
         StringEquals = { "kms:ViaService" = "s3.${local.region}.amazonaws.com" }
-        StringLike   = { "kms:EncryptionContext:aws:s3:arn" = "${local.bucket_arn}/${local.key_prefix}/*" }
+        # With S3 Bucket Keys (aws/object-storage enables them) the encryption
+        # context is the bucket ARN; without them it is the object ARN. Object
+        # access stays limited by the s3:GetObject statement.
+        StringLike = { "kms:EncryptionContext:aws:s3:arn" = [local.bucket_arn, "${local.bucket_arn}/${local.key_prefix}/*"] }
       }
     }],
     var.queue_kms_key_arn == null ? [] : [{

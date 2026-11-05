@@ -7,6 +7,9 @@ data "google_storage_project_service_account" "this" {
 }
 
 locals {
+  # Service account IDs are at most 30 characters: truncate the shared prefix
+  # before the distinct suffixes so long names cannot collide.
+  sa_prefix        = trimsuffix(substr(var.name, 0, 21), "-")
   function_name    = "${var.name}-session-pipeline"
   topic_name       = "${var.name}-session-events"
   dlq_name         = "${var.name}-session-events-dlq"
@@ -39,13 +42,13 @@ locals {
 
 resource "google_service_account" "function" {
   project      = var.project_id
-  account_id   = substr("${var.name}-pipeline", 0, 30)
+  account_id   = "${local.sa_prefix}-pipeline"
   display_name = "agent-relay session pipeline function"
 }
 
 resource "google_service_account" "invoker" {
   project      = var.project_id
-  account_id   = substr("${var.name}-pipeline-invoker", 0, 30)
+  account_id   = "${local.sa_prefix}-invoker"
   display_name = "agent-relay session pipeline invoker (Pub/Sub push, Cloud Scheduler)"
 }
 
@@ -137,10 +140,13 @@ resource "google_pubsub_topic_iam_member" "gcs_publishes" {
 }
 
 resource "google_storage_notification" "manifests" {
-  bucket             = var.bucket_name
-  topic              = google_pubsub_topic.events.id
-  payload_format     = "JSON_API_V1"
-  event_types        = ["OBJECT_FINALIZE", "OBJECT_DELETE"]
+  bucket         = var.bucket_name
+  topic          = google_pubsub_topic.events.id
+  payload_format = "JSON_API_V1"
+  # On a versioned bucket, deleting the live manifest archives it
+  # (OBJECT_ARCHIVE) instead of deleting it; an overwrite also archives the
+  # previous generation. The handler must check whether a live manifest exists.
+  event_types        = ["OBJECT_FINALIZE", "OBJECT_DELETE", "OBJECT_ARCHIVE"]
   object_name_prefix = "${local.key_prefix}/"
 
   depends_on = [google_pubsub_topic_iam_member.gcs_publishes]

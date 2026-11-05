@@ -16,6 +16,16 @@ locals {
   )
 }
 
+# A unique final snapshot name per database lifetime, so destroying a
+# recreated database never collides with an earlier final snapshot.
+resource "random_id" "final_snapshot" {
+  keepers = {
+    name        = var.name
+    engine_mode = var.engine_mode
+  }
+  byte_length = 4
+}
+
 resource "aws_db_subnet_group" "this" {
   count = local.create_subnet_group ? 1 : 0
 
@@ -94,7 +104,7 @@ resource "aws_db_instance" "this" {
   copy_tags_to_snapshot     = var.copy_tags_to_snapshot
   deletion_protection       = var.deletion_protection
   skip_final_snapshot       = var.skip_final_snapshot
-  final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.name}-final"
+  final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.name}-final-${random_id.final_snapshot.hex}"
   delete_automated_backups  = false
 
   auto_minor_version_upgrade          = var.auto_minor_version_upgrade
@@ -175,7 +185,7 @@ resource "aws_rds_cluster" "this" {
   copy_tags_to_snapshot        = var.copy_tags_to_snapshot
   deletion_protection          = var.deletion_protection
   skip_final_snapshot          = var.skip_final_snapshot
-  final_snapshot_identifier    = var.skip_final_snapshot ? null : "${var.name}-final"
+  final_snapshot_identifier    = var.skip_final_snapshot ? null : "${var.name}-final-${random_id.final_snapshot.hex}"
   delete_automated_backups     = false
 
   allow_major_version_upgrade         = false

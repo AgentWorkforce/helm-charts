@@ -126,3 +126,16 @@ run "vpc_needs_security_groups" {
 
   expect_failures = [aws_lambda_function.this]
 }
+
+run "bucket_key_encryption_context" {
+  command = plan
+
+  variables {
+    bucket_kms_key_arn = "arn:aws:kms:us-west-2:111111111111:key/abc"
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s.Condition.StringLike["kms:EncryptionContext:aws:s3:arn"] if s.Sid == "DecryptSessionObjectsViaS3"]), "arn:aws:s3:::relay-sessions")
+    error_message = "Decrypt must accept the bucket ARN context (S3 Bucket Keys)."
+  }
+}

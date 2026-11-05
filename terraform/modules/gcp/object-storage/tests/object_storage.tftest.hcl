@@ -67,3 +67,19 @@ run "workload_identity" {
     error_message = "No public members."
   }
 }
+
+run "cross_project_pool_uses_pool_project" {
+  command = plan
+
+  variables {
+    workload_identity = {
+      workload_pool                      = "cluster-proj.svc.id.goog"
+      direct_kubernetes_service_accounts = [{ namespace = "agent-relay", name = "agent-relay-worker" }]
+    }
+  }
+
+  assert {
+    condition     = data.google_project.this[0].project_id == "cluster-proj"
+    error_message = "The principal's project number comes from the pool's project."
+  }
+}

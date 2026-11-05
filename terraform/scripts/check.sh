@@ -27,7 +27,14 @@ have() {
 }
 
 fail=0
-run() { echo "+ $*"; "$@" || { echo "::error::failed: $*"; fail=1; }; }
+# run [-C dir] cmd...: runs in the parent shell (no subshell), so a failure
+# always reaches $fail.
+run() {
+  local dir="$ROOT"
+  if [ "$1" = "-C" ]; then dir="$2"; shift 2; fi
+  echo "+ (${dir#"$ROOT"/}) $*"
+  if ! (cd "$dir" && "$@"); then echo "::error::failed in ${dir#"$ROOT"/}: $*"; fail=1; fi
+}
 
 if want fmt; then run "$TF_BIN" fmt -check -recursive -diff "$ROOT"; fi
 
@@ -36,13 +43,13 @@ for d in "${dirs[@]}"; do
   if want validate || want test; then
     (cd "$ROOT/$d" && "$TF_BIN" init -backend=false -input=false -no-color >/dev/null) || { echo "::error::init failed: $d"; fail=1; continue; }
   fi
-  if want validate; then (cd "$ROOT/$d" && run "$TF_BIN" validate -no-color); fi
-  if want test && [ -d "$ROOT/$d/tests" ]; then (cd "$ROOT/$d" && run "$TF_BIN" test -no-color); fi
+  if want validate; then run -C "$ROOT/$d" "$TF_BIN" validate -no-color; fi
+  if want test && [ -d "$ROOT/$d/tests" ]; then run -C "$ROOT/$d" "$TF_BIN" test -no-color; fi
   if want tflint && have tflint; then
-    (cd "$ROOT/$d" && run tflint --config "$ROOT/.tflint.hcl" --no-color)
+    run -C "$ROOT/$d" tflint --config "$ROOT/.tflint.hcl" --no-color
   fi
   if want docs && have terraform-docs; then
-    (cd "$ROOT/$d" && run terraform-docs --config "$ROOT/.terraform-docs.yml" --output-check .)
+    run -C "$ROOT/$d" terraform-docs --config "$ROOT/.terraform-docs.yml" --output-check .
   fi
 done
 

@@ -52,7 +52,7 @@ run "defaults_are_internal_and_authenticated" {
     error_message = "Dead-letter after 8 attempts."
   }
   assert {
-    condition     = google_storage_notification.manifests.object_name_prefix == "96bulls/" && toset(google_storage_notification.manifests.event_types) == toset(["OBJECT_FINALIZE", "OBJECT_DELETE"])
+    condition     = google_storage_notification.manifests.object_name_prefix == "96bulls/" && toset(google_storage_notification.manifests.event_types) == toset(["OBJECT_FINALIZE", "OBJECT_DELETE", "OBJECT_ARCHIVE"])
     error_message = "Object finalize and delete under the tenant prefix are notified."
   }
   assert {
@@ -91,4 +91,17 @@ run "cmek_needs_repository" {
   }
 
   expect_failures = [google_cloudfunctions2_function.this]
+}
+
+run "long_names_get_distinct_service_accounts" {
+  command = plan
+
+  variables {
+    name = "abcdefghijklmnopqrstuvwxyz123"
+  }
+
+  assert {
+    condition     = google_service_account.function.account_id != google_service_account.invoker.account_id && length(google_service_account.invoker.account_id) <= 30 && length(google_service_account.function.account_id) <= 30
+    error_message = "Service account IDs stay distinct and within 30 characters."
+  }
 }

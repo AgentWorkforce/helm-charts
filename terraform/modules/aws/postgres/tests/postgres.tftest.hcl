@@ -1,3 +1,5 @@
+mock_provider "random" {}
+
 mock_provider "aws" {
   mock_resource "aws_db_instance" {
     defaults = {

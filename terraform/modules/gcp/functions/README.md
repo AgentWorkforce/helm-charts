@@ -3,14 +3,14 @@
 **Optional.** The sessions pipeline's **event-driven mode** on GCP: the equivalent of `aws/functions`.
 
 ```
-sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE under <key_prefix>/)--> Pub/Sub <name>-session-events
+sessions bucket --(GCS notification: OBJECT_FINALIZE / OBJECT_DELETE / OBJECT_ARCHIVE under <key_prefix>/)--> Pub/Sub <name>-session-events
     <name>-session-events-push --(OIDC push, ack 600 s, retry 10-600 s)--> Cloud Run function <name>-session-pipeline (internal ingress)
     after 8 delivery attempts --> Pub/Sub <name>-session-events-dlq (14 days) + pull subscription <name>-session-events-dlq-hold
     Cloud Scheduler every 30 minutes --> POST {"reconcile": true}
     Cloud Scheduler every minute, paused unless briefs_enabled --> POST {"brief": true}
 ```
 
-- GCS notifications filter on a prefix only, not a suffix, so the handler must ignore everything except `manifest.json`.
+- GCS notifications filter on a prefix only, not a suffix, so the handler must ignore everything except `manifest.json`. On a versioned bucket, a delete of the live manifest arrives as `OBJECT_ARCHIVE` (and an overwrite also archives the previous generation), so the handler must check whether a live manifest still exists.
 - The function is HTTP with `ALLOW_INTERNAL_ONLY` ingress. Pub/Sub push and Cloud Scheduler in the same project count as internal. Only the invoker service account (push and scheduler) and the function's own service account (the reconcile chain) have `roles/run.invoker`. There is no public invoker.
 - **Runtime service account:** `roles/storage.objectViewer` on the bucket, publisher on its topic (reconcile re-enqueue), and accessor on its one secret. Grant Cloud SQL or search access separately.
 - **Secret:** an empty Secret Manager container (`SESSION_PIPELINE_SECRET_ID`). Add its JSON value out of band.

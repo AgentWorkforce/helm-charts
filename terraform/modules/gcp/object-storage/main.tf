@@ -4,6 +4,9 @@ locals {
   create_gsa    = local.wi != null && try(local.wi.google_service_account, null) != null
   direct_ksas   = local.wi == null ? [] : local.wi.direct_kubernetes_service_accounts
   needs_project = length(local.direct_ksas) > 0
+  # The principal names the project that owns the workload pool
+  # (<pool project>.svc.id.goog), which may differ from the bucket's.
+  wi_pool_project = local.wi_pool == null ? null : trimsuffix(local.wi_pool, ".svc.id.goog")
 
   # Static keys only: members such as the new GSA email are unknown at plan time.
   iam_members_flat = merge(
@@ -18,7 +21,7 @@ locals {
 
 data "google_project" "this" {
   count      = local.needs_project ? 1 : 0
-  project_id = var.project_id
+  project_id = local.wi_pool_project
 }
 
 resource "google_storage_bucket" "this" {

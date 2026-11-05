@@ -26,12 +26,14 @@ module "postgres" {
 | ---- | ------- |
 | terraform | >= 1.6 |
 | aws | >= 6.0, < 7.0 |
+| random | >= 3.5, < 4.0 |
 
 ### Providers
 
 | Name | Version |
 | ---- | ------- |
 | aws | >= 6.0, < 7.0 |
+| random | >= 3.5, < 4.0 |
 
 ### Resources
 
@@ -43,6 +45,7 @@ module "postgres" {
 | [aws_rds_cluster.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/rds_cluster) | resource |
 | [aws_rds_cluster_instance.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/rds_cluster_instance) | resource |
 | [aws_rds_cluster_parameter_group.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/rds_cluster_parameter_group) | resource |
+| [random_id.final_snapshot](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ### Inputs
 

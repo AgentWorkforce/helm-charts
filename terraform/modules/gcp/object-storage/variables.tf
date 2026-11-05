@@ -101,6 +101,7 @@ variable "workload_identity" {
       namespace = string
       name      = string
     })), [])
+    # <project>.svc.id.goog of the cluster's project (default: project_id).
     workload_pool = optional(string)
   })
   default = null

@@ -6,6 +6,12 @@ locals {
 
   create_admin    = var.admin_user.create
   admin_secret_id = coalesce(var.admin_user.secret_id, "${var.name}-admin-password")
+
+  # One generation number drives both write-only destinations, so the user
+  # and the secret are always rewritten together with the same ephemeral
+  # value: it changes with password_version and with anything that replaces
+  # either destination (secret id, user name, instance name).
+  admin_password_generation = var.admin_user.password_version * 16777216 + parseint(substr(sha1(join("/", [var.project_id, var.name, var.admin_user.name, local.admin_secret_id])), 0, 6), 16)
 }
 
 resource "google_sql_database_instance" "this" {
@@ -144,7 +150,13 @@ resource "google_secret_manager_secret_version" "admin" {
 
   secret                 = google_secret_manager_secret.admin[0].id
   secret_data_wo         = ephemeral.random_password.admin[0].result
-  secret_data_wo_version = var.admin_user.password_version
+  secret_data_wo_version = local.admin_password_generation
+
+  # A replaced user (for example a recreated instance) gets a fresh password:
+  # write the same value to a new version.
+  lifecycle {
+    replace_triggered_by = [google_sql_user.admin]
+  }
 }
 
 resource "google_sql_user" "admin" {
@@ -155,5 +167,5 @@ resource "google_sql_user" "admin" {
   name                = var.admin_user.name
   type                = "BUILT_IN"
   password_wo         = ephemeral.random_password.admin[0].result
-  password_wo_version = var.admin_user.password_version
+  password_wo_version = local.admin_password_generation
 }
