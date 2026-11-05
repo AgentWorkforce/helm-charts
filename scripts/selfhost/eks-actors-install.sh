@@ -63,7 +63,7 @@ case "$ACTOR_CREDENTIALS" in
     # (values-eks-actors.yaml only carries an <...> placeholder.)
     configured_role_arn="$(helm template "$RELEASE" "$CHART_DIR" -n "$NS" -f "$CHART_DIR/values-eks-actors.yaml" ${VALUES:+-f "$VALUES"} \
       --set durable-actors.storage.s3.actorCredentials=assume-role 2>/dev/null \
-      | grep -oE 'name: DURABLE_ACTORS_S3_ACTOR_ROLE_ARN, value: "[^"]*"' | head -1 | sed -E 's/.*value: "([^"]*)"/\1/')"
+      | grep -oE 'name: DURABLE_ACTORS_S3_ACTOR_ROLE_ARN, value: "[^"]*"' | head -1 | sed -E 's/.*value: "([^"]*)"/\1/' || true)"
     if [[ -n "${EKS_ACTORS_ACTOR_ROLE_ARN:-}" ]]; then
       HELM_SET+=(--set "durable-actors.storage.s3.actorRoleArn=${EKS_ACTORS_ACTOR_ROLE_ARN}")
     elif [[ -z "$configured_role_arn" || "$configured_role_arn" == *"<"* ]]; then

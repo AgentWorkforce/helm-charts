@@ -96,6 +96,8 @@ case " $* " in
     printf '{"name":"relay","version":%s,"info":{"status":"deployed"},"chart":{"metadata":{"version":"1.0.0"}}}\n' "${revision}"
     ;;
   *" show chart "*) printf 'name: agent-relay\nversion: 2.0.0\n' ;;
+  # helm template prints ${MOCK_FIXTURES}/helm-template when present.
+  *" template "*) [[ -f "${MOCK_FIXTURES}/helm-template" ]] && cat "${MOCK_FIXTURES}/helm-template" ;;
 esac
 exit 0
 MOCK
@@ -199,6 +201,7 @@ scripts=(
   "${SELFHOST_DIR}/verify-agent-relay.sh"
   "${SELFHOST_DIR}/pre-upgrade-check.sh"
   "${SELFHOST_DIR}/record-restore-drill.sh"
+  "${SELFHOST_DIR}/eks-actors-install.sh"
   "${RECOVERY_DIR}/gcp-recovery-backup.sh"
   "${RECOVERY_DIR}/gcp-restore-drill-request.sh"
   "${RECOVERY_DIR}/gcp-restore-drill-audit.sh"
@@ -625,5 +628,46 @@ audit_case "failed gate" '.verificationGates.cloudSql = "FAIL"'
 audit_case "missing gate" 'del(.verificationGates.gcsIntegrity)'
 audit_case "no drill request" '.' remove-request
 pass "drill audit applies the recorder's evidence checks and requires the request"
+
+# eks-actors-install.sh: actor storage credential mode and role ARN (helm and aws mocked).
+cat >"${mock_bin}/aws" <<'MOCK'
+#!/usr/bin/env bash
+printf 'aws' >>"${MOCK_COMMAND_LOG}"
+printf ' %s' "$@" >>"${MOCK_COMMAND_LOG}"
+printf '\n' >>"${MOCK_COMMAND_LOG}"
+exit 0
+MOCK
+chmod +x "${mock_bin}/aws"
+eks_install() { # eks_install [VAR=value ...]; runs `install` and prints the logged helm upgrade line
+  : >"${command_log}"
+  env PIPPEN_SANDBOX_ACCOUNT_ID=111122223333 EKS_ACTORS_CHART_DIR="${tmp_root}/chart" "$@" \
+    "${TEST_BASH}" "${SELFHOST_DIR}/eks-actors-install.sh" install >/dev/null 2>"${tmp_root}/eks.err" || return $?
+  grep '^helm upgrade' "${command_log}"
+}
+mkdir -p "${tmp_root}/chart"
+rm -f "${fixtures}/helm-template"
+role="arn:aws:iam::111122223333:role/pippen/workload"
+out="$(eks_install)"
+[[ "${out}" == *"actorCredentials=assume-role"* && "${out}" == *"actorRoleArn=${role}/pippen-sbx-actors-proof-storage"* ]] ||
+  fail "eks-actors-install default is not assume-role with the derived storage role: ${out}"
+out="$(eks_install EKS_ACTORS_ROLE_PREFIX=pippen-sbx-actors)"
+[[ "${out}" == *"actorRoleArn=${role}/pippen-sbx-actors-storage"* ]] ||
+  fail "eks-actors-install ignores EKS_ACTORS_ROLE_PREFIX: ${out}"
+out="$(eks_install EKS_ACTORS_ACTOR_ROLE_ARN="${role}/env-storage")"
+[[ "${out}" == *"actorRoleArn=${role}/env-storage"* ]] || fail "eks-actors-install ignores EKS_ACTORS_ACTOR_ROLE_ARN: ${out}"
+printf '            - {name: DURABLE_ACTORS_S3_ACTOR_ROLE_ARN, value: "%s/values-storage"}\n' "${role}" >"${fixtures}/helm-template"
+out="$(eks_install)"
+[[ "${out}" != *"actorRoleArn="* ]] || fail "eks-actors-install overrides a values-file actorRoleArn: ${out}"
+printf '            - {name: DURABLE_ACTORS_S3_ACTOR_ROLE_ARN, value: "arn:aws:iam::<account>:role/<actor storage role>"}\n' >"${fixtures}/helm-template"
+out="$(eks_install)"
+[[ "${out}" == *"actorRoleArn=${role}/pippen-sbx-actors-proof-storage"* ]] ||
+  fail "eks-actors-install keeps the overlay's <...> placeholder ARN: ${out}"
+rm -f "${fixtures}/helm-template"
+out="$(eks_install EKS_ACTORS_ACTOR_CREDENTIALS=control-plane)"
+[[ "${out}" == *"actorCredentials=control-plane"* && "${out}" == *"actorRoleArn= "* || "${out}" == *"actorRoleArn=" ]] ||
+  fail "eks-actors-install control-plane mode does not clear actorRoleArn: ${out}"
+if eks_install EKS_ACTORS_ACTOR_CREDENTIALS=bogus >/dev/null; then fail "eks-actors-install accepted an unknown credential mode"; fi
+grep -q 'must be assume-role or control-plane' "${tmp_root}/eks.err" || fail "eks-actors-install did not explain the rejected mode"
+pass "eks-actors-install picks the actor credential mode and storage role ARN"
 
 printf 'All self-hosted script tests passed.\n'
