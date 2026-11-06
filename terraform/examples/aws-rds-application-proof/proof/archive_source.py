@@ -11,7 +11,9 @@ def build(root,output):
     root=Path(root);output=Path(output)
     if output.exists():raise RuntimeError('archive_output_exists')
     manifest=json.loads((root/'archive-manifest.json').read_text());expected=manifest['files']
-    if set(manifest)!={'format','composition_commit','composition_tree','bun_lock_sha256','owner_input_sha256','packages','files'} or manifest['format']!='actual-rds-source-archive-v1':raise RuntimeError('archive_manifest_invalid')
+    allowed={'format','composition_commit','composition_tree','bun_lock_sha256','owner_input_sha256','packages','files'}
+    if manifest.get('format')=='actual-rds-application-archive-v1':allowed|={'helm_commit','helm_tree','helm_sources','provider_lock_sha256','runtime_images','guest_manifest_sha256','ca_sha256','test_only','toolchain'}
+    if set(manifest)!=allowed or manifest['format'] not in ['actual-rds-source-archive-v1','actual-rds-application-archive-v1']:raise RuntimeError('archive_manifest_invalid')
     files={}
     for path in root.rglob('*'):
         if path.is_symlink():raise RuntimeError('archive_symlink_refused')

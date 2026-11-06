@@ -21,11 +21,11 @@ PG='postgres@sha256:748a18a54d3842d43bc156f0840d78029b8d349e0feca98c12b9c4ce3404
 def check(ok,code):
     if not ok:raise SecretIoError(code)
 
-def fixture(source,receipt):
+def fixture(source,receipt,context):
     marker=str(uuid.uuid4());prefix='rds-prep-'+marker[:8];pg=prefix+'-pg';node=prefix+'-node';network=prefix+'-net'
     declared={}
     names=[node,pg];env={k:os.environ[k] for k in ['PATH','HOME'] if k in os.environ}
-    docker=['docker','--context','colima-rds'];phase='preflight';checks=[];ids={};clean=False
+    docker=['docker','--context',context];phase='preflight';checks=[];ids={};clean=False
     result={'ok':False,'scope':'synthetic Linux arm64 installed source/psql17 IO only; no actual RDS SQL/cloud','marker':marker,'images':{'node':NODE,'postgres':PG},'checks':checks,'containers':ids}
     baseline_volumes=None
     owner=secrets.token_urlsafe(32);initial=secrets.token_urlsafe(32);rotated=secrets.token_urlsafe(32)
@@ -141,5 +141,5 @@ def fixture(source,receipt):
     return result
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--source',required=True);parser.add_argument('--receipt',required=True);a=parser.parse_args()
-    r=fixture(a.source,a.receipt);print(json.dumps(r));raise SystemExit(0 if r['ok'] else 1)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--source',required=True);parser.add_argument('--receipt',required=True);parser.add_argument('--context',required=True,choices=['colima-rds2']);a=parser.parse_args()
+    r=fixture(a.source,a.receipt,a.context);print(json.dumps(r));raise SystemExit(0 if r['ok'] else 1)

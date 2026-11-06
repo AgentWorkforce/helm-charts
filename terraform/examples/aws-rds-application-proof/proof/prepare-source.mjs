@@ -31,8 +31,9 @@ mkdirSync(out,{recursive:true,mode:0o700});
 // Preparation hook is outside the archive, and cannot affect the source checkout.
 const prepHook=out+'.prepare-hook.mjs';
 writeFileSync(prepHook,`import {install} from ${JSON.stringify(pathToFileURL(join(here,'register.mjs')).href)};install(new URL(${JSON.stringify(pathToFileURL(source+sep).href)}));\n`,{mode:0o600});
-const capture=`const m=await import(${JSON.stringify(pathToFileURL(join(source,RUNTIME[0])).href)});console.log(JSON.stringify(await m.captureGuestSources()));`;
-const manifest=JSON.parse(execFileSync(process.execPath,['--import',prepHook,'--input-type=module','-e',capture],{cwd:source,encoding:'utf8',timeout:30000,maxBuffer:4*1024*1024}));
+const capture=`const m=await import(${JSON.stringify(pathToFileURL(join(source,RUNTIME[0])).href)});const manifest=await m.captureGuestSources();console.log(JSON.stringify({manifest,sha256:m.sourceManifestSha256(manifest)}));`;
+const captured=JSON.parse(execFileSync(process.execPath,['--import',prepHook,'--input-type=module','-e',capture],{cwd:source,encoding:'utf8',timeout:30000,maxBuffer:4*1024*1024}));
+const manifest=captured.manifest;
 requireInvariant(manifest.compositionCommit===EXPECTED,'guest_manifest_commit_changed');
 const files={};
 function put(name,bytes){requireInvariant(!name.startsWith('/')&&!name.split('/').includes('..')&&!files[name],'unsafe_duplicate_archive_path');mkdirSync(dirname(join(out,name)),{recursive:true});writeFileSync(join(out,name),bytes,{mode:0o600});files[name]=hash(bytes);}
@@ -83,4 +84,4 @@ requireInvariant(packages.pg.version==='8.23.1','pg_version_changed');
 clean();
 const outer={format:'actual-rds-source-archive-v1',composition_commit:EXPECTED,composition_tree:git('rev-parse','HEAD^{tree}'),bun_lock_sha256:hash(Buffer.from(lock)),owner_input_sha256:ownerInputs,packages,files};
 writeFileSync(join(out,'archive-manifest.json'),JSON.stringify(outer,null,2)+'\n',{mode:0o600});
-console.log(JSON.stringify({ok:true,scope:'source preparation only; installed execution still required',output:out,source_commit:EXPECTED,owner_inputs:34,pg:packages.pg.version,packages:Object.keys(packages).length,files:Object.keys(files).length,manifest_sha256:hash(readFileSync(join(out,'archive-manifest.json')))}));
+console.log(JSON.stringify({ok:true,scope:'source preparation only; installed execution still required',output:out,source_commit:EXPECTED,owner_inputs:34,pg:packages.pg.version,packages:Object.keys(packages).length,files:Object.keys(files).length,manifest_sha256:hash(readFileSync(join(out,'archive-manifest.json'))),guest_manifest_sha256:captured.sha256}));
