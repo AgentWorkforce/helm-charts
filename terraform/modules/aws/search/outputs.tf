@@ -1,26 +1,26 @@
 output "domain_name" {
   description = "Domain name."
-  value       = aws_opensearch_domain.this.domain_name
+  value       = local.domain.domain_name
 }
 
 output "domain_arn" {
   description = "Domain ARN."
-  value       = aws_opensearch_domain.this.arn
+  value       = local.domain.arn
 }
 
 output "endpoint" {
   description = "Private VPC HTTPS endpoint host (no scheme). https://<endpoint> is meant for the sessions pipeline's OpenSearch SearchIndexAdapter (no chart value)."
-  value       = aws_opensearch_domain.this.endpoint
+  value       = local.domain.endpoint
 }
 
 output "url" {
   description = "https://<endpoint>."
-  value       = "https://${aws_opensearch_domain.this.endpoint}"
+  value       = "https://${local.domain.endpoint}"
 }
 
 output "dashboard_endpoint" {
   description = "OpenSearch Dashboards host inside the VPC."
-  value       = aws_opensearch_domain.this.dashboard_endpoint
+  value       = local.domain.dashboard_endpoint
 }
 
 output "indexer_role_arn" {

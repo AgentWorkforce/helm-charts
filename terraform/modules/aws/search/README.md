@@ -6,7 +6,7 @@
 - Encryption at rest (customer key optional), node-to-node encryption, HTTPS enforced with `Policy-Min-TLS-1-2-PFS-2023-10`.
 - Fine-grained access control with an **IAM master user** (`master_user_arn`). There is no internal user database and no anonymous access.
 - Sized for per-event transcript text: 3 `r7g.large.search` data nodes (4 with two subnets, a multiple of the AZ count) with 200 GiB gp3 each, plus 3 dedicated `m7g.large.search` cluster managers. Every size is a variable.
-- **Destroy guard:** OpenSearch has no API deletion protection, so the domain has `prevent_destroy`: Terraform refuses to destroy or replace it. To delete it on purpose, `terraform state rm` the domain resource and delete it with the AWS CLI or console.
+- **Destroy guard:** default domains retain literal `prevent_destroy=true`. The unindexed historical address moves to `aws_opensearch_domain.this[0]` without recreation. A protected domain cannot be converted by toggling `disposable`. For new synthetic fixtures only, `disposable=true` selects a separate identically configured resource from creation; retire it through a reviewed Terraform destroy with state intact. Do not use that mode for durable/customer data, switch modes, remove state, or issue a native deletion to bypass protection. Protected-domain retirement requires a separately reviewed source/lifecycle change.
 - Two workload roles trusted by EKS Pod Identity (and IRSA): **indexer** (the sessions-pipeline search stage: `ESHttpGet/Head/Post/Put/Delete/Patch`) and **reader** (the session read API: `ESHttpGet/Head/Post`). With the master user, map them as `backend_roles` to OpenSearch roles scoped to the transcript indices.
 - Pod Identity allows one role per ServiceAccount. When the pod already has a role, set `workload_roles = { create = false }`, attach `indexer_policy_json` / `reader_policy_json` to that role, and list it in `additional_principal_arns`. Do not attach the indexer policy to a role shared with pods that only read. `examples/aws` binds the two roles to their own `indexer_service_account` and `reader_service_account`.
 - Application, search-slow and index-slow logs go to CloudWatch. Add `AUDIT_LOGS` once audit logging is configured in the security plugin.
@@ -35,6 +35,7 @@
 | [aws_eks_pod_identity_association.workload](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_pod_identity_association) | resource |
 | [aws_iam_role.workload](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role_policy.workload](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
+| [aws_opensearch_domain.disposable](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearch_domain) | resource |
 | [aws_opensearch_domain.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearch_domain) | resource |
 | [aws_opensearch_domain_policy.this](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/opensearch_domain_policy) | resource |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
@@ -57,6 +58,7 @@
 | dedicated\_master\_count | Cluster manager nodes (3 or 5). | `number` | `3` | no |
 | dedicated\_master\_enabled | Dedicated cluster manager nodes (recommended for production). | `bool` | `true` | no |
 | dedicated\_master\_type | Cluster manager node type. | `string` | `"m7g.large.search"` | no |
+| disposable | Explicitly create a new disposable domain with Terraform destruction enabled. Defaults to protected; immutable for an existing domain. Protected domains cannot be converted by toggling this input. | `bool` | `false` | no |
 | ebs\_iops | Provisioned IOPS for gp3 (null uses the baseline). | `number` | `null` | no |
 | ebs\_throughput | Provisioned throughput (MiB/s) for gp3 (null uses the baseline). | `number` | `null` | no |
 | ebs\_volume\_size | gp3 volume per data node in GiB. Size for the transcript text plus replicas plus ~25% headroom. | `number` | `200` | no |
