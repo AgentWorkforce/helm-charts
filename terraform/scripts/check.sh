@@ -64,6 +64,9 @@ for d in "${dirs[@]}"; do
   fi
   if want validate; then run -C "$ROOT/$d" "$TF_BIN" validate -no-color; fi
   if want test && [ -d "$ROOT/$d/tests" ]; then run -C "$ROOT/$d" "$TF_BIN" test -no-color; fi
+  if want test && [ "$d" = "examples/aws-environments" ] && have python3; then
+    run -C "$ROOT/$d" python3 tests/check_lambda_bindings.py "$TF_BIN"
+  fi
   if want tflint && have tflint; then
     run -C "$ROOT/$d" tflint --config "$ROOT/.tflint.hcl" --no-color
   fi
