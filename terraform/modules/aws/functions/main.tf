@@ -334,7 +334,7 @@ resource "aws_lambda_event_source_mapping" "events" {
   batch_size                         = var.batch_size
   maximum_batching_window_in_seconds = var.maximum_batching_window_seconds
   function_response_types            = ["ReportBatchItemFailures"]
-  enabled                            = true
+  enabled                            = var.enabled
 
   scaling_config {
     maximum_concurrency = var.max_concurrency
@@ -351,7 +351,7 @@ resource "aws_cloudwatch_event_rule" "reconcile" {
   name                = "${var.name}-session-reconcile"
   description         = "agent-relay session pipeline: reconcile recent manifests (lost notifications)"
   schedule_expression = "rate(${var.reconcile_minutes} minutes)"
-  state               = "ENABLED"
+  state               = var.enabled ? "ENABLED" : "DISABLED"
   tags                = var.tags
 }
 
@@ -377,7 +377,7 @@ resource "aws_cloudwatch_event_rule" "brief" {
   name                = "${var.name}-session-brief"
   description         = "agent-relay session pipeline: one session-brief tick (due wakeups)"
   schedule_expression = var.brief_schedule_expression
-  state               = var.briefs_enabled ? "ENABLED" : "DISABLED"
+  state               = var.enabled && var.briefs_enabled ? "ENABLED" : "DISABLED"
   tags                = var.tags
 }
 

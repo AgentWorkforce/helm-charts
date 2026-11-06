@@ -1,3 +1,9 @@
+variable "enabled" {
+  description = "Enable queue consumption and schedules. Set false while provisioning the function, secret and database bootstrap; direct authorized invocations remain possible."
+  type        = bool
+  default     = true
+}
+
 variable "name" {
   description = "Prefix for the function, queues, rules, alarms and role (<name>-session-pipeline, <name>-session-events, ...)."
   type        = string

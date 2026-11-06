@@ -116,6 +116,18 @@ run "briefs_enabled" {
   }
 }
 
+run "bootstrap_disables_every_automatic_trigger" {
+  command = plan
+  variables {
+    enabled        = false
+    briefs_enabled = true
+  }
+  assert {
+    condition     = !aws_lambda_event_source_mapping.events.enabled && aws_cloudwatch_event_rule.reconcile.state == "DISABLED" && aws_cloudwatch_event_rule.brief.state == "DISABLED" && !output.activation_enabled
+    error_message = "Bootstrap must disable the queue mapping and both schedules, even when briefs are configured."
+  }
+}
+
 run "exactly_one_package" {
   command = plan
 

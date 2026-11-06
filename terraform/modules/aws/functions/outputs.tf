@@ -1,3 +1,8 @@
+output "activation_enabled" {
+  description = "Whether automatic queue consumption and schedules are enabled."
+  value       = var.enabled
+}
+
 output "function_name" {
   description = "Pipeline function name."
   value       = aws_lambda_function.this.function_name

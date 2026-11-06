@@ -12,6 +12,13 @@ sessions bucket --(S3 notification, <key_prefix>/**/manifest.json puts and delet
 
 By default the chart runs these stages as long-running worker pods (the hoopdb-indexer reconcile tick, referee, and the bob-costas sweep). This module is an alternative, not a requirement. No chart value consumes it.
 
+Set `enabled = false` during initial secret/database/artifact bootstrap to disable
+the queue mapping and both schedules. Existing callers retain `enabled = true`
+by default. A disabled function can still be explicitly invoked by an authorized
+caller, and its queue can accumulate notifications. Enable automatic processing
+only after verifying the artifact, bootstrap and retirement of overlapping
+worker stages.
+
 - **Package:** `package.image_uri` (ECR, pinned by digest: `<repository>@sha256:<64 hex>`; tags are refused), `package.s3_bucket` + `s3_key`, or `package.filename`. The hosted handler is `src/session-pipeline/lambda.ts`, export `handler`, on `nodejs24.x` / `arm64`.
 - **No Function URL.** Only the two EventBridge rules (by source ARN) and the function's own role may invoke it.
 - **Execution role:** logs to its own log group, unconditional `s3:ListBucket`, and `s3:GetObject` on `<bucket>/<key_prefix>/*/<layout_version>/*` only. It may consume and re-enqueue its queue, read its one secret, invoke itself, and decrypt through S3 for the bucket key. It gets ENI permissions only in a VPC.
@@ -82,6 +89,7 @@ By default the chart runs these stages as long-running worker pods (the hoopdb-i
 | create\_secret | Create an empty Secrets Manager secret (a container; set its JSON value out of band: HoopDb URL and, with search on, the search backend credentials). Only the pipeline role may read it. | `bool` | `true` | no |
 | delivery\_delay\_seconds | Queue delivery delay, so a burst of manifest writes coalesces. | `number` | `30` | no |
 | dlq\_retention\_seconds | DLQ retention (14 days, the SQS maximum). | `number` | `1209600` | no |
+| enabled | Enable queue consumption and schedules. Set false while provisioning the function, secret and database bootstrap; direct authorized invocations remain possible. | `bool` | `true` | no |
 | environment | Extra (non-secret) environment variables, merged over the module's defaults (see the README). Secrets go in the pipeline secret, never here. | `map(string)` | `{}` | no |
 | handler | Handler for zip packages (ignored for images). | `string` | `"index.handler"` | no |
 | key\_prefix | Tenant key base the services write under (the services' TENANT\_KEY\_BASE, "96bulls"). | `string` | `"96bulls"` | no |
@@ -115,6 +123,7 @@ By default the chart runs these stages as long-running worker pods (the hoopdb-i
 
 | Name | Description |
 | ---- | ----------- |
+| activation\_enabled | Whether automatic queue consumption and schedules are enabled. |
 | brief\_rule\_arn | EventBridge brief rule ARN (DISABLED unless briefs\_enabled). |
 | bucket\_notification\_queue\_configuration | The S3 notification queue configuration, for buckets whose notifications are managed elsewhere (manage\_bucket\_notification = false). |
 | dlq\_arn | Dead-letter queue ARN. |
