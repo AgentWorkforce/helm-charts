@@ -91,3 +91,8 @@ output "runtime_role_policy_json" {
     pipeline = var.pipeline_runtime == "lambda" ? module.pipeline[0].execution_role_policy_json : null
   }
 }
+
+output "lambda_shared_environment" {
+  description = "Non-secret writer/reader bindings, or null until explicitly configured. Independently qualify the matching reader artifact, read-only DB identity, JWT settings, schema/FGAC bootstrap and worker retirement before activation."
+  value       = var.lambda_runtime_bindings == null ? null : local.lambda_shared_environment
+}
