@@ -273,12 +273,18 @@ python3 terraform/scripts/verify-aws-data.py configuration \
   --config /approved/private/verification.json --run-id <32-hex-run-id> \
   --confirm-account <account> --confirm-region us-west-2 \
   --confirm-environment dev --confirm-environment-class development \
-  --confirm-name-prefix agent-relay --confirm-live
+  --confirm-name-prefix agent-relay \
+  --confirm-search-url <separately-reviewed-private-HTTPS-search-url> --confirm-live
 ```
 
-The account, region, environment, class and installation prefix must come from
+The account, region, environment, class, installation prefix and exact private
+OpenSearch HTTPS URL must come from
 an independently reviewed installation/backend record, not from the target JSON
-being verified. All confirmations are required, including for cleanup. Replacing
+being verified. Confirm the exact URL against a separately reviewed native
+DescribeDomain record and expected domain ARN: domain names can repeat across
+accounts, and the opaque endpoint suffix is not an account ownership proof.
+Do not automatically derive `--confirm-search-url` from the untrusted target
+JSON. All confirmations are required, including for cleanup. Replacing
 `verification.json` with another installation's otherwise valid same-account,
 same-environment output is refused before constructing an SDK session. There is
 no permissive legacy schema fallback: regenerate `verification` after upgrading.
@@ -289,13 +295,21 @@ the exported tuple. Customer mode refuses exported/native Pippen ownership tags.
 The closed output includes `name_prefix`, `environment_class`, nullable `pippen`,
 `postgres.identifier`/`master_username`, and `pipeline.function_name`. Every phase
 and the direct-import helpers require an immutable `ConfirmedInstallation` of
-scalar values, validate all derived resource names and unqualified ARN types,
+scalar values (including that exact independently confirmed HTTPS origin),
+validate all derived resource names and unqualified ARN types,
 and check the caller before a target operation. RDS uses
 `<prefix>-<environment>-pg` (instance or Aurora cluster); Lambda uses
 `<prefix>-<environment>-session-pipeline`; bucket/search names and writer
 endpoints follow this root's exact conventions. Import callers must construct
 that confirmation separately with `confirm_installation(...)`; omitting it is an
-error. Names and confirmations are safety checks, not IAM authorization.
+error. Before signing each direct `Search.call`, its path and exact confirmed
+origin are checked first, then STS must report the confirmed account and a
+well-formed same-account ARN. A recognized common `agent-session` caller must
+match the selected Pippen lease and is refused in customer mode. Runtime-role
+callers remain supported. Direct `Search` checks account/common lease; the
+phase helpers additionally enforce their exact configured phase-role ARN.
+Neither check inspects native IAM role content or establishes authorization.
+Names and confirmations are safety checks, not IAM authorization.
 
 Before `GetSecretValue`, the PostgreSQL phase checks singleton native RDS/Aurora
 metadata, PostgreSQL17 engine/status, exact identifiers/ARNs, private/encrypted
@@ -329,7 +343,9 @@ Version history is retained.
 
 Run `search-bootstrap` as the separate administrator, `search-write` as the
 indexer, `search-read` as the reader, then `search-cleanup` as the administrator,
-each with the same arguments and run ID. These phases create temporary scoped
+each with the same arguments and run ID. Each phase first requires the independently confirmed exact search URL, so
+runtime roles need no new DescribeDomain permission. Native bootstrap still
+checks domain ARN and endpoint linkage. These phases create temporary scoped
 FGAC roles/mappings and two synthetic indices, verify the marker, reject both
 single and bulk reader writes, reject access to a known foreign index, and
 check the rejected writes had no effects before cleanup. Signed requests never

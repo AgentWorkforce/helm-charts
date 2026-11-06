@@ -19,6 +19,7 @@ RUN = "a" * 32
 def installation(**changes):
     values = dict(account=ACCOUNT, region=REGION, environment="dev", environment_class="development", name_prefix="agent-relay")
     values.update(changes)
+    values.setdefault("search_url", f"https://vpc-{values['name_prefix']}-{values['environment']}-search-abc.{values['region']}.es.amazonaws.com")
     return probe.confirm_installation(**values)
 
 
@@ -30,7 +31,7 @@ def fixture(mode="rds", confirmed=None):
         "pippen": None if i.pippen_agent is None else {"agent": i.pippen_agent, "session_id": i.pippen_session},
         "storage": {"prefix": f"proofs/{i.environment}/", "bucket": f"{name}-{i.account}-{i.region}-sessions", "role_arn": f"arn:aws:iam::{i.account}:role/storage"},
         "postgres": {"identifier": name + "-pg", "host": f"{name}-pg.abc.{i.region}.rds.amazonaws.com", "secret_arn": f"arn:aws:secretsmanager:{i.region}:{i.account}:secret:rds!db-canary-AbCd12", "resource_arn": f"arn:aws:rds:{i.region}:{i.account}:{'db' if mode == 'rds' else 'cluster'}:{name}-pg", "port": 5432, "database": "relaycontrol", "master_username": "relay_admin", "engine_mode": mode, "backup_retention_days": {"development": 7, "staging": 14, "production": 35}[i.environment_class], "deletion_protection": True},
-        "search": {"url": f"https://vpc-{name}-search-abc.{i.region}.es.amazonaws.com", "domain_arn": f"arn:aws:es:{i.region}:{i.account}:domain/{name}-search", "domain_name": name + "-search", "index_prefix": name + "-", "master_role_arn": f"arn:aws:iam::{i.account}:role/admin", "indexer_role_arn": f"arn:aws:iam::{i.account}:role/writer", "reader_role_arn": f"arn:aws:iam::{i.account}:role/reader", "lambda_role_arn": f"arn:aws:iam::{i.account}:role/external/pipeline"},
+        "search": {"url": i.search_url, "domain_arn": f"arn:aws:es:{i.region}:{i.account}:domain/{name}-search", "domain_name": name + "-search", "index_prefix": name + "-", "master_role_arn": f"arn:aws:iam::{i.account}:role/admin", "indexer_role_arn": f"arn:aws:iam::{i.account}:role/writer", "reader_role_arn": f"arn:aws:iam::{i.account}:role/reader", "lambda_role_arn": f"arn:aws:iam::{i.account}:role/external/pipeline"},
         "pipeline": {"function_name": name + "-session-pipeline", "function_arn": f"arn:aws:lambda:{i.region}:{i.account}:function:{name}-session-pipeline", "image_uri": None},
     }
 
@@ -112,7 +113,8 @@ class DataProofRefusalTests(unittest.TestCase):
             def client(self, *a, **k): raise AssertionError("No SDK client permitted")
         mixed_lambda = fixture(); mixed_lambda["pipeline"]["function_arn"] = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:agent-relay-prod-session-pipeline"
         mixed_db = fixture(); mixed_db["postgres"]["resource_arn"] = f"arn:aws:rds:{REGION}:{ACCOUNT}:db:other-dev-pg"
-        for c in (fixture(confirmed=installation(name_prefix="other")), fixture(confirmed=installation(environment="prod")), {**fixture(), "name_prefix": "other"}, mixed_lambda, mixed_db):
+        mixed_search = fixture(); mixed_search["search"]["url"] = "https://vpc-agent-relay-dev-search-foreignopaque.us-west-2.es.amazonaws.com"
+        for c in (mixed_search, fixture(confirmed=installation(name_prefix="other")), fixture(confirmed=installation(environment="prod")), {**fixture(), "name_prefix": "other"}, mixed_lambda, mixed_db):
             for call in (lambda: probe.configuration(NoCalls(), c, installation=installation()), lambda: probe.postgres(NoCalls(), c, None, installation=installation()), lambda: probe.storage(NoCalls(), c, RUN, installation=installation()), lambda: probe.lambda_smoke(NoCalls(), c, "reviewed", installation=installation()), lambda: probe.Search(NoCalls(), c, installation=installation()), *(lambda phase=p: probe.search_phase(NoCalls(), c, phase, RUN, installation=installation()) for p in ("search-bootstrap", "search-write", "search-read", "search-cleanup"))):
                 with self.assertRaises(probe.Failed): call()
     def test_no_legacy_helper_fallback(self):
@@ -122,14 +124,23 @@ class DataProofRefusalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             config = Path(td)/"config.json"; config.write_text(json.dumps(fixture(confirmed=installation(name_prefix="other"))))
             boto = types.ModuleType("boto3"); boto.Session = lambda **kwargs: self.fail("No SDK session permitted")
-            args = ["lambda-smoke", "--config", str(config), "--run-id", RUN, "--confirm-account", ACCOUNT, "--confirm-environment", "dev", "--confirm-region", REGION, "--confirm-environment-class", "development", "--confirm-name-prefix", "agent-relay", "--confirm-live"]
+            args = ["lambda-smoke", "--config", str(config), "--run-id", RUN, "--confirm-account", ACCOUNT, "--confirm-environment", "dev", "--confirm-region", REGION, "--confirm-environment-class", "development", "--confirm-name-prefix", "agent-relay", "--confirm-search-url", fixture()["search"]["url"], "--confirm-live"]
             with patch.dict("sys.modules", {"boto3": boto}), self.assertRaises(probe.Failed): probe.main(args)
     def test_pippen_confirmation_is_exact_and_cannot_be_omitted(self):
         i = installation(name_prefix="pippen-sbx-ar", pippen_agent="proof", pippen_session="12345678-0000-4000-8000-000000000000")
         c = fixture(confirmed=i); probe.validate(c, i, RUN)
         for candidate in (installation(name_prefix="pippen-sbx-ar"), i._replace(pippen_session="22345678-0000-4000-8000-000000000000")):
             with self.assertRaises(probe.Failed): probe.validate(c, candidate, RUN)
-        with self.assertRaises(probe.Failed): probe.confirm_installation(ACCOUNT, REGION, "dev", "development", "agent-relay", "proof", None)
+        with self.assertRaises(probe.Failed): probe.confirm_installation(ACCOUNT, REGION, "dev", "development", "agent-relay", fixture()["search"]["url"], "proof", None)
+    def test_same_named_domain_opaque_endpoint_is_independently_confirmed(self):
+        c = fixture(); c["search"]["url"] = "https://vpc-agent-relay-dev-search-foreignopaque.us-west-2.es.amazonaws.com"
+        with self.assertRaises(probe.Failed): probe.validate(c, installation(), RUN)
+        # Deliberately selecting a DIFFERENT confirmed origin is an explicit
+        # operator decision, never a default copied from untrusted targets.
+        reviewed = installation(search_url=c["search"]["url"])
+        probe.validate(c, reviewed, RUN)
+        for url in ("http://vpc-agent-relay-dev-search-abc.us-west-2.es.amazonaws.com", "https://attacker.example", "https://vpc-agent-relay-dev-search-abc.us-west-2.es.amazonaws.com/path"):
+            with self.assertRaises(probe.Failed): installation(search_url=url)
     def test_immutable_confirmation_contains_only_scalars(self):
         i = installation()
         self.assertTrue(all(isinstance(x, str) or x is None for x in i))
@@ -151,9 +162,35 @@ class DataProofRefusalTests(unittest.TestCase):
         client.http = NoHttp()
         for path in ("@attacker.example", "//attacker.example", "https://attacker.example", "", None, 1, "/x#fragment", "/x\\@attacker.example", "/x\r\nHost: attacker.example", "/x\t", "/x\x7f", "/x\u0085", "/" + "x"*4096):
             with self.subTest(path=path), self.assertRaises(probe.Failed): client.call("GET", path)
+    def test_direct_search_wrong_account_or_common_lease_refuses_before_signing(self):
+        pippen = installation(name_prefix="pippen-sbx-ar", pippen_agent="proof", pippen_session="12345678-0000-4000-8000-000000000000")
+        common = f"arn:aws:sts::{ACCOUNT}:assumed-role/agent-session/agent-12345678-0000-4000-8000-000000000000"
+        for i, caller in ((installation(), {"Account": "222222222222", "Arn": "arn:aws:sts::222222222222:assumed-role/reader/runtime"}), (installation(), {"Account": ACCOUNT, "Arn": common}), (pippen, {"Account": ACCOUNT, "Arn": common.replace("12345678", "22345678")}), (installation(), {"Account": ACCOUNT, "Arn": "malformed"}), (installation(), {"Account": ACCOUNT})):
+            class Session:
+                def client(self, name):
+                    self.asserted = name
+                    return types.SimpleNamespace(get_caller_identity=lambda: caller)
+                def get_credentials(self): raise AssertionError("No credentials/signing permitted")
+            client = probe.Search(Session(), fixture(confirmed=i), installation=i)
+            client.http = types.SimpleNamespace(open=lambda *a, **k: self.fail("No HTTP permitted"))
+            with self.subTest(caller=caller), self.assertRaises(probe.Failed): client.call("GET", "/_cluster/health")
+    def test_direct_search_selected_pippen_runtime_caller_reaches_credentials_after_gate(self):
+        i = installation(name_prefix="pippen-sbx-ar", pippen_agent="proof", pippen_session="12345678-0000-4000-8000-000000000000")
+        class ReachedCredentials(Exception): pass
+        class Session:
+            def client(self, name):
+                return types.SimpleNamespace(get_caller_identity=lambda: {"Account": ACCOUNT, "Arn": f"arn:aws:sts::{ACCOUNT}:assumed-role/protected-reader/runtime"})
+            def get_credentials(self): raise ReachedCredentials()
+        client = probe.Search(Session(), fixture(confirmed=i), installation=i)
+        auth = types.ModuleType("botocore.auth"); auth.SigV4Auth = lambda *a: None
+        request = types.ModuleType("botocore.awsrequest"); request.AWSRequest = lambda **kwargs: types.SimpleNamespace(**kwargs)
+        with patch.dict("sys.modules", {"botocore.auth": auth, "botocore.awsrequest": request}), self.assertRaises(ReachedCredentials): client.call("GET", "/_cluster/health")
     def test_direct_search_legitimate_query_keeps_origin_and_signs_only_after_gate(self):
         sent = []
         class Session:
+            def client(self, name):
+                assert name == "sts"
+                return types.SimpleNamespace(get_caller_identity=lambda: {"Account": ACCOUNT, "Arn": f"arn:aws:sts::{ACCOUNT}:assumed-role/reader/runtime"})
             def get_credentials(self): return types.SimpleNamespace(get_frozen_credentials=lambda: "synthetic")
         aws_module = types.ModuleType("botocore.awsrequest")
         aws_module.AWSRequest = lambda **kwargs: types.SimpleNamespace(**kwargs)

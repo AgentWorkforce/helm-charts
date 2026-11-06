@@ -37,6 +37,7 @@ class ConfirmedInstallation(NamedTuple):
     environment: str
     environment_class: str
     name_prefix: str
+    search_url: str
     pippen_agent: Optional[str] = None
     pippen_session: Optional[str] = None
 
@@ -45,17 +46,21 @@ def matches(pattern, value):
     return isinstance(value, str) and re.fullmatch(pattern, value) is not None
 
 
-def confirm_installation(account, region, environment, environment_class, name_prefix, pippen_agent=None, pippen_session=None):
+def confirm_installation(account, region, environment, environment_class, name_prefix, search_url, pippen_agent=None, pippen_session=None):
     require(matches(r"[0-9]{12}", account))
     require(matches(r"[a-z]{2}(?:-[a-z]+)+-[0-9]+", region))
     require(matches(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", environment) and len(environment) <= 16)
     require(environment_class in ("development", "staging", "production"))
     require(matches(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name_prefix) and len(name_prefix + "-" + environment) <= 21)
+    require(isinstance(search_url, str))
+    origin = urlsplit(search_url)
+    require(origin.scheme == "https" and origin.port in (None, 443) and origin.username is None and origin.password is None and origin.path in ("", "/") and not origin.query and not origin.fragment)
+    require(matches(rf"vpc-{re.escape(name_prefix + '-' + environment)}-search-[a-z0-9]+\.{re.escape(region)}\.es\.amazonaws\.com", origin.hostname))
     require((pippen_agent is None) == (pippen_session is None))
     if pippen_agent is not None:
         require(name_prefix.startswith("pippen-sbx-") and matches(r"[a-z0-9][a-z0-9-]{1,40}", pippen_agent))
         require(matches(r"[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}", pippen_session))
-    return ConfirmedInstallation(account, region, environment, environment_class, name_prefix, pippen_agent, pippen_session)
+    return ConfirmedInstallation(account, region, environment, environment_class, name_prefix, search_url, pippen_agent, pippen_session)
 
 
 def fields(value, keys):
@@ -65,7 +70,7 @@ def fields(value, keys):
 def validate(config, installation, run_id=None):
     require(isinstance(installation, ConfirmedInstallation))
     confirm_installation(*installation) # Reject invalid directly constructed tuples too.
-    account, region, environment, environment_class, prefix, agent, lease = installation
+    account, region, environment, environment_class, prefix, search_url, agent, lease = installation
     if run_id is not None:
         require(matches(r"[0-9a-f]{32}", run_id))
     fields(config, ("account_id", "region", "environment", "environment_class", "name_prefix", "pippen", "postgres", "storage", "search", "pipeline"))
@@ -78,6 +83,7 @@ def validate(config, installation, run_id=None):
     fields(storage, ("bucket", "prefix", "role_arn"))
     require(search["domain_name"] == name + "-search" and search["index_prefix"] == name + "-")
     require(search["domain_arn"] == f"arn:aws:es:{region}:{account}:domain/{name}-search")
+    require(search["url"] == search_url)
     url = urlsplit(search["url"])
     require(url.scheme == "https" and url.port in (None, 443) and url.username is None and url.password is None and url.path in ("", "/") and not url.query and not url.fragment)
     require(matches(rf"vpc-{re.escape(name)}-search-[a-z0-9]+\.{re.escape(region)}\.es\.amazonaws\.com", url.hostname))
@@ -124,7 +130,7 @@ def phase_identity(session, config, installation, run_id=None, role=None):
     caller = session.client("sts").get_caller_identity()
     require(caller["Account"] == installation.account and matches(rf"arn:aws:(?:sts|iam)::{installation.account}:[A-Za-z0-9+=,.@_/-]+", caller["Arn"]))
     if installation.pippen_session is None:
-        require(not matches(r"arn:aws:sts::[0-9]{12}:assumed-role/agent-session/agent-.+", caller["Arn"]))
+        require(not matches(r"arn:aws:sts::[0-9]{12}:assumed-role/agent-session/[^/]+", caller["Arn"]))
     if installation.pippen_session is not None and role is None:
         require(caller["Arn"] == f"arn:aws:sts::{installation.account}:assumed-role/agent-session/agent-{installation.pippen_session}")
     if role is not None:
@@ -169,6 +175,7 @@ def document_ack(status, body, index, identifier):
 class Search:
     def __init__(self, session, config, *, installation):
         validate(config, installation)
+        self.installation = installation # Immutable scalar confirmation; no nested target config.
         self.session, self.url, self.region = session, config["search"]["url"].rstrip("/"), installation.region
         self.http = build_opener(ProxyHandler({}), NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
 
@@ -178,9 +185,17 @@ class Search:
         require(isinstance(path, str) and 1 <= len(path) <= 4096 and path.startswith("/") and not path.startswith("//"))
         require(all(0x21 <= ord(character) <= 0x7e for character in path) and "\\" not in path and "#" not in path)
         require(method in ("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH"))
+        require(self.url == self.installation.search_url.rstrip("/"))
         origin, target = urlsplit(self.url), urlsplit(self.url + path)
         require(target.scheme == origin.scheme == "https" and target.netloc == origin.netloc and target.hostname == origin.hostname)
         require(target.username is None and target.password is None and origin.username is None and origin.password is None and not target.fragment)
+        # Direct imports cannot bypass the account/common-lease gate. Exact
+        # phase-role checks remain in search_phase; this is not IAM authority.
+        caller = self.session.client("sts").get_caller_identity()
+        account = self.installation.account
+        require(isinstance(caller, dict) and caller.get("Account") == account and matches(rf"arn:aws:(?:sts|iam)::{account}:[A-Za-z0-9+=,.@_/-]+", caller.get("Arn")))
+        if matches(rf"arn:aws:sts::{account}:assumed-role/agent-session/[^/]+", caller["Arn"]):
+            require(self.installation.pippen_session is not None and caller["Arn"] == f"arn:aws:sts::{account}:assumed-role/agent-session/agent-{self.installation.pippen_session}")
         from botocore.auth import SigV4Auth
         from botocore.awsrequest import AWSRequest
         data = body.encode() if ndjson else (json.dumps(body).encode() if body is not None else None)
@@ -375,13 +390,14 @@ def main(argv=None):
     parser.add_argument("--confirm-region", required=True)
     parser.add_argument("--confirm-environment-class", required=True, choices=["development", "staging", "production"])
     parser.add_argument("--confirm-name-prefix", required=True, help="Independently reviewed installation prefix; do not copy from untrusted target JSON")
+    parser.add_argument("--confirm-search-url", required=True, help="Exact private HTTPS URL from a separately reviewed native installation record; never auto-copy target JSON")
     parser.add_argument("--confirm-pippen-agent")
     parser.add_argument("--confirm-pippen-session")
     parser.add_argument("--confirm-live", action="store_true", required=True)
     parser.add_argument("--rds-ca", type=Path)
     parser.add_argument("--lambda-code-sha256", help="Reviewed Lambda ZIP CodeSha256 in base64; required for ZIP smoke")
     args = parser.parse_args(argv)
-    installation = confirm_installation(args.confirm_account, args.confirm_region, args.confirm_environment, args.confirm_environment_class, args.confirm_name_prefix, args.confirm_pippen_agent, args.confirm_pippen_session)
+    installation = confirm_installation(args.confirm_account, args.confirm_region, args.confirm_environment, args.confirm_environment_class, args.confirm_name_prefix, args.confirm_search_url, args.confirm_pippen_agent, args.confirm_pippen_session)
     config = validate(json.loads(args.config.read_text()), installation, args.run_id)
     import boto3
     session = boto3.Session(region_name=config["region"])
