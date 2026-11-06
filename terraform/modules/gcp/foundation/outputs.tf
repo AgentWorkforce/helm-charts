@@ -11,16 +11,17 @@ output "identity" {
 output "network" {
   description = "Data-state inputs: postgres network_self_link/allocated_ip_range, and functions vpc_connector. PSA completion is an explicit dependency."
   value = {
-    self_link                   = google_compute_network.this.self_link
-    id                          = google_compute_network.this.id
-    subnet_self_link            = google_compute_subnetwork.nodes.self_link
-    pod_range_name              = "pods"
-    service_range_name          = "services"
-    ranges                      = var.network_ranges
-    allocated_ip_range          = google_compute_global_address.private_services.name
-    private_services_connection = google_service_networking_connection.private_services.id
-    functions_vpc_connector     = try(google_vpc_access_connector.this[0].id, null)
-    nat_enabled                 = var.enable_nat
+    self_link                    = google_compute_network.this.self_link
+    id                           = google_compute_network.this.id
+    subnet_self_link             = google_compute_subnetwork.nodes.self_link
+    pod_range_name               = "pods"
+    service_range_name           = "services"
+    ranges                       = var.network_ranges
+    allocated_ip_range           = google_compute_global_address.private_services.name
+    private_services_connection  = google_service_networking_connection.private_services.id
+    functions_vpc_connector      = try(google_vpc_access_connector.this[0].id, null)
+    functions_vpc_connector_name = try(google_vpc_access_connector.this[0].name, null)
+    nat_enabled                  = var.enable_nat
   }
   depends_on = [google_service_networking_connection.private_services]
 }

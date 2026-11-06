@@ -1,6 +1,11 @@
 locals {
   prefix = "${var.name}-${var.environment}"
-  labels = merge(var.labels, { environment = var.environment, managed-by = "terraform" })
+  # Serverless VPC Access counts each hyphen twice and requires length <21.
+  # Fixed 64-bit digest suffix keeps the full accepted prefix/environment in
+  # the identity instead of truncating either into a colliding readable name.
+  # "ar-" + 16 hex characters has 19 literal / 20 effective characters.
+  connector_name = "ar-${substr(sha256(jsonencode([var.name, var.environment])), 0, 16)}"
+  labels         = merge(var.labels, { environment = var.environment, managed-by = "terraform" })
   # IPv4 intervals allow offline overlap and RFC1918 checks without provider calls.
   ranges = { for k, c in var.network_ranges : k => {
     start = try(sum([for i, n in split(".", cidrhost(c, 0)) : tonumber(n) * pow(256, 3 - i)]), -1)
@@ -109,7 +114,7 @@ resource "google_compute_subnetwork" "connector" {
 resource "google_vpc_access_connector" "this" {
   count         = var.create_connector ? 1 : 0
   project       = var.project_id
-  name          = "${var.name}-${substr(var.environment, 0, 4)}-vpc"
+  name          = local.connector_name
   region        = var.region
   machine_type  = "e2-micro"
   min_instances = 2

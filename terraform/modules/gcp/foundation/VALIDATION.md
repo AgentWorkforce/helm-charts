@@ -4,9 +4,9 @@ This receipt covers source/offline validation only. No cloud credentials, GCP
 project reads, live plans/applies, deployment, IAM rollout, DNS changes, teardown,
 state import or API enable/disable was performed.
 
-- Terraform 1.17.1 darwin_arm64: `init -backend=false`, `validate`, 16 module mock
+- Terraform 1.17.1 darwin_arm64: `init -backend=false`, `validate`, 21 module mock
   cases and 2 thin-root mock cases passed.
-- OpenTofu 1.13.6 darwin_arm64: the same 16+2 cases and validation passed in an
+- OpenTofu 1.13.6 darwin_arm64: the same 21+2 cases and validation passed in an
   isolated source copy on T7, with `init -backend=false`.
 - Google provider 7.46.2; random 3.9.1 only for the existing PostgreSQL test
   composition fixture (administrator creation disabled, no generated password).
@@ -40,7 +40,10 @@ dead-letter forwarding, TLS+AUTH and managed Redis acknowledgment, deletion
 protection/protection-release shape, output contract, plus invalid project,
 project-number mismatch, environment mismatch/invalid environment, public-wide
 and IPv6/empty operator access, overlapping/public networks, actor zone mismatch,
-and guessed GKE version rejection.
+and guessed GKE version rejection. Connector regressions check Google's effective
+length rule (hyphens count twice), maximum-length and maximally hyphenated accepted
+prefixes, the usual agent-relay prefix, distinct full prefixes with identical
+leading characters, environment separation, and a fixed deterministic name.
 
 Mock success does not establish project service-agent readiness, available GKE
 versions/channel, organization policy, capacity/quotas, private connectivity,

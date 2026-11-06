@@ -39,7 +39,14 @@ service-account key, retrieves a Secret Manager payload, or changes APIs.
   Non-Google registry pulls and actor public HTTPS egress need NAT or another
   separately designed path; an NAT-disabled plan is not a working full suite.
 - Optional dedicated Serverless VPC Access connector feeds the existing functions
-  module. ALL_TRAFFIC function egress additionally requires reviewed NAT. This
+  module. Its deterministic `ar-<16 hex>` name hashes the complete installation
+  prefix and environment (64-bit SHA-256 prefix), rather than truncating similar
+  prefixes/environments into identical readable names. It has 20 effective
+  characters under
+  [Google's connector naming rule](https://docs.cloud.google.com/vpc/docs/configure-serverless-vpc-access),
+  which counts hyphens twice and requires fewer than 21. Project/region scope
+  comes from the connector's resource identity. ALL_TRAFFIC function egress
+  additionally requires reviewed NAT. This
   source does not install private DNS, VPN, firewall rules for customer workloads,
   external ingress, certificates, DNS, registries or image artifacts. GKE and
   Serverless VPC Access create their own platform firewall rules. Review those
@@ -132,7 +139,7 @@ application. Backend/recovery storage must be external and outlive all three.
 | --- | --- |
 | `identity` | Approved project ID, immutable number, environment, region receipts/fences |
 | `network.self_link`, `allocated_ip_range`, `private_services_connection` | `modules/gcp/postgres.network_self_link`, `.allocated_ip_range`; apply foundation first and wait for PSA |
-| `network.functions_vpc_connector` | `modules/gcp/functions.vpc_connector`; never omit private SQL routing |
+| `network.functions_vpc_connector`, `network.functions_vpc_connector_name` | `modules/gcp/functions.vpc_connector`; never omit private SQL routing |
 | `network.subnet_self_link`, range names/ranges | Reviewed private networking and NetworkPolicy profile |
 | `gke.name`, `.location`, `.private_endpoint`, `.id` | Separate application/search root with exec authentication and private operator path |
 | `gke.workload_pool`, `workload_identity` | `modules/gcp/object-storage.workload_identity` exact namespace/KSA entries and other per-resource IAM |

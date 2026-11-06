@@ -170,3 +170,50 @@ run "retirement_requires_explicit_protection_change" {
     error_message = "Reviewed protection release affects owned compute/queues but must never disconnect retained managed data automatically."
   }
 }
+
+run "connector_max_prefix" {
+  command = plan
+  variables { name = "abcdefghijkl" }
+  assert {
+    condition     = length(replace(google_vpc_access_connector.this[0].name, "-", "--")) == 20 && can(regex("^ar-[0-9a-f]{16}$", google_vpc_access_connector.this[0].name)) && google_vpc_access_connector.this[0].name == "ar-633791c1058fb35d" && output.network.functions_vpc_connector_name == google_vpc_access_connector.this[0].name
+    error_message = "A maximum-length accepted prefix must produce a valid connector name below Google's 21 effective-character limit, with hyphens counted twice."
+  }
+}
+# Frozen baseline from connector_max_prefix keeps comparisons portable across
+# Terraform/OpenTofu test engines that differ in cross-run reference support.
+run "connector_hyphen_heavy_prefix" {
+  command = plan
+  variables { name = "a-----------" }
+  assert {
+    condition     = length(replace(google_vpc_access_connector.this[0].name, "-", "--")) < 21 && google_vpc_access_connector.this[0].name != "ar-633791c1058fb35d"
+    error_message = "The most hyphen-heavy accepted prefix must remain bounded and distinct from another accepted name."
+  }
+}
+run "connector_environment_disambiguation" {
+  command = plan
+  variables {
+    name                 = "abcdefghijkl"
+    environment          = "staging"
+    expected_environment = "staging"
+  }
+  assert {
+    condition     = length(replace(google_vpc_access_connector.this[0].name, "-", "--")) < 21 && google_vpc_access_connector.this[0].name != "ar-633791c1058fb35d"
+    error_message = "The same installation prefix in different environments must create different valid connector names."
+  }
+}
+run "connector_full_prefix_disambiguation" {
+  command = plan
+  variables { name = "abcdefghijkm" }
+  assert {
+    condition     = google_vpc_access_connector.this[0].name != "ar-633791c1058fb35d" && length(replace(google_vpc_access_connector.this[0].name, "-", "--")) < 21
+    error_message = "Distinct accepted prefixes sharing their first eleven characters must not collapse after truncation."
+  }
+}
+run "connector_agent_relay_regression" {
+  command = plan
+  variables { name = "agent-relay" }
+  assert {
+    condition     = length(replace(google_vpc_access_connector.this[0].name, "-", "--")) < 21
+    error_message = "The normal hyphenated agent-relay prefix previously exceeded the connector's effective name limit."
+  }
+}
