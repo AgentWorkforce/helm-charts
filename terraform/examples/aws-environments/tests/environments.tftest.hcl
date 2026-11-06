@@ -458,14 +458,14 @@ run "negative_completeness_timestamp_refused" {
 run "artifact_refuses_dotted_index" {
   command = plan
   variables {
-    pipeline_runtime = "lambda"
-    activate_lambda = true
-    lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
     function_security_group_ids = ["sg-function"]
     lambda_runtime_bindings = {
-      search_index = "agent-relay-dev-sessions.v2"
-      state_backend_id = "agent-relay-dev-sessions"
-      complete_since = "epoch"
+      search_index       = "agent-relay-dev-sessions.v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
       postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   }
@@ -475,14 +475,14 @@ run "artifact_refuses_dotted_index" {
 run "artifact_refuses_202_character_index" {
   command = plan
   variables {
-    pipeline_runtime = "lambda"
-    activate_lambda = true
-    lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
     function_security_group_ids = ["sg-function"]
     lambda_runtime_bindings = {
-      search_index = "agent-relay-dev-${join("", [for i in range(186) : "s"])}"
-      state_backend_id = "agent-relay-dev-sessions"
-      complete_since = "epoch"
+      search_index       = "agent-relay-dev-${join("", [for i in range(186) : "s"])}"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
       postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   }
@@ -492,19 +492,19 @@ run "artifact_refuses_202_character_index" {
 run "artifact_accepts_201_character_index" {
   command = plan
   variables {
-    pipeline_runtime = "lambda"
-    activate_lambda = true
-    lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
     function_security_group_ids = ["sg-function"]
     lambda_runtime_bindings = {
-      search_index = "agent-relay-dev-${join("", [for i in range(185) : "s"])}"
-      state_backend_id = "agent-relay-dev-sessions"
-      complete_since = "epoch"
+      search_index       = "agent-relay-dev-${join("", [for i in range(185) : "s"])}"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
       postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
   }
   assert {
-    condition = length(output.lambda_shared_environment.OPENSEARCH_INDEX) == 201 && output.pipeline.activation_enabled
+    condition     = length(output.lambda_shared_environment.OPENSEARCH_INDEX) == 201 && output.pipeline.activation_enabled
     error_message = "The maximum index accepted by the matching private artifact must remain usable."
   }
 }
