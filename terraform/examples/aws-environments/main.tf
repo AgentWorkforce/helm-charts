@@ -19,11 +19,14 @@ locals {
     "pippen:agent"   = var.pippen.agent
     "pippen:session" = var.pippen.session_id
   })
-  role_path         = var.pippen == null ? "/" : "/pippen/workload/"
-  boundary          = var.pippen == null ? null : "arn:aws:iam::${var.account_id}:policy/pippen-agent-session-boundary"
-  storage_prefix    = "proofs/${var.environment}/"
-  search_indexer_sa = "${var.release_name}-search-indexer"
-  search_reader_sa  = "${var.release_name}-session-read"
+  role_path             = var.pippen == null ? "/" : "/pippen/workload/"
+  boundary              = var.pippen == null ? null : "arn:aws:iam::${var.account_id}:policy/pippen-agent-session-boundary"
+  storage_prefix        = "proofs/${var.environment}/"
+  search_indexer_sa     = "${var.release_name}-search-indexer"
+  search_reader_sa      = "${var.release_name}-session-read"
+  external_runtime_arns = var.existing_runtime_roles == null ? [] : compact(values(var.existing_runtime_roles))
+  indexer_role_arn      = var.existing_runtime_roles == null ? module.search.indexer_role_arn : var.existing_runtime_roles.indexer_role_arn
+  reader_role_arn       = var.existing_runtime_roles == null ? module.search.reader_role_arn : var.existing_runtime_roles.reader_role_arn
 }
 
 resource "terraform_data" "environment_contract" {
@@ -46,6 +49,14 @@ resource "terraform_data" "environment_contract" {
         "arn:aws:iam::${var.account_id}:role${local.role_path}${local.name}-sessions",
       ], var.search_master_user_arn)
       error_message = "OpenSearch administration requires a separate role in this environment's account."
+    }
+    precondition {
+      condition = var.existing_runtime_roles == null ? true : (
+        (var.pipeline_runtime == "lambda") == (var.existing_runtime_roles.pipeline_role_arn != null) &&
+        length(distinct(local.external_runtime_arns)) == length(local.external_runtime_arns) &&
+        alltrue([for arn in local.external_runtime_arns : startswith(arn, "arn:aws:iam::${var.account_id}:role/") && arn != var.search_master_user_arn && arn != "arn:aws:iam::${var.account_id}:role${local.role_path}${local.name}-sessions"])
+      )
+      error_message = "External runtime roles must be distinct same-account roles, separate from administration/storage; supply a pipeline role exactly when pipeline_runtime=lambda."
     }
     precondition {
       condition     = !local.production || (var.deletion_protection && length(var.search_subnet_ids) == 3)
@@ -140,13 +151,14 @@ module "search" {
   multi_az_with_standby_enabled = local.production
   ebs_volume_size               = local.profile.search_storage
   workload_roles = {
+    create                   = var.existing_runtime_roles == null
     name_prefix              = "${local.name}-search"
     path                     = local.role_path
     permissions_boundary_arn = local.boundary
     indexer_service_accounts = [{ cluster_name = var.eks_cluster_name, namespace = local.namespace, service_account = local.search_indexer_sa }]
     reader_service_accounts  = [{ cluster_name = var.eks_cluster_name, namespace = local.namespace, service_account = local.search_reader_sa }]
   }
-  additional_principal_arns = var.pipeline_runtime == "lambda" ? [module.pipeline[0].execution_role_arn] : []
+  additional_principal_arns = distinct(concat(local.external_runtime_arns, var.pipeline_runtime == "lambda" ? [module.pipeline[0].execution_role_arn] : []))
   tags                      = local.tags
 
   depends_on = [terraform_data.environment_contract]
@@ -163,6 +175,7 @@ module "pipeline" {
   package                      = var.lambda_package == null ? {} : var.lambda_package
   vpc_subnet_ids               = var.private_subnet_ids
   vpc_security_group_ids       = var.function_security_group_ids
+  existing_execution_role_arn  = var.existing_runtime_roles == null ? null : var.existing_runtime_roles.pipeline_role_arn
   role_path                    = local.role_path
   permissions_boundary_arn     = local.boundary
   search_index_enabled         = true

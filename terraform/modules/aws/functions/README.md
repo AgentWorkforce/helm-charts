@@ -28,6 +28,32 @@ worker stages.
 - **VPC:** set `vpc_subnet_ids` and `vpc_security_group_ids` to reach a private HoopDb. The subnets need NAT or VPC endpoints for S3, SQS, Secrets Manager and CloudWatch Logs.
 - **Bucket notifications:** `aws_s3_bucket_notification` owns the bucket's whole notification configuration. If anything else notifies from the bucket, set `manage_bucket_notification = false` and add `bucket_notification_queue_configuration` there.
 
+## Operator-owned execution role
+
+`existing_execution_role_arn = null` preserves managed-role behavior. Supplying
+an exact same-account/partition role ARN sets the actual Lambda `role` and
+`execution_role_arn` output to that ARN and creates **no IAM role or inline
+policy**. No IAM role lookup is performed. `role_path` and
+`permissions_boundary_arn` configure only a managed role.
+
+Before applying, a separate approved operator phase must create and verify the
+role's Lambda service trust, runtime permissions, permissions boundary and any
+mandatory guards. An ARN cannot establish those properties. The caller still
+needs its approved, scoped `iam:PassRole` permission; this module grants no
+caller permissions. `execution_role_policy_json` describes the proposed runtime
+permissions in either mode, including `additional_policy_statements`, but does
+not attach them in external mode. Some service-generated ARNs may remain
+unknown until resources exist; this output alone is not proof of an installed
+policy or a bootstrap ordering mechanism. Retain the execution role and required
+ENI permissions through function/VPC-interface retirement. The role's owner
+must remove the role only after its consumers are gone.
+
+Moved blocks migrate existing managed-role state without replacing roles when
+upgrading to the counted resources. Switching an already-managed deployment to an external ARN
+would otherwise propose destroying the previously managed IAM resources. Use a
+separately reviewed state ownership handoff before that switch; this module
+does not adopt, detach or forget existing IAM resources automatically.
+
 <!-- BEGIN_TF_DOCS -->
 ### Requirements
 
@@ -78,7 +104,7 @@ worker stages.
 | bucket\_name | The sessions (Locker) bucket that receives manifests: the same bucket as sessions-pipeline worker.locker.bucket. | `string` | n/a | yes |
 | name | Prefix for the function, queues, rules, alarms and role (<name>-session-pipeline, <name>-session-events, ...). | `string` | n/a | yes |
 | package | The pipeline code, exactly one of: image\_uri (a container image in ECR, package\_type Image), s3\_bucket + s3\_key (a zip in S3), or filename (a local zip). The hosted stack builds src/session-pipeline/lambda.ts from AgentWorkforce/96BullSessions with export "handler". | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) s3_object_version = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | n/a | yes |
-| additional\_policy\_statements | Extra IAM statements for the execution role (for example es:ESHttpPost/Put on an OpenSearch domain once the services have that backend). | `any` | `[]` | no |
+| additional\_policy\_statements | Extra statements in execution\_role\_policy\_json, attached only for a managed role (for example es:ESHttpPost/Put on an OpenSearch domain once the services have that backend). | `any` | `[]` | no |
 | alarm\_actions | SNS topic ARNs for the DLQ, backlog-age and error alarms. Empty creates the alarms with actions disabled. | `list(string)` | `[]` | no |
 | architecture | arm64 or x86\_64 (must match the package). | `string` | `"arm64"` | no |
 | batch\_size | SQS messages per invocation. | `number` | `10` | no |
@@ -91,6 +117,7 @@ worker stages.
 | dlq\_retention\_seconds | DLQ retention (14 days, the SQS maximum). | `number` | `1209600` | no |
 | enabled | Enable queue consumption and schedules. Set false while provisioning the function, secret and database bootstrap; direct authorized invocations remain possible. | `bool` | `true` | no |
 | environment | Extra (non-secret) environment variables, merged over the module's defaults (see the README). Secrets go in the pipeline secret, never here. | `map(string)` | `{}` | no |
+| existing\_execution\_role\_arn | Existing same-account Lambda execution role. Null creates the role and inline policy; otherwise this module authors neither. The operator must verify trust, permissions, boundary and guards separately. | `string` | `null` | no |
 | handler | Handler for zip packages (ignored for images). | `string` | `"index.handler"` | no |
 | key\_prefix | Tenant key base the services write under (the services' TENANT\_KEY\_BASE, "96bulls"). | `string` | `"96bulls"` | no |
 | lambda\_kms\_key\_arn | KMS key for the function's environment variables. null uses the AWS managed key. | `string` | `null` | no |
@@ -102,12 +129,12 @@ worker stages.
 | max\_receive\_count | Receives before a message moves to the DLQ. | `number` | `8` | no |
 | maximum\_batching\_window\_seconds | How long the mapping waits to fill a batch. | `number` | `20` | no |
 | memory\_size | Function memory in MB. | `number` | `3008` | no |
-| permissions\_boundary\_arn | Permissions boundary for the execution role. | `string` | `null` | no |
+| permissions\_boundary\_arn | Permissions boundary for the managed execution role; unused with existing\_execution\_role\_arn. | `string` | `null` | no |
 | queue\_kms\_key\_arn | Customer managed KMS key for both queues. null uses SQS-managed SSE. A CMK's key policy must let s3.amazonaws.com use it (kms:GenerateDataKey, kms:Decrypt) for the bucket notification. | `string` | `null` | no |
 | queue\_retention\_seconds | session-events retention. | `number` | `345600` | no |
 | reconcile\_minutes | Reconcile schedule (lost notifications). The lookback (PIPELINE\_RECONCILE\_LOOKBACK\_MINUTES) is twice this. | `number` | `30` | no |
 | reserved\_concurrent\_executions | Reserved concurrency for the function (-1: unreserved). | `number` | `-1` | no |
-| role\_path | IAM path for the execution role. | `string` | `"/"` | no |
+| role\_path | IAM path for the managed execution role; unused with existing\_execution\_role\_arn. | `string` | `"/"` | no |
 | runtime | Runtime for zip packages (ignored for images). The hosted pipeline runs nodejs24.x. | `string` | `"nodejs24.x"` | no |
 | search\_index\_enabled | SEARCH\_INDEX\_ENABLED. Off: pointers only (Postgres pg\_trgm search). On: the pipeline also writes the search index through its SearchIndexAdapter. ClickHouse credentials go in the pipeline secret; Amazon OpenSearch uses IAM instead: grant the execution role with additional\_policy\_statements and list it in the search module's additional\_principal\_arns. | `bool` | `false` | no |
 | secret\_arn | Existing pipeline secret ARN, when create\_secret is false. | `string` | `null` | no |
@@ -128,7 +155,8 @@ worker stages.
 | bucket\_notification\_queue\_configuration | The S3 notification queue configuration, for buckets whose notifications are managed elsewhere (manage\_bucket\_notification = false). |
 | dlq\_arn | Dead-letter queue ARN. |
 | dlq\_url | Dead-letter queue URL (inspect and redrive from here). |
-| execution\_role\_arn | Execution role ARN (grant it OpenSearch or other access with additional\_policy\_statements, or in the resource's own policy). |
+| execution\_role\_arn | Actual Lambda execution role ARN, managed here or supplied by the operator. |
+| execution\_role\_policy\_json | Proposed runtime permissions, including additional\_policy\_statements. Attached only in managed-role mode; external-role installation and validation belong to the operator. May contain values unknown until resources exist. |
 | function\_arn | Pipeline function ARN. |
 | function\_name | Pipeline function name. |
 | queue\_arn | session-events queue ARN. |

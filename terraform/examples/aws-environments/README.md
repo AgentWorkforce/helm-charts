@@ -107,6 +107,53 @@ delete the baseline workspace bucket. End with the owner-run Pippen sweep and a
 `clean: true` receipt; investigate quarantine rather than bypassing it. Pippen
 currently supplies AWS sandboxes, not GCP project vending.
 
+## Existing runtime identities
+
+By default this root manages the search and Lambda execution roles as before.
+For an approved bootstrap phase that owns these identities separately, set:
+
+```hcl
+existing_runtime_roles = {
+  indexer_role_arn  = "arn:aws:iam::111111111111:role/bootstrap/example-indexer"
+  reader_role_arn   = "arn:aws:iam::111111111111:role/bootstrap/example-reader"
+  # Required exactly when pipeline_runtime = "lambda"; omit in worker mode.
+  pipeline_role_arn = "arn:aws:iam::111111111111:role/bootstrap/example-pipeline"
+}
+```
+
+Replace the placeholder account and role names. Both search identities are
+required together; Lambda mode additionally requires the pipeline identity.
+Empty, wildcard, foreign-account, duplicate, administrative and managed-storage
+role aliases are refused. The search module's existing `workload_roles.create =
+false` path creates neither its roles/inline policies nor Pod Identity
+associations. The functions module similarly authors no execution-role IAM.
+All supplied runtime principals are included in the private OpenSearch domain
+policy alongside its distinct administrator. Fine-grained OpenSearch role
+mappings are still required: a domain policy does not make the reader read-only.
+`verification.search` exports the supplied effective ARNs; verification and
+application service-account names retain their existing contract.
+
+The product bootstrap owner must independently verify the exact role, trust,
+policy, boundary and mandatory-guard hashes, and arrange the exact EKS Pod
+Identity associations before application use. This state performs no IAM reads
+or validation of those properties, and does not grant the caller `iam:PassRole`
+or other permissions. `runtime_role_policy_json` exports proposed indexer,
+reader and optional pipeline permissions for review, including the Lambda's
+OpenSearch indexer grant. It never installs them for external roles; generated
+resource references can remain unknown until creation. The separate bootstrap
+must resolve the exact resource scope and dependency order before activation.
+
+These are product-owned bootstrap prerequisites, not new product resources in
+Pippen's baseline. This option does **not** make the complete data root IAM-free:
+the sessions-bucket access role and its worker/alleyoop associations retain their
+existing ownership. It also does not provide a closed Pippen capability profile,
+change the accepted caller contract, install guard infrastructure or prove any
+live deployment. Those remain separate reviewed work. Null retains current
+managed-role defaults. For existing deployments, use a reviewed IAM state
+ownership handoff before changing modes; otherwise Terraform proposes deleting
+the old managed roles/policies/associations. Preserve external identities through
+consumer retirement and remove them in their owning bootstrap phase afterwards.
+
 ## Lambda bootstrap and the complete application
 
 Worker mode is the default. Lambda mode requires `pipeline_runtime = "lambda"`,
@@ -240,6 +287,7 @@ exact destroy inventory and recovery proof; do not remove state to bypass them.
 | deletion\_protection | Database API deletion protection. Production refuses false. Final snapshots and S3 versioning remain enabled. | `bool` | `true` | no |
 | enable\_relayfile | Include Relayfile in the full-suite application contract; its actor identities/Secrets must be configured by the application layer. | `bool` | `false` | no |
 | environment\_class | Sizing/protection tier; environment names remain independent of this classification. | `string` | `"development"` | no |
+| existing\_runtime\_roles | Operator-owned runtime identities. Null manages search/pipeline roles here. Otherwise supply both search roles and, only in Lambda mode, the pipeline role. Trust, policies, guards and EKS associations must already be verified outside this state. | ```object({ indexer_role_arn = string reader_role_arn = string pipeline_role_arn = optional(string) })``` | `null` | no |
 | function\_security\_group\_ids | Lambda security groups with private database/search access and egress to the required AWS services. | `list(string)` | `[]` | no |
 | kms\_key\_arn | Existing customer-managed key; null uses AWS-managed encryption keys. | `string` | `null` | no |
 | lambda\_package | Compatible pipeline artifact when pipeline\_runtime=lambda: exactly one immutable image, versioned S3 zip, or local zip with hash. No credential values. | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) s3_object_version = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | `null` | no |
@@ -260,6 +308,7 @@ exact destroy inventory and recovery proof; do not remove state to bypass them.
 | application\_contract | Required full-suite components and selected pipeline mode. This contract does not replace complete Helm values, actor roles, bootstrap or runtime compatibility proof. |
 | environment | Environment identity to compare with the separately configured backend before apply. |
 | pipeline | Lambda runtime bindings, or null in worker mode. Populate the secret out of band and verify actual handler compatibility before activation. |
+| runtime\_role\_policy\_json | Proposed search and Lambda runtime permissions for operator review. External mode does not attach them or validate existing IAM configuration. Values may be unknown until service resources exist. |
 | service\_accounts | Distinct environment-scoped workload bindings; the application chart must use these identities. |
 | verification | Non-secret input for the private-runner data-path verifier. Contains secret references, never secret values. |
 <!-- END_TF_DOCS -->
