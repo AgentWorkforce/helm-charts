@@ -159,7 +159,8 @@ consumer retirement and remove them in their owning bootstrap phase afterwards.
 The private managed-OpenSearch Lambda artifact needs explicit non-secret runtime
 configuration in addition to its immutable ZIP/image reference. Set
 `lambda_runtime_bindings` using the Lambda profile example. The index must start
-with `<name_prefix>-<environment>-`; choose a fresh reviewed index for a changed
+with `<name_prefix>-<environment>-` and match the artifact's lowercase letter/digit/
+underscore/hyphen grammar (maximum 201 characters, no dots). Choose a fresh reviewed index for a changed
 search representation. `state_backend_id` is the shared writer/reader base ID
 (maximum 114 identifier characters); the matching artifact appends
 `.js-literal-v2` before using its 128-character PostgreSQL completeness key.

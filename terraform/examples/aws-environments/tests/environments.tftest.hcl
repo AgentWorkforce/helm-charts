@@ -454,3 +454,57 @@ run "negative_completeness_timestamp_refused" {
   }
   expect_failures = [var.lambda_runtime_bindings]
 }
+
+run "artifact_refuses_dotted_index" {
+  command = plan
+  variables {
+    pipeline_runtime = "lambda"
+    activate_lambda = true
+    lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index = "agent-relay-dev-sessions.v2"
+      state_backend_id = "agent-relay-dev-sessions"
+      complete_since = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "artifact_refuses_202_character_index" {
+  command = plan
+  variables {
+    pipeline_runtime = "lambda"
+    activate_lambda = true
+    lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index = "agent-relay-dev-${strrep("s", 186)}"
+      state_backend_id = "agent-relay-dev-sessions"
+      complete_since = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "artifact_accepts_201_character_index" {
+  command = plan
+  variables {
+    pipeline_runtime = "lambda"
+    activate_lambda = true
+    lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index = "agent-relay-dev-${strrep("s", 185)}"
+      state_backend_id = "agent-relay-dev-sessions"
+      complete_since = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  assert {
+    condition = length(output.lambda_shared_environment.OPENSEARCH_INDEX) == 201 && output.pipeline.activation_enabled
+    error_message = "The maximum index accepted by the matching private artifact must remain usable."
+  }
+}

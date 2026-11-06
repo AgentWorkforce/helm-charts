@@ -235,12 +235,12 @@ variable "lambda_runtime_bindings" {
 
   validation {
     condition = var.lambda_runtime_bindings == null ? true : (
-      can(regex("^[a-z0-9][a-z0-9._-]{0,254}$", var.lambda_runtime_bindings.search_index)) &&
+      can(regex("^[a-z0-9][a-z0-9_-]{0,200}$", var.lambda_runtime_bindings.search_index)) &&
       can(regex("^[a-zA-Z0-9._-]{1,114}$", var.lambda_runtime_bindings.state_backend_id)) &&
       can(regex("^[a-z_][a-z0-9_]{0,62}$", var.lambda_runtime_bindings.projection_schema)) &&
       can(regex("^[0-9a-f]{64}$", var.lambda_runtime_bindings.postgres_ca_sha256)) &&
       (var.lambda_runtime_bindings.complete_since == "epoch" ? true : try(timecmp(var.lambda_runtime_bindings.complete_since, "1970-01-01T00:00:00Z") >= 0, false))
     )
-    error_message = "Supply a lowercase OpenSearch index, backend ID of at most 114 identifier characters (the artifact adds .js-literal-v2), PostgreSQL schema identifier, lowercase SHA256, and epoch or a nonnegative RFC3339 completeness timestamp."
+    error_message = "Supply a lowercase OpenSearch index of at most 201 characters without dots, backend ID of at most 114 identifier characters (the artifact adds .js-literal-v2), PostgreSQL schema identifier, lowercase SHA256, and epoch or a nonnegative RFC3339 completeness timestamp."
   }
 }
