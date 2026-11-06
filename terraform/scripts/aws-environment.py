@@ -71,6 +71,9 @@ def verify_caller(variables, caller, environ):
     if caller.get("Account") != account:
         raise Refused("AWS caller account does not match the environment")
     pippen = variables.get("pippen")
+    lease_keys = ("PIPPEN_SANDBOX_ACCOUNT_ID", "PIPPEN_SANDBOX_SESSION_ID", "PIPPEN_SANDBOX_AGENT_ID")
+    if pippen is None and any(key in environ for key in lease_keys):
+        raise Refused("Pippen execution requires the declared lease identity; customer defaults are refused")
     if pippen is not None:
         if not isinstance(pippen, dict) or not all(isinstance(pippen.get(k), str) and pippen[k] for k in ("agent", "session_id")):
             raise Refused("Pippen agent/session identity is incomplete")

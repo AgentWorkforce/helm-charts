@@ -94,7 +94,8 @@ pippen sandbox exec aws-proof -- \
 ```
 
 Use the same wrapper for show/apply/output. The runner verifies Pippen's exported
-account/agent/session and exact STS caller. Roles use `/pippen/workload/`, the
+account/agent/session and exact STS caller, and refuses a Pippen execution whose
+configuration omits the lease instead of silently using customer defaults. Roles use `/pippen/workload/`, the
 Pippen boundary, reserved tags and bucket prefix. No fallback to an admin role
 is provided. Before live use the Pippen owner must confirm the deployed boundary
 and sweeper support RDS, OpenSearch, Lambda/SQS/EventBridge and the foundation

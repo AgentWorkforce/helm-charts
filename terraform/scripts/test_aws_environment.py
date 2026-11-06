@@ -77,6 +77,14 @@ class EnvironmentBoundaryTests(unittest.TestCase):
         with self.assertRaises(runner.Refused):
             runner.verify_caller(variables, caller, environ)
 
+    def test_pippen_execution_cannot_omit_lease_configuration(self):
+        variables = {"account_id": "111111111111"}
+        caller = {"Account": "111111111111", "Arn": "arn:aws:sts::111111111111:assumed-role/agent-session/agent-expected"}
+        for key in ("PIPPEN_SANDBOX_ACCOUNT_ID", "PIPPEN_SANDBOX_SESSION_ID", "PIPPEN_SANDBOX_AGENT_ID"):
+            with self.subTest(key=key), self.assertRaises(runner.Refused):
+                runner.verify_caller(variables, caller, {key: "present"})
+        runner.verify_caller(variables, {"Account": "111111111111", "Arn": "arn:aws:sts::111111111111:assumed-role/customer-deployer/session"}, {})
+
     def test_apply_requires_exact_plan_and_unchanged_inputs(self):
         plan, receipt = self.root / "plan", self.root / "receipt.json"
         plan.write_bytes(b"synthetic plan")
