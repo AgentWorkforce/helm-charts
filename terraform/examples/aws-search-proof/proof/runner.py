@@ -103,11 +103,13 @@ class Runner:
                 process.poll()
                 try: os.killpg(process.pid, sig)
                 except ProcessLookupError: return True
+                except PermissionError: pass # Unknown, not absence; still reap/probe within the bound.
                 end = time.monotonic() + 5
                 while time.monotonic() < end:
                     process.poll()
                     try: os.killpg(process.pid, 0)
                     except ProcessLookupError: return True
+                    except PermissionError: pass # May be transient while the group exits.
                     time.sleep(.1)
             return False
         try:

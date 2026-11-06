@@ -211,6 +211,35 @@ class RunnerGuards(unittest.TestCase):
         self.assertEqual(record['outcome'],'interrupted');self.assertTrue(record['process_group_absent'])
         self.assertEqual({sig:signal.getsignal(sig) for sig in original},original)
 
+    def test_transient_group_permission_denial_is_retried_until_exact_absence(self):
+        self.subject.transport=None
+        fake=SimpleNamespace(pid=123456789,returncode=0,wait=Mock(),poll=Mock(return_value=0))
+        def launch(*args,**kwargs):
+            signal.raise_signal(signal.SIGTERM)
+            return fake
+        responses=[None,PermissionError('synthetic probe denied'),ProcessLookupError()]
+        with patch.object(r.subprocess,'Popen',side_effect=launch),patch.object(r.os,'killpg',side_effect=responses) as groups,patch.object(r.time,'sleep'):
+            with self.assertRaises(r.CommandInterrupted):self.subject.run(['inert'])
+        self.assertEqual(groups.call_count,3)
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signal.SIGTERM)
+        self.assertTrue(record['process_group_absent']);self.assertTrue(self.subject.settled)
+
+    def test_persistent_group_permission_denial_records_unsettled_and_never_advances(self):
+        self.subject.transport=None
+        fake=SimpleNamespace(pid=123456789,returncode=0,wait=Mock(),poll=Mock(return_value=0))
+        def launch(*args,**kwargs):
+            signal.raise_signal(signal.SIGTERM)
+            return fake
+        ticks=iter(range(0,100,3))
+        with patch.object(r.subprocess,'Popen',side_effect=launch),patch.object(r.os,'killpg',side_effect=PermissionError('synthetic denied')),patch.object(r.time,'monotonic',side_effect=lambda:next(ticks)),patch.object(r.time,'sleep'):
+            with self.assertRaises(r.CommandInterrupted):self.subject.run(['inert'])
+        self.assertGreaterEqual(fake.poll.call_count,2)
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signal.SIGTERM)
+        self.assertFalse(record['process_group_absent']);self.assertFalse(self.subject.settled)
+        with self.assertRaisesRegex(RuntimeError,'Unsettled'):self.subject.apply('a'*64,'b'*64)
+
     def test_prelaunch_signal_does_not_spawn_and_restores_handlers(self):
         self.subject.transport=None
         original={sig:signal.getsignal(sig) for sig in [signal.SIGTERM,signal.SIGHUP,signal.SIGINT]}
@@ -268,10 +297,11 @@ finally:
                 time.sleep(.04)
                 try:os.kill(wrapper.pid,signal.SIGHUP)
                 except ProcessLookupError:break
-            wrapper.communicate(timeout=8)
+            wrapper_stdout,wrapper_stderr=wrapper.communicate(timeout=8)
             records=list(self.subject.path('commands').glob('*.json'));self.assertEqual(len(records),1)
             record=json.loads(records[0].read_text())
-            self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signal.SIGTERM)
+            diagnostics=json.dumps({'wrapper_returncode':wrapper.returncode,'wrapper_stdout':wrapper_stdout,'wrapper_stderr':wrapper_stderr,'child_stdout':records[0].with_suffix('.stdout').read_text(),'child_stderr':records[0].with_suffix('.stderr').read_text(),'record':record,'finally_report':report.read_text() if report.exists() else None},sort_keys=True)
+            self.assertEqual(record['outcome'],'interrupted',diagnostics);self.assertEqual(record['signal'],signal.SIGTERM,diagnostics)
             self.assertEqual(record['pgid'],owned['pid']);self.assertTrue(record['process_group_absent'])
             self.assertEqual(json.loads(report.read_text()),{'restored':True,'settled':True})
             self.assertEqual(json.loads(self.subject.path('phase.json').read_text()),{'status':'pending'})
