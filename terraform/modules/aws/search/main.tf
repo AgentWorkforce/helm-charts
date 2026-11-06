@@ -3,6 +3,14 @@ data "aws_region" "current" {}
 data "aws_partition" "current" {}
 
 locals {
+  # Select only non-secret attributes; concatenating entire provider objects
+  # propagates the schema's password sensitivity into unrelated public outputs.
+  domain = {
+    domain_name        = one(concat(aws_opensearch_domain.this[*].domain_name, aws_opensearch_domain.disposable[*].domain_name))
+    arn                = one(concat(aws_opensearch_domain.this[*].arn, aws_opensearch_domain.disposable[*].arn))
+    endpoint           = one(concat(aws_opensearch_domain.this[*].endpoint, aws_opensearch_domain.disposable[*].endpoint))
+    dashboard_endpoint = one(concat(aws_opensearch_domain.this[*].dashboard_endpoint, aws_opensearch_domain.disposable[*].dashboard_endpoint))
+  }
   account_id = data.aws_caller_identity.current.account_id
   region     = data.aws_region.current.region
   partition  = data.aws_partition.current.partition
@@ -145,7 +153,14 @@ resource "aws_cloudwatch_log_resource_policy" "this" {
 # Domain
 # ---------------------------------------------------------------------------
 
+# Preserve the existing protected domain's state address without recreation.
+moved {
+  from = aws_opensearch_domain.this
+  to   = aws_opensearch_domain.this[0]
+}
+
 resource "aws_opensearch_domain" "this" {
+  count = var.disposable ? 0 : 1
   #checkov:skip=CKV_AWS_248:security_group_ids is a required input; the default security group is never used implicitly.
   #checkov:skip=CKV_AWS_317:Audit logs need the security plugin's audit config; add AUDIT_LOGS to log_publishing to enable them.
   domain_name    = var.domain_name
@@ -243,11 +258,116 @@ resource "aws_opensearch_domain" "this" {
       condition     = !var.multi_az_with_standby_enabled || (local.az_count == 3 && var.dedicated_master_enabled && var.dedicated_master_count == 3 && local.instance_count % 3 == 0)
       error_message = "Multi-AZ with Standby needs three subnets (AZs), three dedicated masters and a multiple of three data nodes."
     }
-    # OpenSearch domains have no API deletion protection: Terraform refuses to
-    # destroy or replace the transcript index. To delete it on purpose, run
-    # terraform state rm on this resource and delete the domain with the AWS
-    # CLI or console.
+    # Default domains retain the literal guard, including when count changes.
+    # A protected domain cannot be converted to disposable by toggling the input.
     prevent_destroy = true
+  }
+
+  depends_on = [aws_cloudwatch_log_resource_policy.this]
+}
+
+resource "aws_opensearch_domain" "disposable" {
+  count = var.disposable ? 1 : 0
+  #checkov:skip=CKV_AWS_248:security_group_ids is a required input; the default security group is never used implicitly.
+  #checkov:skip=CKV_AWS_317:Audit logs need the security plugin's audit config; add AUDIT_LOGS to log_publishing to enable them.
+  domain_name    = var.domain_name
+  engine_version = var.engine_version
+
+  cluster_config {
+    instance_type                 = var.instance_type
+    instance_count                = local.instance_count
+    dedicated_master_enabled      = var.dedicated_master_enabled
+    dedicated_master_type         = var.dedicated_master_enabled ? var.dedicated_master_type : null
+    dedicated_master_count        = var.dedicated_master_enabled ? var.dedicated_master_count : null
+    multi_az_with_standby_enabled = var.multi_az_with_standby_enabled
+    zone_awareness_enabled        = local.az_count > 1
+
+    dynamic "zone_awareness_config" {
+      for_each = local.az_count > 1 ? [1] : []
+      content {
+        availability_zone_count = local.az_count
+      }
+    }
+  }
+
+  vpc_options {
+    subnet_ids         = var.subnet_ids
+    security_group_ids = var.security_group_ids
+  }
+
+  ebs_options {
+    ebs_enabled = true
+    volume_type = var.ebs_volume_type
+    volume_size = var.ebs_volume_size
+    iops        = var.ebs_iops
+    throughput  = var.ebs_throughput
+  }
+
+  encrypt_at_rest {
+    enabled    = true
+    kms_key_id = var.kms_key_arn
+  }
+
+  node_to_node_encryption {
+    enabled = true
+  }
+
+  domain_endpoint_options {
+    enforce_https       = true
+    tls_security_policy = var.tls_security_policy
+  }
+
+  advanced_security_options {
+    enabled                        = true
+    anonymous_auth_enabled         = false
+    internal_user_database_enabled = false
+    master_user_options {
+      master_user_arn = var.master_user_arn
+    }
+  }
+
+  snapshot_options {
+    automated_snapshot_start_hour = var.automated_snapshot_start_hour
+  }
+
+  software_update_options {
+    auto_software_update_enabled = var.auto_software_update_enabled
+  }
+
+  off_peak_window_options {
+    enabled = true
+    off_peak_window {
+      window_start_time {
+        hours   = var.off_peak_window_start.hours
+        minutes = var.off_peak_window_start.minutes
+      }
+    }
+  }
+
+  dynamic "log_publishing_options" {
+    for_each = aws_cloudwatch_log_group.this
+    content {
+      log_type                 = log_publishing_options.key
+      cloudwatch_log_group_arn = log_publishing_options.value.arn
+    }
+  }
+
+  advanced_options = var.advanced_options
+
+  tags = var.tags
+
+  lifecycle {
+    precondition {
+      condition     = local.instance_count % local.az_count == 0
+      error_message = "instance_count must be a multiple of the number of subnet_ids (AZs)."
+    }
+    precondition {
+      condition     = !var.multi_az_with_standby_enabled || (local.az_count == 3 && var.dedicated_master_enabled && var.dedicated_master_count == 3 && local.instance_count % 3 == 0)
+      error_message = "Multi-AZ with Standby needs three subnets (AZs), three dedicated masters and a multiple of three data nodes."
+    }
+    # Explicitly disposable from creation; never use for durable/customer data.
+    # Normal retirement remains a reviewed Terraform destroy, with state intact.
+    prevent_destroy = false
   }
 
   depends_on = [aws_cloudwatch_log_resource_policy.this]
@@ -257,7 +377,7 @@ resource "aws_opensearch_domain" "this" {
 # create-time cycle. Every request is also checked by fine-grained access
 # control, so IAM here is the outer gate only.
 resource "aws_opensearch_domain_policy" "this" {
-  domain_name = aws_opensearch_domain.this.domain_name
+  domain_name = local.domain.domain_name
   access_policies = jsonencode({
     Version = "2012-10-17"
     Statement = [{

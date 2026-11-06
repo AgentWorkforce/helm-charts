@@ -1,3 +1,10 @@
+variable "disposable" {
+  description = "Explicitly create a new disposable domain with Terraform destruction enabled. Defaults to protected; immutable for an existing domain. Protected domains cannot be converted by toggling this input."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "domain_name" {
   description = "OpenSearch domain name (3-28 characters, lowercase letter first)."
   type        = string

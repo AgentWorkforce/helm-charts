@@ -39,27 +39,27 @@ run "defaults_are_private_and_encrypted" {
   command = plan
 
   assert {
-    condition     = length(one(aws_opensearch_domain.this.vpc_options).subnet_ids) == 3
+    condition     = length(one(aws_opensearch_domain.this[0].vpc_options).subnet_ids) == 3
     error_message = "The domain must be a VPC domain."
   }
   assert {
-    condition     = one(aws_opensearch_domain.this.encrypt_at_rest).enabled && one(aws_opensearch_domain.this.node_to_node_encryption).enabled
+    condition     = one(aws_opensearch_domain.this[0].encrypt_at_rest).enabled && one(aws_opensearch_domain.this[0].node_to_node_encryption).enabled
     error_message = "Encryption at rest and node-to-node encryption must be on."
   }
   assert {
-    condition     = one(aws_opensearch_domain.this.domain_endpoint_options).enforce_https
+    condition     = one(aws_opensearch_domain.this[0].domain_endpoint_options).enforce_https
     error_message = "HTTPS must be enforced."
   }
   assert {
     condition = (
-      one(aws_opensearch_domain.this.advanced_security_options).enabled &&
-      !one(aws_opensearch_domain.this.advanced_security_options).anonymous_auth_enabled &&
-      !one(aws_opensearch_domain.this.advanced_security_options).internal_user_database_enabled
+      one(aws_opensearch_domain.this[0].advanced_security_options).enabled &&
+      !one(aws_opensearch_domain.this[0].advanced_security_options).anonymous_auth_enabled &&
+      !one(aws_opensearch_domain.this[0].advanced_security_options).internal_user_database_enabled
     )
     error_message = "Fine-grained access control with IAM master user, no anonymous or internal users."
   }
   assert {
-    condition     = one(aws_opensearch_domain.this.cluster_config).zone_awareness_enabled && one(one(aws_opensearch_domain.this.cluster_config).zone_awareness_config).availability_zone_count == 3
+    condition     = one(aws_opensearch_domain.this[0].cluster_config).zone_awareness_enabled && one(one(aws_opensearch_domain.this[0].cluster_config).zone_awareness_config).availability_zone_count == 3
     error_message = "Zone awareness follows the subnet count."
   }
   assert {
@@ -119,7 +119,7 @@ run "two_azs_default_to_four_nodes" {
   }
 
   assert {
-    condition     = one(aws_opensearch_domain.this.cluster_config).instance_count == 4
+    condition     = one(aws_opensearch_domain.this[0].cluster_config).instance_count == 4
     error_message = "Two AZs default to four data nodes."
   }
 }
