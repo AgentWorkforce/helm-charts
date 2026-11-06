@@ -28,6 +28,12 @@ interfaces would slot in beside these.
 Every module stands alone. The examples compose them, but nothing forces you to
 use all four, or to use them together.
 
+For separate development, staging, production or named installations, see
+[`examples/aws-environments`](examples/aws-environments). It adds account/region/
+environment state isolation, sizing profiles, a saved-plan runner and opt-in
+live data-path checks. Lambda starts inactive there. This does not establish
+live full-suite proof or replace the foundation/application installation.
+
 ### What the stack consumes
 
 - **Postgres.** Every database is PostgreSQL 17:
@@ -178,6 +184,7 @@ cloud credentials. CI runs the same script in
 - `init -backend=false` and `validate`
 - tflint (terraform, aws and google rulesets)
 - `terraform test` with mock providers
+- Python unit tests for environment/plan guards and verifier refusal cases
 - terraform-docs drift
 - checkov
 

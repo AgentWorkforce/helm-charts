@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Static checks for every Terraform module and example, with no cloud
 # credentials: fmt, init (no backend), validate, tflint, terraform test (mock
-# providers), terraform-docs drift and checkov. Each tool is skipped with a
+# providers), Python runner/verifier unit tests, terraform-docs drift and checkov. Each tool is skipped with a
 # notice when it is not installed, unless CI=true, where a missing tool fails.
 #
 #   terraform/scripts/check.sh            # all checks
@@ -42,6 +42,9 @@ run() {
 }
 
 if want fmt; then run "$TF_BIN" fmt -check -recursive -diff "$ROOT"; fi
+if want test && have python3; then
+  run python3 -m unittest discover -s "$ROOT/scripts" -p 'test_aws_*.py'
+fi
 
 for d in "${dirs[@]}"; do
   echo "== $d"
