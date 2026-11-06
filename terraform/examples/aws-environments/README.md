@@ -290,7 +290,10 @@ new permission grants are added to make a refused read succeed.
 Run `postgres` with `--rds-ca /approved/rds-global-bundle.pem` to require real
 PostgreSQL 17, private RDS metadata, encryption/backups/protection and
 `sslmode=verify-full`, then a temporary-table round trip. Run `storage` under the
-storage role for synthetic put/get/list/delete. Version history is retained.
+storage role for synthetic put/get/list/delete. Every configuration and storage
+S3 request binds `ExpectedBucketOwner` to the separately confirmed account,
+including cleanup; a name containing an account ID is not ownership proof.
+Version history is retained.
 
 Run `search-bootstrap` as the separate administrator, `search-write` as the
 indexer, `search-read` as the reader, then `search-cleanup` as the administrator,
@@ -298,7 +301,9 @@ each with the same arguments and run ID. These phases create temporary scoped
 FGAC roles/mappings and two synthetic indices, verify the marker, reject both
 single and bulk reader writes, reject access to a known foreign index, and
 check the rejected writes had no effects before cleanup. Signed requests never
-follow redirects. Keep cleanup failures visible and retain the run ID so the
+follow redirects. Direct `Search.call` paths must have exactly one leading
+slash, remain on the confirmed HTTPS origin, and contain no backslash, control
+character or fragment; refusal precedes credential access or signing. Keep cleanup failures visible and retain the run ID so the
 exact synthetic resources can be retired later.
 
 `lambda-smoke` checks the deployed arm64/private-VPC artifact and explicitly

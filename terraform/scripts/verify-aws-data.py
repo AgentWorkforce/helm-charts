@@ -173,11 +173,19 @@ class Search:
         self.http = build_opener(ProxyHandler({}), NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
 
     def call(self, method, path, body=None, ndjson=False):
+        # A direct-import caller must not turn the approved base into userinfo
+        # (e.g. base + "@foreign") or introduce alternate URL interpretation.
+        require(isinstance(path, str) and 1 <= len(path) <= 4096 and path.startswith("/") and not path.startswith("//"))
+        require(all(0x21 <= ord(character) <= 0x7e for character in path) and "\\" not in path and "#" not in path)
+        require(method in ("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH"))
+        origin, target = urlsplit(self.url), urlsplit(self.url + path)
+        require(target.scheme == origin.scheme == "https" and target.netloc == origin.netloc and target.hostname == origin.hostname)
+        require(target.username is None and target.password is None and origin.username is None and origin.password is None and not target.fragment)
         from botocore.auth import SigV4Auth
         from botocore.awsrequest import AWSRequest
         data = body.encode() if ndjson else (json.dumps(body).encode() if body is not None else None)
         headers = {"Content-Type": "application/x-ndjson" if ndjson else "application/json"}
-        aws = AWSRequest(method=method, url=self.url + path, data=data, headers=headers)
+        aws = AWSRequest(method=method, url=target.geturl(), data=data, headers=headers)
         credentials = self.session.get_credentials()
         require(credentials is not None)
         SigV4Auth(credentials.get_frozen_credentials(), "es", self.region).add_auth(aws)
@@ -253,12 +261,12 @@ def configuration(session, config, *, installation):
     phase_identity(session, config, installation)
     client = session.client("s3")
     bucket = config["storage"]["bucket"]
-    public = client.get_public_access_block(Bucket=bucket)["PublicAccessBlockConfiguration"]
+    public = client.get_public_access_block(Bucket=bucket, ExpectedBucketOwner=installation.account)["PublicAccessBlockConfiguration"]
     require(all(public.get(k) is True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")))
-    require(client.get_bucket_versioning(Bucket=bucket).get("Status") == "Enabled")
-    rules = client.get_bucket_encryption(Bucket=bucket)["ServerSideEncryptionConfiguration"]["Rules"]
+    require(client.get_bucket_versioning(Bucket=bucket, ExpectedBucketOwner=installation.account).get("Status") == "Enabled")
+    rules = client.get_bucket_encryption(Bucket=bucket, ExpectedBucketOwner=installation.account)["ServerSideEncryptionConfiguration"]["Rules"]
     require(len(rules) == 1 and rules[0]["ApplyServerSideEncryptionByDefault"]["SSEAlgorithm"] == "aws:kms" and rules[0].get("BucketKeyEnabled") is True)
-    policy = json.loads(client.get_bucket_policy(Bucket=bucket)["Policy"])
+    policy = json.loads(client.get_bucket_policy(Bucket=bucket, ExpectedBucketOwner=installation.account)["Policy"])
     require(any(s.get("Effect") == "Deny" and s.get("Condition", {}).get("Bool", {}).get("aws:SecureTransport") in (False, "false") for s in policy.get("Statement", [])))
     search = config["search"]
     domain = session.client("opensearch").describe_domain(DomainName=search["domain_name"])["DomainStatus"]
@@ -302,12 +310,12 @@ def storage(session, config, run_id, *, installation):
     # Only the synthetic current key is deleted. Version history remains under
     # normal retention; an approved administrator cleans versions at retirement.
     try:
-        client.put_object(Bucket=value["bucket"], Key=key, Body=body)
-        result = client.get_object(Bucket=value["bucket"], Key=key)
+        client.put_object(Bucket=value["bucket"], Key=key, Body=body, ExpectedBucketOwner=installation.account)
+        result = client.get_object(Bucket=value["bucket"], Key=key, ExpectedBucketOwner=installation.account)
         require(result["Body"].read() == body)
-        require(any(x["Key"] == key for x in client.list_objects_v2(Bucket=value["bucket"], Prefix=key).get("Contents", [])))
+        require(any(x["Key"] == key for x in client.list_objects_v2(Bucket=value["bucket"], Prefix=key, ExpectedBucketOwner=installation.account).get("Contents", [])))
     finally:
-        client.delete_object(Bucket=value["bucket"], Key=key)
+        client.delete_object(Bucket=value["bucket"], Key=key, ExpectedBucketOwner=installation.account)
 
 
 def search_phase(session, config, phase, run_id, *, installation):

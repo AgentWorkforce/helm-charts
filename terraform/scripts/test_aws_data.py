@@ -142,6 +142,33 @@ class DataProofRefusalTests(unittest.TestCase):
         for section, key in (("search", "reader_role_arn"), ("search", "lambda_role_arn"), ("storage", "role_arn")):
             c = fixture(); c["search"]["master_role_arn"] = c[section][key]
             with self.assertRaises(probe.Failed): probe.validate(c, installation(), RUN)
+    def test_direct_search_call_rejects_authority_or_control_paths_before_creds_or_imports(self):
+        class NoCredentials:
+            def get_credentials(self): raise AssertionError("No credentials permitted")
+        client = probe.Search(NoCredentials(), fixture(), installation=installation())
+        class NoHttp:
+            def open(self, *a, **k): raise AssertionError("No HTTP permitted")
+        client.http = NoHttp()
+        for path in ("@attacker.example", "//attacker.example", "https://attacker.example", "", None, 1, "/x#fragment", "/x\\@attacker.example", "/x\r\nHost: attacker.example", "/x\t", "/x\x7f", "/x\u0085", "/" + "x"*4096):
+            with self.subTest(path=path), self.assertRaises(probe.Failed): client.call("GET", path)
+    def test_direct_search_legitimate_query_keeps_origin_and_signs_only_after_gate(self):
+        sent = []
+        class Session:
+            def get_credentials(self): return types.SimpleNamespace(get_frozen_credentials=lambda: "synthetic")
+        aws_module = types.ModuleType("botocore.awsrequest")
+        aws_module.AWSRequest = lambda **kwargs: types.SimpleNamespace(**kwargs)
+        auth_module = types.ModuleType("botocore.auth")
+        auth_module.SigV4Auth = lambda *a: types.SimpleNamespace(add_auth=lambda request: sent.append(request.url))
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self, bound): return b'{"ok":true}'
+        c = fixture(); client = probe.Search(Session(), c, installation=installation())
+        client.http = types.SimpleNamespace(open=lambda *a, **k: Response())
+        with patch.dict("sys.modules", {"botocore.awsrequest": aws_module, "botocore.auth": auth_module}):
+            self.assertEqual(client.call("PUT", "/agent-relay-dev-proof/_doc/accepted?refresh=true", {}), (200, {"ok": True}))
+        self.assertEqual(sent, [c["search"]["url"] + "/agent-relay-dev-proof/_doc/accepted?refresh=true"])
     def test_unknown_search_phase_is_refused_before_any_client(self):
         with self.assertRaises(probe.Failed): probe.search_phase(None, fixture(), "arbitrary", RUN, installation=installation())
 
@@ -247,6 +274,34 @@ class NativeGates(unittest.TestCase):
         s = NativeSession(); s.invoke_response = {"StatusCode": 200, "FunctionError": "Unhandled", "Payload": io.BytesIO(b'{"ok":true}')}
         cfg = types.ModuleType("botocore.config"); cfg.Config = lambda **kwargs: kwargs
         with patch.dict("sys.modules", {"botocore.config": cfg}), self.assertRaises(probe.Failed): probe.lambda_smoke(s, s.config, "reviewed", installation=s.i)
+
+
+class S3OwnerBinding(unittest.TestCase):
+    def session(self, refuse=False):
+        calls = []; c = fixture()
+        class Client:
+            def get_caller_identity(self): return {"Account": ACCOUNT, "Arn": f"arn:aws:sts::{ACCOUNT}:assumed-role/storage/test"}
+            def operation(self, name, kwargs):
+                calls.append((name, kwargs))
+                if kwargs.get("ExpectedBucketOwner") != ACCOUNT: raise AssertionError("Every S3 operation must bind the confirmed owner")
+                if refuse: raise PermissionError("synthetic expected owner refusal")
+                return {"get_public_access_block": {"PublicAccessBlockConfiguration": {k: True for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")}}, "get_bucket_versioning": {"Status": "Enabled"}, "get_bucket_encryption": {"ServerSideEncryptionConfiguration": {"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms"}, "BucketKeyEnabled": True}]}}, "get_bucket_policy": {"Policy": '{"Statement":[{"Effect":"Deny","Condition":{"Bool":{"aws:SecureTransport":"false"}}}]}'}, "put_object": {}, "get_object": {"Body": io.BytesIO(json.dumps({"marker": RUN}).encode())}, "list_objects_v2": {"Contents": [{"Key": c["storage"]["prefix"] + RUN + "/marker.json"}]}, "delete_object": {}}[name]
+            def __getattr__(self, name): return lambda **kwargs: self.operation(name, kwargs)
+        class Domain:
+            def describe_domain(self, **kwargs): return {"DomainStatus": {"ARN": c["search"]["domain_arn"], "Endpoints": {"vpc": c["search"]["url"].split("//")[1]}, "VPCOptions": {"VPCId": "vpc-synthetic"}, "DomainEndpointOptions": {"EnforceHTTPS": True}, "EncryptionAtRestOptions": {"Enabled": True}, "NodeToNodeEncryptionOptions": {"Enabled": True}, "AdvancedSecurityOptions": {"Enabled": True}}}
+        return types.SimpleNamespace(client=lambda name, **kwargs: Domain() if name == "opensearch" else Client()), calls
+    def test_every_configuration_and_object_api_binds_confirmed_owner(self):
+        s, calls = self.session(); probe.configuration(s, fixture(), installation=installation()); probe.storage(s, fixture(), RUN, installation=installation())
+        self.assertEqual({n for n, _ in calls}, {"get_public_access_block", "get_bucket_versioning", "get_bucket_encryption", "get_bucket_policy", "put_object", "get_object", "list_objects_v2", "delete_object"})
+        self.assertTrue(all(kwargs["ExpectedBucketOwner"] == ACCOUNT for _, kwargs in calls))
+    def test_foreign_owner_refusal_never_becomes_success_or_unbound_cleanup(self):
+        for phase in ("configuration", "storage"):
+            s, calls = self.session(refuse=True)
+            with self.assertRaises(PermissionError):
+                if phase == "configuration": probe.configuration(s, fixture(), installation=installation())
+                else: probe.storage(s, fixture(), RUN, installation=installation())
+            self.assertTrue(calls and all(kwargs["ExpectedBucketOwner"] == ACCOUNT for _, kwargs in calls))
+            self.assertFalse(any(name in ("get_object", "list_objects_v2") for name, _ in calls))
 
 
 class Acknowledgements(unittest.TestCase):
