@@ -14,13 +14,14 @@ not binary/provider attestation or remote backend-state attestation. Terraform's
 own saved-plan/state locking checks still apply. Receipt renames are atomic for
 cooperating live processes, not power-loss durable (directory metadata is not
 fsynced). After a host/filesystem crash, reconcile backend/state and attempt
-evidence before trusting a recovered approval or retrying. Receipt v1 requires a
-new plan.
+evidence before trusting a recovered approval or retrying. Receipts v1/v2 require a
+new reviewed v3 plan.
 """
 import argparse
 import base64
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -32,9 +33,12 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 STACK = ROOT / "examples" / "aws-environments"
+_MODE_SPEC = importlib.util.spec_from_file_location("search_creation_mode", ROOT / "modules/aws/search/creation_mode.py")
+_MODE = importlib.util.module_from_spec(_MODE_SPEC)
+_MODE_SPEC.loader.exec_module(_MODE)
 BACKEND_KEYS = {"bucket", "key", "region", "encrypt", "use_lockfile", "expected_bucket_owner", "kms_key_id", "allowed_account_ids"}
 RC_TEXT = "disable_checkpoint = true\n"
-RECEIPT_KEYS = {"schema_version", "variables_sha256", "backend_sha256", "source_sha256", "artifact_sha256", "artifact_source_path", "artifact_path", "effective_variables_sha256", "effective_variables_path", "plan_sha256", "plan_path", "attempt_id", "variables_path", "backend_path", "source_root", "stack_path", "tool", "cli_config_sha256", "account_id", "environment", "region"}
+RECEIPT_KEYS = {"schema_version", "search_mode_history", "variables_sha256", "backend_sha256", "source_sha256", "artifact_sha256", "artifact_source_path", "artifact_path", "effective_variables_sha256", "effective_variables_path", "plan_sha256", "plan_path", "attempt_id", "variables_path", "backend_path", "source_root", "stack_path", "tool", "cli_config_sha256", "account_id", "environment", "region"}
 
 
 class Refused(Exception):
@@ -97,7 +101,7 @@ def source_digest(root=ROOT):
             raise Refused("Source symlinks are not a complete source seal")
         if not path.is_file():
             continue
-        if not (path.name.endswith((".tf", ".tf.json", ".tofu", ".tofu.json", ".tftpl", ".tfvars", ".tfvars.json")) or path.name in (".terraform.lock.hcl", "aws-environment.py")):
+        if not (path.name.endswith((".tf", ".tf.json", ".tofu", ".tofu.json", ".tftpl", ".tfvars", ".tfvars.json")) or path.name in (".terraform.lock.hcl", "aws-environment.py") or path == root / "modules/aws/search/creation_mode.py"):
             continue
         h.update(str(rel).encode() + b"\0" + checked_path(path).read_bytes() + b"\0")
     return h.hexdigest()
@@ -182,6 +186,18 @@ def verify_plan(plan, receipt, binding, approved_sha):
         raise Refused("Environment/backend/source/artifact changed since planning; create a new plan")
 
 
+def admit_search_plan(prefix, plan, environment):
+    before = digest(plan)
+    payload = json.loads(subprocess.check_output(prefix + ["show", "-json", str(plan)], env=environment))
+    try:
+        history = _MODE.admit(payload)
+    except _MODE.SearchModeError as exc:
+        raise Refused(str(exc)) from exc
+    if digest(plan) != before:
+        raise Refused("Saved plan changed during search history admission")
+    return history
+
+
 def private_bytes(path, data, *, mode=0o600):
     path = checked_path(path, exists=False)
     temporary = path.with_name("." + path.name + "." + uuid.uuid4().hex)
@@ -231,8 +247,10 @@ def staged_binding(effective, artifact):
 def load_receipt(directory, variables_path, backend_path, tool):
     receipt = checked_path(directory / "plan-receipt.json")
     recorded = read_json(receipt)
-    if not isinstance(recorded, dict) or set(recorded) != RECEIPT_KEYS or type(recorded.get("schema_version")) is not int or recorded["schema_version"] != 2:
+    if not isinstance(recorded, dict) or set(recorded) != RECEIPT_KEYS or type(recorded.get("schema_version")) is not int or recorded["schema_version"] != 3:
         raise Refused("Unsupported/corrupt saved-plan receipt; create a new plan")
+    if not isinstance(recorded["search_mode_history"], str) or recorded["search_mode_history"] not in {"fresh", "enrolled", "legacy-or-missing-marker unchanged-domain", "destroy"}:
+        raise Refused("Invalid search history qualification")
     attempt_id = recorded["attempt_id"]
     if not isinstance(attempt_id, str) or not re.fullmatch(r"[a-f0-9]{12}4[a-f0-9]{3}[89ab][a-f0-9]{15}", attempt_id):
         raise Refused("Invalid saved-plan attempt identity")
@@ -331,17 +349,25 @@ def main(argv=None):
         if args.command == "plan":
             plan = attempt / "data.tfplan"
             subprocess.run(prefix + ["plan", "-input=false", f"-var-file={effective}", f"-out={plan}"], env=child_env, check=True)
+            history = admit_search_plan(prefix, plan, child_env)
             assert_sealed(binding, variables_path, backend_path, rc, tool)
             if staged_binding(effective, artifact) != seals:
                 raise Refused("Staged inputs changed during planning")
             checked_path(plan)
-            private_json(directory / "plan-receipt.json", {**binding, "schema_version": 2, "artifact_path": seals["artifact_path"], "effective_variables_sha256": seals["effective_variables_sha256"], "effective_variables_path": str(effective), "attempt_id": attempt_id, "plan_sha256": digest(plan), "plan_path": str(plan), "variables_path": str(variables_path), "backend_path": str(backend_path), "source_root": str(ROOT), "stack_path": str(STACK), **{k: variables[k] for k in ("account_id", "environment", "region")}})
+            private_json(directory / "plan-receipt.json", {**binding, "schema_version": 3, "search_mode_history": history, "artifact_path": seals["artifact_path"], "effective_variables_sha256": seals["effective_variables_sha256"], "effective_variables_path": str(effective), "attempt_id": attempt_id, "plan_sha256": digest(plan), "plan_path": str(plan), "variables_path": str(variables_path), "backend_path": str(backend_path), "source_root": str(ROOT), "stack_path": str(STACK), **{k: variables[k] for k in ("account_id", "environment", "region")}})
             print(f"Saved plan: {plan}\nSHA-256: {digest(plan)}\nReview this plan before invoking apply --approve-plan <SHA-256>.")
         elif args.command in ("apply", "show"):
             # Recheck the receipt, plan and all original/staged seals AFTER init.
             if load_receipt(directory, variables_path, backend_path, tool)[1] != recorded:
                 raise Refused("Active approval changed during initialization")
             verify_plan(plan, receipt, binding, args.approve_plan if args.command == "apply" else digest(plan))
+            if args.command == "apply":
+                history = admit_search_plan(prefix, plan, child_env)
+                if history != recorded["search_mode_history"]:
+                    raise Refused("Search history qualification differs from reviewed plan receipt")
+                if load_receipt(directory, variables_path, backend_path, tool)[1] != recorded:
+                    raise Refused("Active approval changed during search history admission")
+                verify_plan(plan, receipt, binding, args.approve_plan)
             assert_sealed(binding, variables_path, backend_path, rc, tool)
             if staged_binding(effective, artifact) != seals:
                 raise Refused("Staged inputs changed immediately before execution")

@@ -220,9 +220,9 @@ class Runner:
         if destroy: args.append('-destroy')
         self.run(args)
         plan = json.loads(self.run([self.terraform, 'show', '-json', str(saved)]).stdout)
-        changes(plan, self.v, destroy, ledger)
+        history = changes(plan, self.v, destroy, ledger)
         after = self.bindings(); require(after == before, 'Source/input/provider/backend/state changed while preparing the saved plan')
-        packet = {**after, 'plan_sha256': sha(saved), 'plan_json_sha256': digest(canonical(plan)), 'operation': name}
+        packet = {**after, 'plan_sha256': sha(saved), 'plan_json_sha256': digest(canonical(plan)), 'operation': name, 'search_mode_history': history}
         if destroy:
             packet.update(context_sha256=self.sealed_context(original)[1], original_packet_sha256=sha(self.path('create.packet.json')), created_sha256=sha(self.path('created.json')), network_created_sha256=sha(self.path('network-created.json')))
         save(self.path(name + '.plan.json'), plan); save(self.path(name + '.packet.json'), packet)
@@ -239,7 +239,7 @@ class Runner:
         plan = json.loads(self.run([self.terraform, 'show', '-json', str(self.path(name + '.tfplan'))]).stdout)
         require(digest(canonical(plan)) == packet['plan_json_sha256'], 'Saved plan JSON changed')
         ledger = read(self.path('created.json')) if destroy else None
-        changes(plan, self.v, destroy, ledger)
+        require(changes(plan, self.v, destroy, ledger) == packet.get('search_mode_history'), 'Search history qualification differs from the reviewed packet')
         expiry = dt.datetime.fromisoformat(cap['profile_expires_at'].replace('Z', '+00:00'))
         require((expiry - dt.datetime.now(dt.timezone.utc)).total_seconds() >= (3600 if destroy else 7200), 'Immutable profile needs adequate creation/cleanup time; no expiry extension/fallback')
         if destroy:

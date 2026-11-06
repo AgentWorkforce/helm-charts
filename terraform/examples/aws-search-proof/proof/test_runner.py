@@ -11,10 +11,10 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from contract import ADDRESSES, CONTEXT_KEYS, DOMAIN, POLICY, canonical, caller, digest, domain_name, expected_tags, identities
+from contract import ADDRESSES, CONTEXT_KEYS, DOMAIN, POLICY, MARKER, canonical, caller, digest, domain_name, expected_tags, identities
 from files import save, sha
 import runner as r
-from test_contract import create_plan, inherited, inputs, packet
+from test_contract import create_plan, destroy_plan, inherited, inputs, packet
 
 class RunnerGuards(unittest.TestCase):
     def setUp(self):
@@ -93,7 +93,7 @@ class RunnerGuards(unittest.TestCase):
 
     def staged_create(self, fail=False):
         plan=create_plan(self.v);saved=self.subject.path('create.tfplan');saved.write_text('synthetic plan')
-        original={**packet(),'plan_sha256':sha(saved),'plan_json_sha256':digest(canonical(plan))}
+        original={**packet(),'plan_sha256':sha(saved),'plan_json_sha256':digest(canonical(plan)), 'search_mode_history':'fresh'}
         save(self.subject.path('create.packet.json'),original)
         save(self.subject.path('network-before.json'),{'observed_at':__import__('time').time(),'inputs_sha256':sha(self.variables)})
         cap=inherited(self.v,original);self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps(cap)
@@ -115,6 +115,30 @@ class RunnerGuards(unittest.TestCase):
         self.subject.run=run
         return original,cap
 
+    def test_history_gate_rejects_before_creation_packet(self):
+        plan=create_plan(self.v)
+        next(r for r in plan['resource_changes'] if r['address']==MARKER)['change']['after']['input']=False
+        self.subject.bindings=Mock(return_value={})
+        self.subject.identity=Mock()
+        def run(args,**kwargs):
+            if 'plan' in args:self.subject.path('create.tfplan').write_text('synthetic plan')
+            return SimpleNamespace(stdout=json.dumps(plan) if 'show' in args else '')
+        self.subject.run=run
+        with self.assertRaisesRegex(RuntimeError,'mode mismatch'):self.subject.prepare()
+        self.assertFalse(self.subject.path('create.packet.json').exists())
+        self.assertFalse(self.subject.path('phase.json').exists())
+
+    def test_history_gate_rejects_even_exact_hash_review_before_apply(self):
+        original,_=self.staged_create()
+        plan=create_plan(self.v)
+        next(r for r in plan['resource_changes'] if r['address']==MARKER)['change']['after']['input']=False
+        original['plan_json_sha256']=digest(canonical(plan))
+        save(self.subject.path('create.packet.json'),original)
+        self.subject.run=lambda args,**kwargs:SimpleNamespace(stdout=json.dumps(plan)) if 'show' in args else self.fail('No mutation before history admission')
+        with self.assertRaisesRegex(RuntimeError,'mode mismatch'):self.subject.apply(original['plan_sha256'],sha(self.subject.path('create.packet.json')))
+        self.subject.aws.assert_not_called()
+        self.assertFalse(self.subject.path('phase.json').exists())
+
     def test_original_context_is_durable_before_apply_and_survives_capture(self):
         original,cap=self.staged_create()
         self.subject.apply(original['plan_sha256'],sha(self.subject.path('create.packet.json')))
@@ -130,10 +154,9 @@ class RunnerGuards(unittest.TestCase):
         fingerprint=sha(self.subject.path('original-capability-context.json'))
         save(self.subject.path('network-created.json'),{'context_sha256':fingerprint})
         ledger=json.loads(self.subject.path('created.json').read_text())
-        before={DOMAIN:{'domain_name':ledger['domain_name'],'arn':ledger['domain_arn'],'tags':expected_tags(self.v)},POLICY:{'domain_name':ledger['domain_name']},'terraform_data.guard':{}}
-        plan={'resource_changes':[{'address':a,'mode':'managed','change':{'actions':['delete'],'before':before[a]}} for a in ADDRESSES]}
+        plan=destroy_plan(self.v,ledger)
         saved=self.subject.path('destroy.tfplan');saved.write_text('synthetic delete plan')
-        destruction={**original,'plan_sha256':sha(saved),'plan_json_sha256':digest(canonical(plan)),'context_sha256':fingerprint,'original_packet_sha256':sha(self.subject.path('create.packet.json')),'created_sha256':sha(self.subject.path('created.json')),'network_created_sha256':sha(self.subject.path('network-created.json'))}
+        destruction={**original,'plan_sha256':sha(saved),'plan_json_sha256':digest(canonical(plan)),'context_sha256':fingerprint,'original_packet_sha256':sha(self.subject.path('create.packet.json')),'created_sha256':sha(self.subject.path('created.json')),'network_created_sha256':sha(self.subject.path('network-created.json')), 'search_mode_history':'destroy'}
         save(self.subject.path('destroy.packet.json'),destruction)
         def run(args,**kwargs):
             if 'show' in args:return SimpleNamespace(stdout=json.dumps(plan))
@@ -206,6 +229,10 @@ class RunnerGuards(unittest.TestCase):
             nonlocal injected
             if event=='line' and frame.f_code is r.Runner.run.__code__ and frame.f_lineno==boundary and not injected:
                 injected=True;signal.raise_signal(signal.SIGTERM)
+                # CPython3.9 writes the trace-local snapshot back on return.
+                # Refresh it from the actual handler-updated cells, without
+                # assigning an invented signal or changing this boundary.
+                frame.f_locals
             return trace
         fake=SimpleNamespace(pid=123456789,returncode=None,wait=Mock(side_effect=RuntimeError('synthetic wait error')),poll=Mock(return_value=None))
         previous=sys.gettrace()
