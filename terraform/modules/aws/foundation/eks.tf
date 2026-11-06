@@ -26,8 +26,17 @@ resource "aws_eks_cluster" "this" {
     resources = ["secrets"]
     provider { key_arn = var.kms_key_arn }
   }
-  tags       = local.tags
-  depends_on = [aws_cloudwatch_log_group.cluster, aws_iam_role_policy_attachment.this, aws_route.nat, aws_route.internet]
+  tags = local.tags
+  # Routes do not attach their tables to subnets. Keep both associations ready
+  # before the cluster/node/add-on chain and attached throughout its retirement.
+  depends_on = [
+    aws_cloudwatch_log_group.cluster,
+    aws_iam_role_policy_attachment.this,
+    aws_route.nat,
+    aws_route.internet,
+    aws_route_table_association.public,
+    aws_route_table_association.private,
+  ]
 }
 resource "aws_eks_access_entry" "operator" {
   for_each      = var.operator_role_arns

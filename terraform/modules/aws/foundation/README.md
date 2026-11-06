@@ -34,7 +34,13 @@ Foundation state is separate from data and application, and its backend/key outl
 
 EKS API deletion protection defaults to true. A reviewed retirement must first explicitly disable it and verify that change before deletion.
 
+The cluster depends on both public/private subnet route-table associations as well as the routes. This makes them transitive prerequisites of every node group and add-on, keeping associations attached until those consumers retire.
+
 Destroy order in this graph removes storage/DNS add-ons before managed nodes, bootstrap add-ons before cluster, then network. The cluster explicitly depends on its IAM policy attachments so they survive until EKS has retired its managed infrastructure ([provider dependency guidance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster)). AWS controls the cluster SG and ENI lifecycle; dependent external ENIs/load balancers/PVs may block or outlive deletion. Record the exported cluster SG ID plus EKS cluster/node-group IDs and inventory their ENIs/Auto Scaling/EC2/EBS/PrivateLink/NAT/EIP/flow-log resources before and after retirement. Verify service-created groups/ENIs actually disappear; do not blindly delete untagged resources or report a clean teardown from Terraform exit status alone. See [EKS deletion prerequisites](https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html).
+
+## Offline routing dependency regression
+
+After `terraform init -backend=false`, run `python3 tests/check_routing_graph.py` from this module. The checker reads `terraform graph -type=plan` without cloud credentials and requires paths from the cluster, bootstrap add-ons, managed node groups and storage/DNS add-ons to both route resources and both subnet association resources. It fails if any of those 16 paths is absent. The reverse dependency order preserves routes and their subnet attachments until EKS consumers retire; graph ordering alone proves neither network reachability nor clean live retirement. `--graph <saved-plan.dot>` can audit a previously captured graph.
 
 <!-- BEGIN_TF_DOCS -->
 ### Requirements
