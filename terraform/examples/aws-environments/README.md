@@ -62,11 +62,40 @@ python3 terraform/scripts/aws-environment.py show \
 
 Review the saved plan and its account, region, environment, resource inventory,
 cost, retention and networking. After approval of that exact plan, run `apply`
-with the same arguments and `--approve-plan <saved-plan-SHA-256>`. The receipt
-binds the variables, backend, Terraform source, dependency lock files, runner
-and local Lambda artifact bytes. Changed bindings require a new plan. Successful
-apply consumes the receipt. Provider credentials refresh through the runner's
-normal SDK credential chain; the provider also fences the allowed account.
+with the same arguments and `--approve-plan <saved-plan-SHA-256>`. Receipt v2
+binds original variables/backend paths and bytes, Terraform source/dependency
+locks, this wrapper, selected tool family and its run-owned CLI configuration.
+For local Lambda ZIPs, it also binds the original artifact path/hash and private
+content-addressed bytes actually named by the plan's derived variables. Original
+input variables and ZIPs are never rewritten. The active `plan-receipt.json`
+selects `plans/<random-v4-hex>/data.tfplan` and `variables.json`; local artifacts
+live under `artifacts/sha256-<hex>/package.zip`, inside the private run directory.
+Review the derived variables and staged artifact lineage with the saved plan.
+Legacy receipts are refused: create and review a new v2 plan after upgrading.
+
+The wrapper rechecks original/staged inputs, source, backend, CLI configuration
+and receipt around init/plan and immediately before apply. Changed bindings
+require a new plan; a refused operation or failed replacement plan preserves the
+previous unconsumed approval. Every actual apply attempt atomically moves the
+active receipt to that attempt's `apply-attempt-receipt.json` **before** invoking
+Terraform, including when apply fails partially. Do not retry it automatically;
+retain evidence and independently reconcile exact state/native resources before
+reviewing a recovery plan. Receipt renames are atomic for cooperating live
+processes, not power-loss durable: directory metadata is not fsynced. After a
+host/filesystem crash, independently reconcile backend/state and attempt
+evidence before trusting or retrying any recovered approval. This wrapper does
+not own automatic rollback or
+retirement of a customer's existing installation.
+
+All inherited `TF_*` settings are discarded; the child uses only controlled
+input/data-directory/CLI-config settings, with a run-owned configuration that
+disables checkpoints. `TF_BIN` selects only the approved `terraform`/`tofu`
+family before environment sanitization. These are drift checks, not isolation
+from concurrent hostile same-UID or privileged mutation. Use an approved
+PATH/toolchain and exclude concurrent privileged mutation. The wrapper does not
+attest executable/provider bytes or remote backend state; Terraform's own
+saved-plan/state locking checks remain necessary. Provider credentials refresh
+through the runner's normal SDK chain; the provider fences the allowed account.
 
 Use `output` with the same arguments to export **only** non-secret verification
 references to `terraform/.runs/<account>/<region>/<environment>/verification.json`.
@@ -95,7 +124,10 @@ pippen sandbox exec aws-proof -- \
 
 Use the same wrapper for show/apply/output. The runner verifies Pippen's exported
 account/agent/session and exact STS caller, and refuses a Pippen execution whose
-configuration omits the lease instead of silently using customer defaults. Roles use `/pippen/workload/`, the
+configuration omits the lease instead of silently using customer defaults. Any
+`PIPPEN_SANDBOX_*` marker requires the complete exact declared/exported tuple;
+a recognized `agent-session` STS caller cannot opt out by stripping markers.
+These checks do not allocate an account or grant credentials. Roles use `/pippen/workload/`, the
 Pippen boundary, reserved tags and bucket prefix. No fallback to an admin role
 is provided. Before live use the Pippen owner must confirm the deployed boundary
 and sweeper support RDS, OpenSearch, Lambda/SQS/EventBridge and the foundation
