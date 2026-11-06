@@ -480,7 +480,7 @@ run "artifact_refuses_202_character_index" {
     lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
     function_security_group_ids = ["sg-function"]
     lambda_runtime_bindings = {
-      search_index = "agent-relay-dev-${strrep("s", 186)}"
+      search_index = "agent-relay-dev-${join("", [for i in range(186) : "s"])}"
       state_backend_id = "agent-relay-dev-sessions"
       complete_since = "epoch"
       postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -497,7 +497,7 @@ run "artifact_accepts_201_character_index" {
     lambda_package = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
     function_security_group_ids = ["sg-function"]
     lambda_runtime_bindings = {
-      search_index = "agent-relay-dev-${strrep("s", 185)}"
+      search_index = "agent-relay-dev-${join("", [for i in range(185) : "s"])}"
       state_backend_id = "agent-relay-dev-sessions"
       complete_since = "epoch"
       postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
