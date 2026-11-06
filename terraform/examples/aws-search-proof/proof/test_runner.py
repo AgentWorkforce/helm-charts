@@ -1,5 +1,8 @@
 import io
 import json
+import os
+import signal
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -192,5 +195,104 @@ class RunnerGuards(unittest.TestCase):
         record=json.loads(records[0].read_text());self.assertEqual(record['outcome'],'interrupted');self.assertTrue(record['process_group_absent'])
         self.assertIn('synthetic partial',records[0].with_suffix('.stdout').read_text())
         with self.assertRaises(ProcessLookupError):r.os.killpg(record['pgid'],0)
+
+    def test_spawn_assignment_signal_is_deferred_until_owned_pid_known(self):
+        self.subject.transport=None
+        original={sig:signal.getsignal(sig) for sig in [signal.SIGTERM,signal.SIGHUP,signal.SIGINT]}
+        fake=SimpleNamespace(pid=123456789,returncode=0,wait=Mock(),poll=Mock(return_value=0))
+        def launch(*args,**kwargs):
+            signal.raise_signal(signal.SIGTERM)
+            return fake
+        with patch.object(r.subprocess,'Popen',side_effect=launch),patch.object(r.os,'killpg',side_effect=ProcessLookupError):
+            with self.assertRaises(r.CommandInterrupted):self.subject.run(['inert'])
+        fake.wait.assert_not_called()
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['pid'],fake.pid);self.assertEqual(record['signal'],signal.SIGTERM)
+        self.assertEqual(record['outcome'],'interrupted');self.assertTrue(record['process_group_absent'])
+        self.assertEqual({sig:signal.getsignal(sig) for sig in original},original)
+
+    def test_prelaunch_signal_does_not_spawn_and_restores_handlers(self):
+        self.subject.transport=None
+        original={sig:signal.getsignal(sig) for sig in [signal.SIGTERM,signal.SIGHUP,signal.SIGINT]}
+        chmod=r.os.chmod
+        def interrupt_before_launch(*args,**kwargs):
+            chmod(*args,**kwargs)
+            if str(args[0]).endswith('.stdout'):signal.raise_signal(signal.SIGHUP)
+        with patch.object(r.os,'chmod',side_effect=interrupt_before_launch),patch.object(r.subprocess,'Popen') as launch:
+            with self.assertRaises(r.CommandInterrupted):self.subject.run(['inert'])
+        launch.assert_not_called()
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['signal'],signal.SIGHUP);self.assertTrue(record['process_group_absent'])
+        self.assertEqual({sig:signal.getsignal(sig) for sig in original},original)
+
+    def test_inert_sigterm_and_repeated_hup_reap_owned_group_without_advancing_pending(self):
+        self.subject.execution=self.root/'signal-execution' # Fresh owner, including original-source red replay.
+        child_code='''import json,os,signal,subprocess,sys,time
+grand=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"])
+def stop(signum,frame):
+ time.sleep(.3)
+ grand.wait(timeout=3)
+ sys.exit(0)
+signal.signal(signal.SIGTERM,stop)
+print(json.dumps({"pid":os.getpid(),"grandchild":grand.pid}),flush=True)
+while True:time.sleep(1)
+'''
+        source=str(getattr(self,'runner_source',Path(r.__file__)))
+        report=self.root/'signal-report.json'
+        code=f'''import importlib.util,json,signal,sys
+sys.path.insert(0,{str(Path(__file__).parent)!r})
+spec=importlib.util.spec_from_file_location("inert_runner",{source!r});module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+from files import save
+subject=module.Runner({str(self.subject.execution)!r},{str(self.variables)!r},"/usr/bin/true",env={self.env!r})
+previous={{sig:signal.getsignal(sig) for sig in [signal.SIGTERM,signal.SIGHUP,signal.SIGINT]}}
+save(subject.path("phase.json"),{{"status":"pending"}})
+try:
+ subject.run([sys.executable,"-c",{child_code!r}],timeout=15)
+ save(subject.path("phase.json"),{{"status":"captured"}})
+finally:
+ save(__import__("pathlib").Path({str(report)!r}),{{"restored":all(signal.getsignal(sig)==handler for sig,handler in previous.items()),"settled":subject.settled}})
+'''
+        wrapper=subprocess.Popen([sys.executable,'-c',code],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        owned=None
+        try:
+            end=time.monotonic()+8
+            while time.monotonic()<end:
+                logs=list(self.subject.path('commands').glob('*.stdout'))
+                if logs and logs[0].read_text().strip():
+                    owned=json.loads(logs[0].read_text().splitlines()[0]);break
+                if wrapper.poll() is not None:break
+                time.sleep(.02)
+            self.assertIsNotNone(owned,'Inert owned group did not start')
+            os.kill(wrapper.pid,signal.SIGTERM)
+            for _ in range(2):
+                time.sleep(.04)
+                try:os.kill(wrapper.pid,signal.SIGHUP)
+                except ProcessLookupError:break
+            wrapper.communicate(timeout=8)
+            records=list(self.subject.path('commands').glob('*.json'));self.assertEqual(len(records),1)
+            record=json.loads(records[0].read_text())
+            self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signal.SIGTERM)
+            self.assertEqual(record['pgid'],owned['pid']);self.assertTrue(record['process_group_absent'])
+            self.assertEqual(json.loads(report.read_text()),{'restored':True,'settled':True})
+            self.assertEqual(json.loads(self.subject.path('phase.json').read_text()),{'status':'pending'})
+            for pid in [owned['pid'],owned['grandchild']]:
+                with self.assertRaises(ProcessLookupError):os.kill(pid,0)
+            with self.assertRaises(ProcessLookupError):os.killpg(owned['pid'],0)
+        finally:
+            # The original-red runner dies without settlement. Always retire
+            # ONLY this test's recorded group, including after an assertion.
+            if owned:
+                for sig in [signal.SIGTERM,signal.SIGKILL]:
+                    try:os.killpg(owned['pid'],sig)
+                    except ProcessLookupError:break
+                    end=time.monotonic()+2
+                    while time.monotonic()<end:
+                        try:os.killpg(owned['pid'],0)
+                        except ProcessLookupError:break
+                        time.sleep(.02)
+            if wrapper.poll() is None:wrapper.kill()
+            wrapper.communicate(timeout=5)
+            if owned:
+                with self.assertRaises(ProcessLookupError):os.killpg(owned['pid'],0)
 
 if __name__ == '__main__':unittest.main()

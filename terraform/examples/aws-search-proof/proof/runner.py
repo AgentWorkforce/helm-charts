@@ -4,6 +4,8 @@
 Tests inject a transport. Importing this file never invokes a tool/provider.
 Capability metadata is inherited from the selected Pippen CLI, never obtained
 by inspecting its credential_process or accepting a client approval file.
+Catchable TERM/HUP/INT interrupt through owned-group settlement; SIGKILL and host
+crash/power loss cannot provide cleanup or completed evidence guarantees.
 """
 import argparse
 import configparser
@@ -22,6 +24,11 @@ from files import read, save, sha
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT.parents[1] / 'modules/aws/search'
+
+class CommandInterrupted(InterruptedError):
+    def __init__(self, signum):
+        self.signum = signum
+        super().__init__(f'Owned command interrupted by signal {signum}')
 
 class Runner:
     def __init__(self, execution, variables, terraform, env=None, transport=None):
@@ -73,7 +80,24 @@ class Runner:
         prefix = self.path('commands') / str(time.time_ns()); prefix.parent.mkdir(mode=0o700, exist_ok=True)
         metadata = {'args': args, 'outcome': 'launching'}; save(prefix.with_suffix('.json'), metadata)
         process = None; self.settled = False
+        requested = None; raised = False; settling = False
+        previous = {}
+        def interrupt(signum, _frame):
+            nonlocal requested, raised
+            if requested is None: requested = signum
+            # Never raise inside Popen before its owned PID is assigned. A
+            # repeat signal must not interrupt settlement or its evidence write.
+            if process is not None and not settling and not raised:
+                raised = True
+                raise CommandInterrupted(requested)
+        def pending_signal():
+            nonlocal raised
+            if requested is not None:
+                raised = True
+                raise CommandInterrupted(requested)
         def settle():
+            nonlocal settling
+            settling = True
             if process is None: return True
             for sig in [signal.SIGTERM, signal.SIGKILL]:
                 process.poll()
@@ -87,15 +111,25 @@ class Runner:
                     time.sleep(.1)
             return False
         try:
+            for sig in [signal.SIGTERM, signal.SIGHUP, signal.SIGINT]:
+                previous[sig] = signal.signal(sig, interrupt)
             with prefix.with_suffix('.stdout').open('w') as out, prefix.with_suffix('.stderr').open('w') as err:
                 os.chmod(out.name, 0o600); os.chmod(err.name, 0o600)
+                pending_signal() # A signal before launch must not create a child.
                 process = subprocess.Popen(args, cwd=ROOT, env=self.env, stdout=out, stderr=err, start_new_session=True, text=True)
-                metadata.update(pid=process.pid, pgid=process.pid, outcome='running'); save(prefix.with_suffix('.json'), metadata)
+                metadata.update(pid=process.pid, pgid=process.pid, outcome='running')
+                pending_signal() # Includes signals deferred during Popen/assignment.
+                save(prefix.with_suffix('.json'), metadata)
                 process.wait(timeout=timeout); self.settled = settle()
+                pending_signal()
                 require(self.settled, 'Unsettled owned process group; quarantine before recovery')
         except BaseException as error:
             self.settled = settle(); metadata.update(outcome='interrupted', error_type=type(error).__name__, process_group_absent=self.settled)
+            if process is not None: metadata.update(pid=process.pid, pgid=process.pid)
+            if requested is not None: metadata['signal'] = requested
             save(prefix.with_suffix('.json'), metadata); raise
+        finally:
+            for sig, handler in previous.items(): signal.signal(sig, handler)
         metadata.update(outcome='completed', exit_code=process.returncode, process_group_absent=self.settled); save(prefix.with_suffix('.json'), metadata)
         result = subprocess.CompletedProcess(args, process.returncode, prefix.with_suffix('.stdout').read_text(), prefix.with_suffix('.stderr').read_text())
         require(not check or result.returncode == 0, 'Tool failed; preserve private command evidence')
