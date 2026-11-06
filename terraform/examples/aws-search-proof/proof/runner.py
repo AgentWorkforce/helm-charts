@@ -80,24 +80,16 @@ class Runner:
         prefix = self.path('commands') / str(time.time_ns()); prefix.parent.mkdir(mode=0o700, exist_ok=True)
         metadata = {'args': args, 'outcome': 'launching'}; save(prefix.with_suffix('.json'), metadata)
         process = None; self.settled = False
-        requested = None; raised = False; settling = False
+        requested = None
         previous = {}
         def interrupt(signum, _frame):
-            nonlocal requested, raised
+            nonlocal requested
+            # Record only: an asynchronous raise could interrupt exception-entry
+            # cleanup or Popen before its owned PID has been assigned.
             if requested is None: requested = signum
-            # Never raise inside Popen before its owned PID is assigned. A
-            # repeat signal must not interrupt settlement or its evidence write.
-            if process is not None and not settling and not raised:
-                raised = True
-                raise CommandInterrupted(requested)
         def pending_signal():
-            nonlocal raised
-            if requested is not None:
-                raised = True
-                raise CommandInterrupted(requested)
+            if requested is not None: raise CommandInterrupted(requested)
         def settle():
-            nonlocal settling
-            settling = True
             if process is None: return True
             for sig in [signal.SIGTERM, signal.SIGKILL]:
                 process.poll()
@@ -122,7 +114,19 @@ class Runner:
                 metadata.update(pid=process.pid, pgid=process.pid, outcome='running')
                 pending_signal() # Includes signals deferred during Popen/assignment.
                 save(prefix.with_suffix('.json'), metadata)
-                process.wait(timeout=timeout); self.settled = settle()
+                deadline = time.monotonic() + timeout
+                while True:
+                    pending_signal()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        if process.poll() is not None: break
+                        raise subprocess.TimeoutExpired(args, timeout)
+                    try:
+                        process.wait(timeout=min(.1, remaining))
+                        break
+                    except subprocess.TimeoutExpired: pass
+                pending_signal()
+                self.settled = settle()
                 pending_signal()
                 require(self.settled, 'Unsettled owned process group; quarantine before recovery')
         except BaseException as error:

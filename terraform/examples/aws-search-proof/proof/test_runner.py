@@ -1,4 +1,5 @@
 import io
+import inspect
 import json
 import os
 import signal
@@ -195,6 +196,55 @@ class RunnerGuards(unittest.TestCase):
         record=json.loads(records[0].read_text());self.assertEqual(record['outcome'],'interrupted');self.assertTrue(record['process_group_absent'])
         self.assertIn('synthetic partial',records[0].with_suffix('.stdout').read_text())
         with self.assertRaises(ProcessLookupError):r.os.killpg(record['pgid'],0)
+
+    def test_first_signal_at_exception_entry_cannot_skip_settlement_or_evidence(self):
+        self.subject.transport=None
+        lines,start=inspect.getsourcelines(r.Runner.run)
+        boundary=start+next(i for i,line in enumerate(lines) if "metadata.update(outcome='interrupted'" in line)
+        injected=False
+        def trace(frame,event,arg):
+            nonlocal injected
+            if event=='line' and frame.f_code is r.Runner.run.__code__ and frame.f_lineno==boundary and not injected:
+                injected=True;signal.raise_signal(signal.SIGTERM)
+            return trace
+        fake=SimpleNamespace(pid=123456789,returncode=None,wait=Mock(side_effect=RuntimeError('synthetic wait error')),poll=Mock(return_value=None))
+        previous=sys.gettrace()
+        try:
+            with patch.object(r.subprocess,'Popen',return_value=fake),patch.object(r.os,'killpg',side_effect=ProcessLookupError) as groups:
+                sys.settrace(trace)
+                with self.assertRaisesRegex(RuntimeError,'synthetic wait error'):self.subject.run(['inert'])
+                self.assertGreater(groups.call_count,0)
+        finally:sys.settrace(previous)
+        self.assertTrue(injected)
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signal.SIGTERM)
+        self.assertTrue(record['process_group_absent']);self.assertTrue(self.subject.settled)
+
+    def test_bounded_wait_slices_preserve_one_total_timeout(self):
+        self.subject.transport=None
+        clock=[0.0];waits=[]
+        def wait(*,timeout):
+            waits.append(timeout);clock[0]+=timeout
+            raise subprocess.TimeoutExpired(['inert'],timeout)
+        fake=SimpleNamespace(pid=123456789,returncode=None,wait=wait,poll=Mock(return_value=None))
+        with patch.object(r.subprocess,'Popen',return_value=fake),patch.object(r.os,'killpg',side_effect=ProcessLookupError),patch.object(r.time,'monotonic',side_effect=lambda:clock[0]):
+            with self.assertRaises(subprocess.TimeoutExpired) as raised:self.subject.run(['inert'],timeout=.25)
+        self.assertEqual(raised.exception.timeout,.25)
+        self.assertEqual(len(waits),3);self.assertTrue(all(0<n<=.1 for n in waits));self.assertAlmostEqual(sum(waits),.25)
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['outcome'],'interrupted');self.assertTrue(record['process_group_absent'])
+
+    def test_recorded_wait_signal_is_checked_before_another_slice(self):
+        self.subject.transport=None
+        def wait(*,timeout):
+            signal.raise_signal(signal.SIGTERM)
+            raise subprocess.TimeoutExpired(['inert'],timeout)
+        fake=SimpleNamespace(pid=123456789,returncode=None,wait=Mock(side_effect=wait),poll=Mock(return_value=None))
+        with patch.object(r.subprocess,'Popen',return_value=fake),patch.object(r.os,'killpg',side_effect=ProcessLookupError):
+            with self.assertRaises(r.CommandInterrupted):self.subject.run(['inert'])
+        self.assertEqual(fake.wait.call_count,1)
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['signal'],signal.SIGTERM);self.assertTrue(record['process_group_absent'])
 
     def test_spawn_assignment_signal_is_deferred_until_owned_pid_known(self):
         self.subject.transport=None
