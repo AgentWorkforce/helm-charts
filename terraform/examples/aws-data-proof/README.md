@@ -1,0 +1,254 @@
+# Disposable AWS PostgreSQL/S3 module proof — held source
+
+This root composes the actual `modules/aws/postgres` and `object-storage`
+modules in a reviewed existing VPC. It prepares a private encrypted PostgreSQL17
+instance, its owned subnet/parameter groups, versioned SSE-KMS bucket, synthetic
+sentinel, two dedicated security groups, and a temporary ARM verifier with its
+own launch template, encrypted delete-on-termination disk/ENI and boundary-capped
+`/pippen/workload/` role plus `eks-*` instance profile. It changes no existing
+VPC, application, role, routing, cluster, baseline policy or provider source.
+
+**Source only / held draft. No live plan, apply, credential retrieval, SQL,
+cloud call or runtime proof was performed by this source lane.** An authorized
+parent operator owns exact private inputs, saved-plan review, execution deadline,
+receipts and cleanup. The prior auxiliary Linux/PG fixture is independent.
+
+This proves a module/storage/restore *test composition*, not an application
+installer. The guest tests real PostgreSQL17 TLS CA/hostname validation and
+plaintext/wrong-CA/wrong-host refusals; private/encrypted native RDS metadata;
+`pg_trgm` and `vector` installation; a synthetic marker and restricted login with
+real SELECT plus write/other-table/schema/role-creation refusals. S3 checks cover
+SSE-KMS put/get/list, two object versions, a delete marker and version recovery,
+multipart upload/abort and scoped Get/Put/Delete/List refusals. Its exact version
+ledger is cleaned; unknown versions prevent any deletion. The parent independently
+compares the unrelated sentinel's bytes/version before allowing final retirement.
+
+No master `SELECT 1`, fake RDS emulation or schema mock constitutes runtime
+application proof. Bulls' actual RDS/HoopDb migration, roles/column grants,
+`HOOPDB_DB_MODE=rds` integration and exact provider composition remain separate
+owner-reviewed acceptance. This root never imports those protected SQL files,
+changes migration/generation/versions.lock, or bundles a private provider.
+OpenSearch, Lambda service/provider and the full suite remain unproved.
+
+## Review and execution stages
+
+These are future operator steps, **not an instruction to apply this draft**.
+Use a new private state/execution directory on T7 (0700, encrypted disk, private
+backups); retain state until native retirement is proved. Local state is explicit
+for this disposable root. Durable customer foundation/data state remains separate
+and external. Never use the proof bucket as its own state backend or import old
+AWS resources. Provider account restriction plus exact lease caller guard must
+remain enabled. No saved credential profile/static credentials belong here.
+
+1. Independently review non-secret lease/account/region, exact available PG17
+   minor and instance classes, pinned Amazon AL2023 ARM AMI, existing VPC/subnet
+   ownership/AZs/routes, permissions/boundary, quotas and public regional RDS CA
+   bundle digest. Private subnet metadata checks do not prove routing. Supply
+   two private AZ subnets and a distinct existing public host subnet with HTTPS
+   egress. The root creates no NAT or network route. Refuse collisions/adoption
+   of any derived database, bucket, role, group, snapshot or verifier identity.
+2. Review the committed source/lock/artifact hashes and initial saved plan with
+   `payload_version_id=null`, `restore_checkpoint=null`, `retire=false`. This
+   provisions modules/identity/network prerequisites with **zero EC2 instances**.
+   The primary has deletion protection, one-day backups, private access, TLS
+   enforcement, 20-GiB gp3 storage and no autoscaling. This bounded single-AZ
+   synthetic fixture makes no HA, performance or production-retention claim.
+   Managed RDS credentials never enter Terraform state; only the secret ARN does.
+3. From `proof/`, perform a real `npm ci`, `npm test`, and `npm run build` under
+   Node24. The builder requires a clean committed worktree, bundles pg and emits
+   a deterministic three-file archive with source/lock/file digests in `dist/`.
+   Rebuild and compare bytes. Upload those exact reviewed bytes to the output
+   `payload_key` in the **new proof bucket**, using expected bucket owner and
+   checksum validation. Record its actual immutable VersionId; do not use null,
+   latest, an arbitrary manifest, presigned URL or baseline workspace object.
+4. A new reviewed saved plan supplies that VersionId and launches one verifier.
+   Capture the full Terraform output, instance, root-volume and ENI IDs promptly
+   before guest shutdown, plus native RDS DbiResourceId, managed-secret ARN and
+   all database ENIs attached to the exclusive owned database SG. Verify native
+   tags/owner/association before recording any service-created interface. Keep
+   the capture as the **seed** entry in `compute_history` after future replacement.
+   The parent enforces an external deadline for **all resources**, including
+   RDS before guest boot; the guest's two-hour shutdown is only a backup.
+5. Wait for the exact `receipts/seed.json` object. Download by its actual version,
+   verify metadata SHA256 and JSON `ok`, source/marker, PG17/TLS/refusal/ACL/S3
+   results; preserve its bytes, SHA256, VersionId and referenced secret VersionId.
+   A missing receipt, failed upload, refresh/network failure or termination is
+   not success. The guest writes only a sanitized failure code on error.
+6. Supply `restore_checkpoint` with those three non-secret references in a new
+   reviewed saved plan. Terraform creates `aws_db_snapshot.marker` from the
+   seeded primary and a separate `aws_db_instance.restored` from that snapshot.
+   This direct provider resource is explicit: the reusable postgres module has
+   **no snapshot restore input**, so this does not test a module restore feature.
+   The changed execution barrier replaces the verifier. Retain both compute
+   captures; never discard seed instance/storage/ENI history on state refresh.
+7. The restore guest first downloads the seed receipt by exact VersionId and
+   validates its digest, source, marker and secret version. PostgreSQL restore
+   cannot enable RDS-managed credentials during restore; it inherits the
+   snapshot's password. The guest reads the seed's exact historical primary
+   secret VersionId into memory and connects to the clone. Both the restricted
+   reader password (HMAC of that password and synthetic marker) and its ACLs were
+   captured in the snapshot. Real marker reads and refusal checks must pass on
+   the clone. No password reset, IAM database token or TF secret value is used.
+   If version retrieval/rotation timing prevents authentication, fail closed;
+   do not reset credentials or call that a restore pass.
+8. Preserve `receipts/restore.json` by exact object version/digest and native
+   captures. It proves the synthetic snapshot marker only. Stop all verifiers
+   and confirm their termination before retiring storage/identity.
+
+The guest uses IMDSv2/hop1 on the host, a no-ingress SG and HTTPS plus only the
+owned DB SG on 5432. The pinned Linux ARM64 Node24 Docker image runs on the bridge
+network, with read-only root, dropped capabilities and bounded CPU/RAM/PIDs.
+AWS credentials are not passed/mounted into it. DB credentials go through stdin
+only, never files/environment/argv/receipts. Public RDS CA bytes are digest-pinned;
+only disposable synthetic wrong-CA keys are generated in its temporary lifecycle.
+The host CLI can read the exact managed secret and version-pinned transport/seed
+receipts, and mutate only the owned proof keys/receipt. The module's AWS-managed
+S3 KMS key is usable only through S3 with the owned bucket encryption context.
+
+## Cleanup contract
+
+Preserve source/lock/payload/plan/state hashes, both raw success/failure receipts,
+object versions, native resource/ownership captures and command outcomes outside
+the soon-to-be-deleted bucket. Retain exact identity and lifecycle permission
+through cleanup. Never sweep the account, import or touch the old proof, alter
+baseline/workspace resources, force-delete unknown objects or service ENIs, or
+accept Denied/missing pagination as empty. Partial applies need exact Terraform
+state/native reconciliation; incomplete ledgers deliberately cannot pass the
+normal retirement verifier.
+
+- RDS protection defaults on. A separately reviewed `retire=true` apply disables
+  compute and releases protection on primary and clone before the destroy plan.
+  It cannot recreate a self-terminated verifier. Both databases explicitly skip
+  **implicit final snapshots**, since they contain only synthetic data; the
+  recovery marker snapshot is explicitly Terraform-owned and deleted after the
+  clone. No application/customer snapshot retention claim follows.
+- The actual postgres module hardcodes `delete_automated_backups=false`. The
+  parent must capture its exact DbiResourceId/retained automated-backup ARN and,
+  after primary deletion, retire only those owned automated backups through a
+  separately reviewed native RDS deletion or wait for observed expiry. The root
+  cannot override this module behavior. Terraform destroy alone is insufficient.
+- RDS deletes its managed secret and associated metadata when its DB is deleted;
+  require fresh `DescribeSecret` **ResourceNotFoundException** on the captured
+  exact ARN. A scheduled recovery deletion/date or API denial is not absence.
+  The restored instance creates no new managed secret. Never delete the primary
+  or its historical secret before the clone's marker verification.
+- S3 `force_destroy=false` preserves unknown data. Parent must capture every page
+  of object versions/delete markers and multipart uploads, establish ownership,
+  and freeze exact `{Key,VersionId}` / `{Key,UploadId}` lists. Only the output
+  payload key, seed/restore receipts, Terraform sentinel and exact fixture
+  marker/multipart keys may appear. A failed/partial guest can leave objects or
+  uploads; recover its precise action ownership before mutation. Unknown entries
+  quarantine the run. `python3 proof/drain_bucket.py ledger.json` verifies caller,
+  full listings and exact ledger equality **before** deleting any listed owned
+  versions or aborting any upload; it refuses unrelated keys. Release the
+  sentinel for this final step only after independent preservation checks.
+- Review/apply the exact destroy plan. Dependency ordering removes clone before
+  snapshot/primary, and compute before role/profile/SG/LT. Capture all RDS ENIs
+  and both compute lifetimes; a self-terminated guest does not retire IAM/LT/SG.
+  Confirm every volume, ENI, SG, launch template, role/profile, DB, subnet group,
+  parameter group, marker snapshot, automated backup, managed secret and bucket.
+  AWS-managed KMS/service baseline resources remain external and preserved.
+
+`proof/retirement.py` is a parent-operated **read-only** final check. Its ledger
+contains `contract` (the last active `proof_contract` captured **before** the
+retire apply clears its compute output), `compute_history` (the
+seed and restore `compute` captures), distinct `database_resource_ids`, verified
+`database_network_interface_ids`, and `managed_secret_arns` (exact primary ARN).
+It requires specific service NotFound codes or explicit empty native backup lists;
+arbitrary empty/Denied responses cannot pass. Run it only after the destroy and
+native backup/secret retirement, retry only within the parent's cleanup deadline,
+and preserve a failed result/state for recovery. It is not account-wide absence
+proof. Uncaptured/unknown resources remain an explicit blocker.
+
+## Offline checks and limits
+
+`terraform init -backend=false`, `validate`, mock `test`, TFLint, terraform-docs,
+Checkov, Python unittest/AST and Node tests/syntax run without credentials. Tests
+cover the real module composition, restore/protection phases, exact caller,
+private AZ separation, host IAM/IMDS/storage binding, malformed/foreign S3 pages,
+unknown-version refusal, unrelated-key preservation and native NotFound semantics.
+Mock passes do not prove service versions/capacity, network paths, deployed IAM,
+async RDS cleanup, actual restore or application compatibility. Inline Checkov
+exceptions explain the deliberate ephemeral/single-AZ/log/monitoring choices and
+launch-template inheritance; no rule is widened for the scanner.
+
+Public sources: [RDS credential management and restore limitations](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html),
+[RDS snapshot restore](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_RestoreFromSnapshot.html),
+[RDS TLS verification](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.SSL.html),
+[Terraform RDS restore](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/db_instance),
+[EC2 shutdown behavior](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_ChangingInstanceInitiatedShutdownBehavior.html).
+
+<!-- BEGIN_TF_DOCS -->
+## Requirements
+
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.11, < 2.0 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | = 6.72.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | = 3.9.1 |
+
+## Providers
+
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
+
+## Modules
+
+| Name | Source | Version |
+| ---- | ------ | ------- |
+| <a name="module_objects"></a> [objects](#module\_objects) | ../../modules/aws/object-storage | n/a |
+| <a name="module_postgres"></a> [postgres](#module\_postgres) | ../../modules/aws/postgres | n/a |
+
+## Resources
+
+| Name | Type |
+| ---- | ---- |
+| [aws_db_instance.restored](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/db_instance) | resource |
+| [aws_db_snapshot.marker](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/db_snapshot) | resource |
+| [aws_iam_instance_profile.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/iam_instance_profile) | resource |
+| [aws_iam_role.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/iam_role) | resource |
+| [aws_iam_role_policy.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/iam_role_policy) | resource |
+| [aws_instance.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/instance) | resource |
+| [aws_launch_template.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/launch_template) | resource |
+| [aws_s3_object.sentinel](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/s3_object) | resource |
+| [aws_security_group.database](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/security_group) | resource |
+| [aws_security_group.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/security_group) | resource |
+| [aws_vpc_security_group_egress_rule.database](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/vpc_security_group_egress_rule) | resource |
+| [aws_vpc_security_group_egress_rule.https](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/vpc_security_group_egress_rule) | resource |
+| [aws_vpc_security_group_ingress_rule.database](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/vpc_security_group_ingress_rule) | resource |
+| [terraform_data.execution](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.guard](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [aws_ami.host](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/ami) | data source |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/caller_identity) | data source |
+| [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/region) | data source |
+| [aws_subnet.host](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
+| [aws_subnet.private](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_account_id"></a> [account\_id](#input\_account\_id) | Exact existing sandbox account; never an account creation request. | `string` | n/a | yes |
+| <a name="input_ami_id"></a> [ami\_id](#input\_ami\_id) | Exact reviewed Amazon AL2023 ARM64 HVM/EBS AMI, not latest. | `string` | n/a | yes |
+| <a name="input_host_subnet_id"></a> [host\_subnet\_id](#input\_host\_subnet\_id) | Reviewed existing public subnet with HTTPS egress through an IGW. No routing changes. | `string` | n/a | yes |
+| <a name="input_payload_sha256"></a> [payload\_sha256](#input\_payload\_sha256) | Content digest of the secret-free transport archive, checked before extraction. | `string` | n/a | yes |
+| <a name="input_payload_version_id"></a> [payload\_version\_id](#input\_payload\_version\_id) | Null provisions data without compute. Exact immutable transport VersionId enables the verifier in a separate reviewed apply. | `string` | `null` | no |
+| <a name="input_pippen"></a> [pippen](#input\_pippen) | Expected allocated non-secret lease identity. | `object({ agent = string, session_id = string })` | n/a | yes |
+| <a name="input_postgres_version"></a> [postgres\_version](#input\_postgres\_version) | Exact region-supported PostgreSQL17 minor verified independently by the operator. | `string` | n/a | yes |
+| <a name="input_private_subnet_ids"></a> [private\_subnet\_ids](#input\_private\_subnet\_ids) | Two or more reviewed private subnets in distinct AZs in that VPC. | `set(string)` | n/a | yes |
+| <a name="input_rds_ca_sha256"></a> [rds\_ca\_sha256](#input\_rds\_ca\_sha256) | Reviewed SHA256 of the public regional RDS CA bundle; never a private certificate/key. | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | Explicit approved existing region. | `string` | n/a | yes |
+| <a name="input_restore_checkpoint"></a> [restore\_checkpoint](#input\_restore\_checkpoint) | Null for seed. Supply only after a successful independently reviewed seed receipt; no secret values. | `object({ seed_receipt_sha256 = string, seed_receipt_version_id = string, secret_version_id = string })` | `null` | no |
+| <a name="input_retire"></a> [retire](#input\_retire) | Reviewed second apply releases DB deletion protection; does not itself delete resources. | `bool` | `false` | no |
+| <a name="input_run_id"></a> [run\_id](#input\_run\_id) | Lease-unique bounded slug; do not reuse while old resources or sessions exist. | `string` | n/a | yes |
+| <a name="input_source_sha"></a> [source\_sha](#input\_source\_sha) | Exact committed source of the reviewed transport payload. | `string` | n/a | yes |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | Reviewed existing VPC; unchanged by this proof. | `string` | n/a | yes |
+
+## Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_proof_contract"></a> [proof\_contract](#output\_proof\_contract) | Non-secret source/lease/module/transport identities. Capture before guest termination. |
+<!-- END_TF_DOCS -->
