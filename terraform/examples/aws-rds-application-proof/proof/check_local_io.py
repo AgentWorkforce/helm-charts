@@ -23,6 +23,7 @@ def check(ok,code):
 
 def fixture(source,receipt):
     marker=str(uuid.uuid4());prefix='rds-prep-'+marker[:8];pg=prefix+'-pg';node=prefix+'-node';network=prefix+'-net'
+    declared={}
     names=[node,pg];env={k:os.environ[k] for k in ['PATH','HOME'] if k in os.environ}
     docker=['docker','--context','colima-rds'];phase='preflight';checks=[];ids={};clean=False
     result={'ok':False,'scope':'synthetic Linux arm64 installed source/psql17 IO only; no actual RDS SQL/cloud','marker':marker,'images':{'node':NODE,'postgres':PG},'checks':checks,'containers':ids}
@@ -58,11 +59,14 @@ def fixture(source,receipt):
         for image in [NODE,PG]:
             meta=json.loads(call('image','inspect',image).stdout)[0]
             check(meta['Architecture']=='arm64' and meta['Os']=='linux','image_architecture_refused')
+            declared[image]=set(meta.get('Config',{}).get('Volumes') or {})
+            check(declared[image]==({'/var/lib/postgresql/data'} if image==PG else set()),'declared_volume_set_changed')
         result['network_id']=call('network','create','--internal','--label','proof.rds-prep='+marker,network).stdout.decode().strip()
         phase='containers'
         for name,image,mount in [(pg,PG,'/fixture:rw,nosuid,size=256m,mode=1777'),(node,NODE,'/guest:rw,nosuid,size=32m,mode=1777')]:
             args=['create','--name',name,'--label','proof.rds-prep='+marker,'--platform','linux/arm64','--network',network,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','512m','--cpus','1','--pids-limit','128','--log-driver','none','--ulimit','core=0','--tmpfs',mount,'--tmpfs','/tmp:rw,nosuid,size=16m','--entrypoint','sleep']
-            if name==pg:args+=['--network-alias','rds-prep-db','--network-alias','rds-prep-wrong','--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=16m']
+            if name==pg:args+=['--network-alias','rds-prep-db','--network-alias','rds-prep-wrong']
+            for path in sorted(declared[image]):args+=['--tmpfs',path+':rw,nosuid,size=16m']
             ids[name]=call(*args,image,'infinity').stdout.decode().strip()
             mounts=json.loads(call('inspect','--format','{{json .Mounts}}',name).stdout)
             check(all(m['Type']!='volume' for m in mounts),'implicit_volume_refused')
