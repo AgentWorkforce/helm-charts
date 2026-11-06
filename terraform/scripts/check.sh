@@ -45,7 +45,6 @@ if want fmt; then run "$TF_BIN" fmt -check -recursive -diff "$ROOT"; fi
 if want test && have python3; then
   run python3 -m unittest discover -s "$ROOT/scripts" -p 'test_aws_*.py'
   run python3 -m unittest discover -s "$ROOT/modules/aws/search/tests" -p 'test_*.py'
-  run python3 -m unittest discover -s "$ROOT/examples/aws-search-proof/proof" -p 'test_*.py'
 fi
 
 for d in "${dirs[@]}"; do
@@ -70,6 +69,13 @@ for d in "${dirs[@]}"; do
     run python3 "$ROOT/$d/tests/check_lifecycle.py"
     run python3 "$ROOT/$d/tests/check_mode_history.py" "$TF_BIN"
     if [[ "$TF_BIN" != *tofu ]]; then run python3 "$ROOT/$d/tests/check_migration.py" "$TF_BIN"; fi
+  fi
+  if want test && [ "$d" = "examples/aws-environments" ] && have python3; then
+    run -C "$ROOT/$d" python3 tests/check_lambda_bindings.py "$TF_BIN"
+  fi
+  if want test && [ "$d" = "examples/aws-search-proof" ] && have python3; then
+    run -C "$ROOT/$d" python3 -m unittest discover -s proof -p 'test_*.py'
+
   fi
   if want tflint && have tflint; then
     run -C "$ROOT/$d" tflint --config "$ROOT/.tflint.hcl" --no-color
