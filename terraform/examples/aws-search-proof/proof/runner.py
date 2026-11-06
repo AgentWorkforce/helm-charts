@@ -81,7 +81,7 @@ class Runner:
         prefix = self.path('commands') / str(time.time_ns()); prefix.parent.mkdir(mode=0o700, exist_ok=True)
         metadata = {'args': args, 'outcome': 'launching'}; save(prefix.with_suffix('.json'), metadata)
         process = None; self.settled = False
-        requested = None
+        requested = None; primary_error = None
         previous = {}
         def interrupt(signum, _frame):
             nonlocal requested
@@ -132,15 +132,19 @@ class Runner:
                 require(self.settled, 'Unsettled owned process group; quarantine before recovery')
             pending_signal() # Log __exit__ may record a signal; retain cleanup/evidence handling.
         except BaseException as error:
-            self.settled = settle(); metadata.update(outcome='interrupted', error_type=type(error).__name__, process_group_absent=self.settled)
+            if not self.settled: self.settled = settle()
+            metadata.update(outcome='interrupted', error_type=type(error).__name__, process_group_absent=self.settled)
             if process is not None: metadata.update(pid=process.pid, pgid=process.pid)
             if requested is not None: metadata['signal'] = requested
-            save(prefix.with_suffix('.json'), metadata); raise
+            save(prefix.with_suffix('.json'), metadata); primary_error = error; raise
         finally:
             for sig, handler in previous.items(): signal.signal(sig, handler)
             if requested is not None and metadata.get('outcome') == 'interrupted' and metadata.get('signal') != requested:
-                metadata['signal'] = requested # Preserve a late request without masking the original command error.
-                save(prefix.with_suffix('.json'), metadata)
+                metadata['signal'] = requested
+                try: save(prefix.with_suffix('.json'), metadata)
+                except OSError as receipt_error:
+                    if primary_error is None: raise
+                    raise primary_error from receipt_error
         # A signal recorded while restoring prior handlers is still failure.
         # Reaching here already proved group absence; do not restart settlement
         # under the restored handlers or publish a completed command receipt.
