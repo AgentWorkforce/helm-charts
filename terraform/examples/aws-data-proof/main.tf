@@ -147,6 +147,13 @@ resource "aws_s3_object" "sentinel" {
   content                = "preserve-during-verifier-${local.marker}"
   server_side_encryption = "aws:kms"
   tags                   = local.tags
+  depends_on             = [module.objects]
+  lifecycle {
+    postcondition {
+      condition     = self.version_id == null ? false : length(trimspace(self.version_id)) > 0 && self.version_id != "null"
+      error_message = "The sentinel must have a real immutable VersionId after versioning/encryption setup; preserve state and reconcile any partial creation."
+    }
+  }
 }
 resource "aws_db_snapshot" "marker" {
   count                  = var.restore_checkpoint == null ? 0 : 1

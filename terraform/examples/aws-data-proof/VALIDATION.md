@@ -20,10 +20,17 @@ are recorded in the held PR/evidence, avoiding a self-referential source receipt
   associations, mutually exclusive network modes, CIDR containment/overlap/
   canonical form/adjacency, foreign and same-lease inventory, explicit available
   AZs, default VPC and owner checks. No real subnet inventory was read.
-- Offline plan/config graph proves 21 transitive prerequisites: verifier waits
+- Offline plan/config graph proves 27 transitive prerequisites: verifier waits
   for DB/clone, exact IAM/profile and SG paths; clone waits for snapshot, primary,
   parameter and subnet groups. Both owned route associations precede the module
-  DB/subnet group, clone and verifier. Reverse graph ordering does not prove asynchronous
+  DB/subnet group, clone and verifier. The sentinel waits for bucket versioning,
+  encryption, public-access block, TLS policy, ownership and lifecycle setup;
+  the native mock asserts an explicit versioned SSE-KMS sentinel output. The
+  actual postcondition expression is also evaluated with six typed values in
+  provider-free Terraform/OpenTofu consoles, refusing null/empty/whitespace/
+  literal-null versions and accepting opaque nonempty versions. This avoids
+  differing computed-value/failed-apply mock timing between the engines.
+  Reverse graph ordering does not prove asynchronous
   native deletion; exact ID checks are required separately.
 - TFLint 0.64.0 passed with the repository configuration. terraform-docs 0.24.0
   generated the README with the repository configuration; output-check passed.

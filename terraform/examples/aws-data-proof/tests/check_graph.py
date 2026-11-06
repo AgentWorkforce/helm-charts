@@ -12,6 +12,7 @@ def reachable(source,target):
         if node not in seen:seen.add(node);pending.extend(edges.get(node,[]))
     return False
 pairs=[
+ *[('aws_s3_object.sentinel',f'module.objects.{resource}.this') for resource in ['aws_s3_bucket_versioning','aws_s3_bucket_server_side_encryption_configuration','aws_s3_bucket_public_access_block','aws_s3_bucket_policy','aws_s3_bucket_ownership_controls','aws_s3_bucket_lifecycle_configuration']],
  *[(resource,association) for resource in ['module.postgres.aws_db_instance.this','module.postgres.aws_db_subnet_group.this','aws_db_instance.restored','aws_instance.verifier'] for association in ['aws_route_table_association.private_first','aws_route_table_association.private_second']],
  ('aws_db_instance.restored','aws_db_snapshot.marker'),
  ('aws_db_instance.restored','module.postgres.aws_db_instance.this'),

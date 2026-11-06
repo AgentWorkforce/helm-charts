@@ -24,6 +24,11 @@ SSE-KMS put/get/list, two object versions, a delete marker and version recovery,
 multipart upload/abort and scoped Get/Put/Delete/List refusals. Its exact version
 ledger is cleaned; unknown versions prevent any deletion. The parent independently
 compares the unrelated sentinel's bytes/version before allowing final retirement.
+The sentinel waits for the complete object-storage module, including versioning,
+encryption, ownership/public-access controls, TLS policy and lifecycle setup. Its
+postcondition rejects a missing, empty or literal `null` VersionId. Service
+propagation can still fail the operation; preserve partial state/native version
+evidence for reconciliation rather than accepting an unversioned sentinel.
 
 No master `SELECT 1`, fake RDS emulation or schema mock constitutes runtime
 application proof. Bulls' actual RDS/HoopDb migration, roles/column grants,
@@ -189,7 +194,11 @@ proof. Uncaptured/unknown resources remain an explicit blocker.
 
 `terraform init -backend=false`, `validate`, mock `test`, TFLint, terraform-docs,
 Checkov, Python unittest/AST and Node tests/syntax run without credentials. Tests
-cover the real module composition, restore/protection phases, exact caller,
+include `python3 tests/check_graph.py /path/to/terraform` and
+`python3 tests/check_sentinel_version.py /path/to/terraform` (repeat with OpenTofu).
+The latter evaluates the actual sentinel postcondition with typed values in an
+empty provider-free console directory; it never reads native object versions.
+These checks cover the real module composition, restore/protection phases, exact caller,
 private AZ separation, owned CIDR/VPC/AZ/collision guards, local-only associations
 and reverse graph ordering, host IAM/IMDS/storage binding, malformed/foreign S3 pages,
 unknown-version refusal, unrelated-key preservation and native NotFound semantics.

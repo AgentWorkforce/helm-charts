@@ -14,6 +14,7 @@ mock_provider "aws" {
     defaults = { address = "synthetic.example", arn = "arn:aws:rds:us-west-2:111111111111:db:pippen-sbx-example-pg", master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-west-2:111111111111:secret:rds-example", secret_status = "active", kms_key_id = "example" }] }
   }
   mock_resource "aws_s3_bucket" { defaults = { arn = "arn:aws:s3:::pippen-sbx-example-111111111111-us-west-2", id = "pippen-sbx-example-111111111111-us-west-2" } }
+  mock_resource "aws_s3_object" { defaults = { version_id = "synthetic-sentinel-version" } }
 }
 mock_provider "random" {}
 override_resource {
@@ -57,6 +58,10 @@ variables {
 }
 run "actual_modules_private_managed_secret_and_versioned_bucket" {
   command = apply
+  assert {
+    condition     = output.proof_contract.sentinel.version_id == "synthetic-sentinel-version" && aws_s3_object.sentinel.server_side_encryption == "aws:kms"
+    error_message = "The sentinel contract requires a real version reference and explicit SSE-KMS."
+  }
   assert {
     condition     = module.postgres.master_user_secret_arn != null && module.postgres.initial_database == "moduleproof" && output.proof_contract.database.retained_automated_backups && output.proof_contract.database.skip_final_snapshot
     error_message = "Expose only a managed-secret reference and explicit module cleanup obligations."
