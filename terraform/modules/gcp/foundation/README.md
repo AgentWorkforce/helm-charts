@@ -18,7 +18,13 @@ service-account key, retrieves a Secret Manager payload, or changes APIs.
 
 - Dedicated custom VPC; subnet with disjoint pod/service secondary ranges, flow
   logs, and Private Google Access; disjoint PSA allocation and connection for
-  private Cloud SQL and optional Memorystore.
+  private Cloud SQL and optional Memorystore. An explicit logged IPv4 ingress
+  deny-all rule at priority 65534 binds to this VPC. It adds no allow rule; GKE
+  and connector generated rules use higher priorities (lower numbers) for their
+  required traffic. Review those rules and their ownership before execution;
+  custom approved allows must have a priority below 65534. The baseline preserves
+  default-deny behavior and is a cluster provisioning/retirement dependency.
+  It does not restrict egress or replace Dataplane V2 NetworkPolicy.
 - Reviewed RFC1918 ranges are required and checked for mutual overlap. PSA must
   be /24 or larger; control plane and connector must be /28. Also check connected
   VPC/VPN/peered networks and sufficient Cloud SQL/Redis address capacity externally.
@@ -47,10 +53,17 @@ service-account key, retrieves a Secret Manager payload, or changes APIs.
   which counts hyphens twice and requires fewer than 21. Project/region scope
   comes from the connector's resource identity. ALL_TRAFFIC function egress
   additionally requires reviewed NAT. This
-  source does not install private DNS, VPN, firewall rules for customer workloads,
+  source does not install private DNS, VPN, allow rules for customer workloads,
   external ingress, certificates, DNS, registries or image artifacts. GKE and
   Serverless VPC Access create their own platform firewall rules. Review those
   generated resources and the umbrella's health-check/NetworkPolicy allowances.
+
+The pinned Checkov 3.3.30 whole-tree resource check cannot resolve the nested
+optional `labels` merge at the example-to-module boundary. A resource-local
+`CKV_GCP_21` exception records that false positive; runtime label behavior is
+unchanged. Mock plans assert both reserved nonempty labels and preservation of
+customer labels when conflicting reserved values are supplied. The explicit
+network/firewall graph check remains enabled.
 
 The node service account has only `roles/container.defaultNodeServiceAccount` in
 this project and optional Artifact Registry reader in explicitly named projects.
@@ -200,14 +213,17 @@ retention/access lifecycle, including Redis AUTH if used.
 
 Terraform >=1.11 (<2), Google >=7.46.2 (<8); root lock pins the tested release.
 `terraform init -backend=false`, `validate`, and `test` run with mock Google
-providers and no cloud credentials. `apply` inside `.tftest.hcl` applies **mocks
-only**. Tests cover private defaults, dependency/output composition, explicit
+providers and no cloud credentials. `apply` inside `.tftest.hcl` applies mocked Google resources
+only. The composition fixture uses the real local random provider because the CI
+Terraform version cannot mock ephemeral resource types; administrator creation
+is explicitly disabled, so no password or secret value is generated. Tests cover private defaults, dependency/output composition, explicit
 optional services, exact KSA IAM, security/retirement flags and negative
 project/environment/access/range/version/actor/Redis acknowledgment cases. Mock
 success does not prove GCP availability, policy, IAM propagation, quotas, routing,
 DNS, application compatibility, live E2E or destroy/recreate/isolated restore.
 
-Primary references: [GKE provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster),
+Primary references: [VPC firewall priority](https://docs.cloud.google.com/firewall/docs/firewalls#priority),
+[GKE provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster),
 [GKE channels](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels),
 [GKE Sandbox](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/sandbox-pods),
 [Redis TLS](https://docs.cloud.google.com/memorystore/docs/redis/about-in-transit-encryption),
@@ -233,6 +249,7 @@ Primary references: [GKE provider](https://registry.terraform.io/providers/hashi
 
 | Name | Type |
 | ---- | ---- |
+| [google_compute_firewall.deny_ingress](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_compute_global_address.private_services](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_global_address) | resource |
 | [google_compute_network.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_network) | resource |
 | [google_compute_router.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_router) | resource |

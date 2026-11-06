@@ -13,7 +13,7 @@ override_resource {
   values = { id = "projects/example-project/regions/us-central1/subnetworks/example-development-nodes" }
 }
 override_resource {
-  target = google_compute_subnetwork.connector[0]
+  target = google_compute_subnetwork.connector
   values = { id = "projects/example-project/regions/us-central1/subnetworks/example-development-connector" }
 }
 variables {
@@ -40,6 +40,10 @@ variables {
 run "private_foundation_and_data_handoff" {
   command = apply
   assert {
+    condition     = google_compute_firewall.deny_ingress.network == google_compute_network.this.id && google_compute_firewall.deny_ingress.direction == "INGRESS" && google_compute_firewall.deny_ingress.priority == 65534 && google_compute_firewall.deny_ingress.source_ranges == toset(["0.0.0.0/0"]) && length(google_compute_firewall.deny_ingress.allow) == 0 && one(google_compute_firewall.deny_ingress.deny).protocol == "all" && google_compute_firewall.deny_ingress.log_config[0].metadata == "EXCLUDE_ALL_METADATA"
+    error_message = "The owned VPC needs an explicit logged deny-all ingress baseline with no new allows, below the priority of platform GKE/connector allow rules."
+  }
+  assert {
     condition     = !google_compute_network.this.auto_create_subnetworks && google_compute_subnetwork.nodes.private_ip_google_access && length(google_compute_subnetwork.nodes.secondary_ip_range) == 2
     error_message = "Dedicated VPC, private Google API connectivity and pod/service ranges are required."
   }
@@ -48,7 +52,7 @@ run "private_foundation_and_data_handoff" {
     error_message = "Regional cluster must have private nodes and enforced operator allowlist on private API."
   }
   assert {
-    condition     = google_container_cluster.this.datapath_provider == "ADVANCED_DATAPATH" && google_container_cluster.this.workload_identity_config[0].workload_pool == "example-project.svc.id.goog" && google_container_cluster.this.addons_config[0].gce_persistent_disk_csi_driver_config[0].enabled
+    condition     = google_container_cluster.this.resource_labels["environment"] == var.environment && google_container_cluster.this.resource_labels["managed-by"] == "terraform" && google_container_cluster.this.datapath_provider == "ADVANCED_DATAPATH" && google_container_cluster.this.workload_identity_config[0].workload_pool == "example-project.svc.id.goog" && google_container_cluster.this.addons_config[0].gce_persistent_disk_csi_driver_config[0].enabled
     error_message = "Dataplane V2, Workload Identity and PD CSI must compose with application/search state."
   }
   assert {
@@ -215,5 +219,16 @@ run "connector_agent_relay_regression" {
   assert {
     condition     = length(replace(google_vpc_access_connector.this[0].name, "-", "--")) < 21
     error_message = "The normal hyphenated agent-relay prefix previously exceeded the connector's effective name limit."
+  }
+}
+
+run "reserved_cluster_labels_cannot_be_overridden" {
+  command = plan
+  variables {
+    labels = { environment = "wrong-environment", managed-by = "wrong-manager", team = "example-team" }
+  }
+  assert {
+    condition     = google_container_cluster.this.resource_labels["environment"] == var.environment && google_container_cluster.this.resource_labels["managed-by"] == "terraform" && google_container_cluster.this.resource_labels["team"] == "example-team"
+    error_message = "The final cluster labels must preserve customer labels while reserved identity labels cannot be overwritten or omitted."
   }
 }

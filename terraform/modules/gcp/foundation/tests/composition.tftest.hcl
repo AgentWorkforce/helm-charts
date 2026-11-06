@@ -25,7 +25,9 @@ mock_provider "google" {
     defaults = { service_config = { uri = "https://example-offline.a.run.app" } }
   }
 }
-mock_provider "random" {}
+# random is the real local provider: Terraform 1.16 does not support mocked
+# ephemeral resource types, even with count zero. The fixture explicitly sets
+# admin_user.create=false, so it creates neither a password nor a secret value.
 run "existing_data_capabilities_accept_foundation_contract" {
   command = apply
   module { source = "./tests/composition" }

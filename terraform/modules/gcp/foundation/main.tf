@@ -55,6 +55,25 @@ resource "google_compute_network" "this" {
   depends_on              = [terraform_data.fence]
 }
 
+# Make the custom VPC ingress baseline explicit rather than relying only on
+# Google's implied deny. GKE/connector generated allows use higher priorities
+# (lower numbers); no application or operator allow rule is added here.
+resource "google_compute_firewall" "deny_ingress" {
+  project       = var.project_id
+  name          = "${local.prefix}-deny-ingress"
+  network       = google_compute_network.this.id
+  description   = "Logged default-deny IPv4 ingress for the owned foundation VPC"
+  direction     = "INGRESS"
+  priority      = 65534
+  source_ranges = ["0.0.0.0/0"]
+  deny {
+    protocol = "all"
+  }
+  log_config {
+    metadata = "EXCLUDE_ALL_METADATA"
+  }
+}
+
 resource "google_compute_subnetwork" "nodes" {
   project                  = var.project_id
   name                     = "${local.prefix}-nodes"
@@ -179,6 +198,8 @@ resource "google_project_iam_member" "registry" {
 }
 
 resource "google_container_cluster" "this" {
+  #checkov:skip=CKV_GCP_21:The pinned scanner cannot resolve the nested optional labels merge. Reserved environment/managed-by labels always override customer labels; mock plans assert the final map including override attempts.
+
   #checkov:skip=CKV_GCP_12:Dataplane V2 (ADVANCED_DATAPATH) enforces NetworkPolicy natively; the legacy Calico network_policy toggle is incompatible.
   #checkov:skip=CKV_GCP_65:Customer Google Group/Workspace authority is external; operator IAM and Kubernetes RBAC must be approved in application state.
   #checkov:skip=CKV_GCP_66:Binary Authorization attestors and project policy are external prerequisites, not invented by this foundation. Enable through a reviewed policy integration.
@@ -249,7 +270,7 @@ resource "google_container_cluster" "this" {
     workload_metadata_config { mode = "GKE_METADATA" }
     metadata = { disable-legacy-endpoints = "true" }
   }
-  depends_on = [google_project_iam_member.nodes, google_project_iam_member.registry]
+  depends_on = [google_project_iam_member.nodes, google_project_iam_member.registry, google_compute_firewall.deny_ingress]
 }
 
 locals {

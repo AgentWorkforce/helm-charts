@@ -38,7 +38,9 @@ terraform test
 
 Do not run plan/apply against real GCP from this example without a concrete
 reviewed execution packet and operator approval under the repository GCP setup
-skill. The mock tests use `apply` only against the mocked provider. Supply an exact
+skill. The mock tests use `apply` only against mocked Google resources; the module
+composition fixture uses the real local random provider with administrator
+creation disabled, generating no password or secret value. Supply an exact
 available GKE version and channel after independent verification; channel/node
 auto-upgrades remain managed and the requested version is not a permanent pin.
 
