@@ -1,6 +1,8 @@
 # Source validation receipt
 
 Base: `d3040fa209ef5c90ce61bde2a776f783c01cfaba` (fresh origin/main, including PR64).
+The branch also merges main `dd5185a6e381df98ebee1626de605c428b31b4b7` (PR66 Lambda
+environment bindings), preserving the prior review/fix history.
 Only this new example and the explicitly reviewed `modules/aws/search` lifecycle
 seam change. Exact tested head/source hashes are recorded in the held PR and
 external receipt, avoiding a self-referential commit value here.
@@ -28,7 +30,7 @@ install, invented lockfile or dependency symlink.
   deferred-policy defect. Its historical failing plan remains review evidence;
   the root dependency is removed while all fully known plan preconditions and
   fresh wrapper identity checks remain intact.
-- Existing AWS example (two cases) and aws-environments (27 cases) pass in an
+- Existing AWS example (two cases) and aws-environments (37 cases under Terraform and OpenTofu) pass in an
   isolated T7 source copy using the changed shared module. No consumer source is
   edited; the separate Lambda environment-binding follow-up remains open.
 - Twenty-four Python offline tests cover all original context hashes, stale/foreign
@@ -46,7 +48,7 @@ install, invented lockfile or dependency symlink.
   proves its owned process group absent; it invokes no AWS or credential tool.
 - TFLint 0.64.0, Terraform formatting, Python AST, Git whitespace and repository
   terraform-docs 0.24.0 output checks pass for the module/root.
-- Checkov 3.3.30 whole Terraform tree: 446 passed, zero failed, 110 documented
+- Checkov 3.3.30 whole Terraform tree: 447 passed, zero failed, 110 documented
   skips. New proof root/local module: 18 passed, zero failed, nine skips. Its
   explicit master/HA and content-log exceptions are bounded disposable choices;
   existing protected defaults/security inputs are not weakened.
