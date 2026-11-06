@@ -1,15 +1,20 @@
 # Terraform modules for self-hosted Agent Relay
 
-Unopinionated Terraform (and OpenTofu) modules for the managed cloud services a
-self-hosted Agent Relay install uses next to the `agent-relay` Helm chart. They
-assume you already have a VPC and the baseline around it. They create the data
-services and the identities that reach them, and nothing else.
+Terraform (and OpenTofu) modules for the infrastructure a self-hosted Agent Relay
+install uses next to the `agent-relay` Helm chart. The four capability modules
+consume an existing network and cluster identity. Separate foundation modules
+can create the network and Kubernetes baseline in an approved existing AWS
+account or GCP project. Foundation, data and application installation have
+separate ownership and state; a successful source check is not live application
+or teardown proof.
 
 ```
 terraform/
-  modules/aws/{postgres,object-storage,search,functions}
-  modules/gcp/{postgres,object-storage,search,functions}
-  examples/aws   examples/gcp        # thin roots: all four together
+  modules/aws/{foundation,postgres,object-storage,search,functions}
+  modules/gcp/{foundation,postgres,object-storage,search,functions}
+  examples/{aws,gcp}                 # thin roots: four capabilities together
+  examples/{aws,gcp}-foundation      # network and Kubernetes foundation roots
+  examples/aws-environments          # environment-scoped AWS data composition
   scripts/check.sh                   # fmt, validate, tflint, test, docs, checkov
 ```
 
@@ -27,6 +32,21 @@ interfaces would slot in beside these.
 
 Every module stands alone. The examples compose them, but nothing forces you to
 use all four, or to use them together.
+
+For a new network and cluster, start with
+[`aws/foundation`](modules/aws/foundation) and
+[`examples/aws-foundation`](examples/aws-foundation), or
+[`gcp/foundation`](modules/gcp/foundation) and
+[`examples/gcp-foundation`](examples/gcp-foundation). AWS foundation covers the
+owned VPC, private nodes, egress and EKS identities. GCP foundation covers the
+owned VPC, GKE, NAT and Private Services Access, with optional Serverless VPC
+Access, pipeline Memorystore and Pub/Sub prerequisites. These modules do not
+vend accounts/projects, bootstrap application databases, install Helm, or
+establish application runtime compatibility. Keep the foundation backend
+separate from data/application state and review each module's external
+prerequisites, retained resources and recovery rules before an apply or destroy.
+In particular, the GCP Memorystore AUTH option requires explicit acknowledgment
+of its sensitive value in Terraform state; that state is not secret-free.
 
 For separate development, staging, production or named installations, see
 [`examples/aws-environments`](examples/aws-environments). It adds account/region/
@@ -69,14 +89,20 @@ live full-suite proof or replace the foundation/application installation.
   `src/session-pipeline/lambda.ts`. The GCP handler, a Cloud Run entry point
   for Pub/Sub push envelopes and scheduler bodies, comes with the pipeline's
   `PipelineRuntimeAdapter`.
-- **Not covered here.** The GCP sessions data path in `values-gcp.yaml` also
+- **Additional GCP prerequisites.** The sessions data path in `values-gcp.yaml` also
   needs Memorystore (Redis) and Pub/Sub settings (`REDIS_*`, `PUBSUB_*` in
-  `extraEnv`). Those resources are outside this module set.
+  `extraEnv`). These are outside the four capability modules; the optional
+  pipeline resources in `gcp/foundation` supply infrastructure references.
+  Application bindings, secret delivery and actual queue/Redis compatibility
+  still need separate verification.
 
-## Bring your own network
+## Network inputs for the capability modules
 
-The modules never create VPCs, subnets, NAT, peering, PSA or PSC connections,
-DNS zones, KMS keys, or anything at the org level. They take these as inputs:
+The four capability modules take networks and identities as inputs rather than
+creating VPCs, subnets, NAT or Private Services Access. Use the separate
+foundation modules above or an existing approved foundation. Shared DNS zones,
+KMS keys, organization/account/project administration and required platform
+permissions remain external prerequisites. The capability inputs are:
 
 | Input | AWS | GCP |
 |---|---|---|
