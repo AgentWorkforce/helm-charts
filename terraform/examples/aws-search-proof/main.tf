@@ -77,5 +77,9 @@ module "search" {
   log_publishing                = []
   create_log_resource_policy    = false
   tags                          = local.tags
-  depends_on                    = [terraform_data.guard]
+  # Guard inputs are independent existing-resource data/required variables and
+  # therefore checked during planning. A module-wide dependency would defer its
+  # caller/region/partition reads and hide the permission-bearing policy JSON.
+  # Fresh apply authority is checked by the external source runner, not this
+  # plan-time resource or a cached Terraform identity data source.
 }

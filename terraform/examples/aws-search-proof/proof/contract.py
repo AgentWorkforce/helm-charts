@@ -60,7 +60,7 @@ def caller(value, v, phase):
     require(value.get('Account') == v['account_id'] and value.get('Arn') == identities(v)[phase],
             'Fresh CLI caller does not match the exact account/lease/phase')
 
-def context(raw, original, v, now=None):
+def context_provenance(raw, original, v):
     require(isinstance(raw, str) and len(raw) <= 16384, 'Missing inherited capability context')
     c = json.loads(raw)
     require(isinstance(c, dict) and set(c) == CONTEXT_KEYS and all(isinstance(x, str) for x in c.values()), 'Closed sanitized capability context required')
@@ -70,10 +70,15 @@ def context(raw, original, v, now=None):
     require(re.fullmatch(r'[a-f0-9]{40}', c['source_commit']), 'Invalid source commitment')
     require(all(re.fullmatch(r'[a-f0-9]{64}', c[k]) for k in CONTEXT_KEYS if k.endswith('_sha256') or k == 'approval_fingerprint'), 'Invalid capability digest')
     require(re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z', c['profile_expires_at']), 'Canonical immutable profile expiry required')
+    dt.datetime.fromisoformat(c['profile_expires_at'].replace('Z', '+00:00')) # Validate historical timestamp without granting live authority.
+    require(all(c[key] == original[binding] for key, binding in BINDINGS.items()), 'Capability does not match ORIGINAL create packet')
+    return c
+
+def context(raw, original, v, now=None):
+    c = context_provenance(raw, original, v)
     expiry = dt.datetime.fromisoformat(c['profile_expires_at'].replace('Z', '+00:00'))
     now = now or dt.datetime.now(dt.timezone.utc)
     require(expiry > now, 'Profile expired; preserve state for separately approved recovery, never extend/rebind identity')
-    require(all(c[key] == original[binding] for key, binding in BINDINGS.items()), 'Capability does not match ORIGINAL create packet')
     return c
 
 def changes(plan, v, destroy=False, ledger=None):

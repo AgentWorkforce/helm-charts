@@ -17,7 +17,7 @@ import stat
 import subprocess
 import sys
 import time
-from contract import ADDRESSES, caller, canonical, changes, context, digest, domain_name, expected_tags, identities, native_error, require, variables as validate_variables
+from contract import ADDRESSES, caller, canonical, changes, context, context_provenance, digest, domain_name, expected_tags, identities, native_error, require, variables as validate_variables
 from files import read, save, sha
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -110,8 +110,23 @@ class Runner:
 
     def packet(self): return read(self.path('create.packet.json'))
 
-    def authority(self, original):
+    def sealed_context(self, original):
+        # Local provenance seal, never a source of credentials or approval authority.
+        path = self.path('original-capability-context.json')
+        value = context_provenance(path.read_text(), original, self.v)
+        fingerprint = sha(path)
+        for name in ['phase.json', 'candidate-contract.json', 'created.json', 'destroy.packet.json', 'network-created.json', 'domain-absence.json', 'network-absence.json']:
+            if self.path(name).exists():
+                require(read(self.path(name)).get('context_sha256') == fingerprint, 'Original capability context seal differs from lifecycle evidence')
+        return value, fingerprint
+
+    def authority(self, original, initial=False):
         value = context(self.env.get('PIPPEN_SANDBOX_CAPABILITY_CONTEXT'), original, self.v)
+        if self.path('original-capability-context.json').exists():
+            sealed, _ = self.sealed_context(original)
+            require(value == sealed, 'All 16 original capability context fields must remain identical')
+        else:
+            require(initial, 'Missing original capability context seal; quarantine lifecycle')
         identity = self.identity('control') # Fresh CLI call; never Terraform's cached data source.
         return value, identity
 
@@ -169,7 +184,7 @@ class Runner:
         after = self.bindings(); require(after == before, 'Source/input/provider/backend/state changed while preparing the saved plan')
         packet = {**after, 'plan_sha256': sha(saved), 'plan_json_sha256': digest(canonical(plan)), 'operation': name}
         if destroy:
-            packet.update(original_packet_sha256=sha(self.path('create.packet.json')), created_sha256=sha(self.path('created.json')), network_created_sha256=sha(self.path('network-created.json')))
+            packet.update(context_sha256=self.sealed_context(original)[1], original_packet_sha256=sha(self.path('create.packet.json')), created_sha256=sha(self.path('created.json')), network_created_sha256=sha(self.path('network-created.json')))
         save(self.path(name + '.plan.json'), plan); save(self.path(name + '.packet.json'), packet)
         return {'operation': name, 'packet_sha256': sha(self.path(name + '.packet.json')), 'plan_sha256': packet['plan_sha256'], 'scope': 'local review packet; no new server approval inferred'}
 
@@ -177,7 +192,7 @@ class Runner:
         require(self.settled, 'Unsettled prior command group')
         require(destroy or not self.path('phase.json').exists(), 'An attempted creation cannot be retried or adopted; reconcile pending/captured lifecycle explicitly')
         name = 'destroy' if destroy else 'create'; original = self.packet(); packet = read(self.path(name + '.packet.json'))
-        cap, identity = self.authority(original)
+        cap, identity = self.authority(original, initial=not destroy)
         require(sha(self.path(name + '.packet.json')) == reviewed_packet_sha256 and packet['plan_sha256'] == reviewed_plan_sha256 and sha(self.path(name + '.tfplan')) == reviewed_plan_sha256, 'Exact saved plan/packet review required')
         current = self.immutable(original)
         require(current['backend_state_sha256'] == packet['backend_state_sha256'], 'Current state differs from the reviewed saved plan')
@@ -196,16 +211,20 @@ class Runner:
             require(time.time() - baseline['observed_at'] <= 900 and baseline['inputs_sha256'] == sha(self.variables), 'Common-role native baseline is stale or foreign; prepare a new approval packet')
             result = self.aws('opensearch', 'describe-domain', '--domain-name', domain_name(self.v['pippen']['session_id']), check=False)
             require(result.returncode != 0 and native_error(result.stderr, 'DescribeDomain', 'ResourceNotFoundException'), 'Refuse existing/foreign/unknown domain; a name or create success cannot establish ownership')
-        save(self.path('phase.json'), {'operation': name, 'status': 'pending', 'plan_sha256': reviewed_plan_sha256, 'apply_caller': identity, 'approval_id': cap['approval_id'], 'approval_fingerprint': cap['approval_fingerprint']})
+        if not destroy and not self.path('original-capability-context.json').exists():
+            save(self.path('original-capability-context.json'), cap)
+        _, context_sha256 = self.sealed_context(original)
+        save(self.path('phase.json'), {'context_sha256': context_sha256, 'operation': name, 'status': 'pending', 'plan_sha256': reviewed_plan_sha256, 'apply_caller': identity, 'approval_id': cap['approval_id'], 'approval_fingerprint': cap['approval_fingerprint']})
         self.run([self.terraform, 'apply', '-input=false', '-no-color', str(self.path(name + '.tfplan'))])
         if destroy:
-            save(self.path('phase.json'), {'operation': 'destroy', 'status': 'destroyed-pending-native-absence'})
+            save(self.path('phase.json'), {'context_sha256': context_sha256, 'operation': 'destroy', 'status': 'destroyed-pending-native-absence'})
         else:
             candidate = json.loads(self.run([self.terraform, 'output', '-json', 'proof_contract']).stdout)
+            candidate['context_sha256'] = context_sha256
             save(self.path('candidate-contract.json'), candidate)
             native = self.native_domain(candidate)
             save(self.path('created.json'), {**candidate, 'native_domain_id': native['DomainId'], 'apply_caller': identity, 'original_packet_sha256': sha(self.path('create.packet.json'))})
-            save(self.path('phase.json'), {'operation': 'create', 'status': 'captured', 'ledger_sha256': sha(self.path('created.json'))})
+            save(self.path('phase.json'), {'context_sha256': context_sha256, 'operation': 'create', 'status': 'captured', 'ledger_sha256': sha(self.path('created.json'))})
         return {'operation': name, 'scope': 'Terraform operation completed; independent native retirement still required'}
 
     def native_domain(self, ledger):
@@ -225,7 +244,7 @@ class Runner:
         require(read(self.path('phase.json')).get('status') == 'destroyed-pending-native-absence', 'Terraform destruction is not complete')
         result = self.aws('opensearch', 'describe-domain', '--domain-name', domain_name(self.v['pippen']['session_id']), check=False)
         require(result.returncode != 0 and native_error(result.stderr, 'DescribeDomain', 'ResourceNotFoundException'), 'Exact domain absence is not proved')
-        save(self.path('domain-absence.json'), {'ok': True, 'domain_name': domain_name(self.v['pippen']['session_id']), 'original_packet_sha256': sha(self.path('create.packet.json')), 'caller': self.identity('control')})
+        save(self.path('domain-absence.json'), {'ok': True, 'context_sha256': self.sealed_context(original)[1], 'domain_name': domain_name(self.v['pippen']['session_id']), 'original_packet_sha256': sha(self.path('create.packet.json')), 'caller': self.identity('control')})
         return {'ok': True, 'scope': 'exact typed domain absence only; common-role ENI absence remains required'}
 
 def main():

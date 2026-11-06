@@ -54,6 +54,7 @@ def network(runner, operation):
         save(runner.path('network-before.json'), receipt)
         return {'ok': True, 'scope': 'common-role read-only DNS/subnet/SG/empty ENI/SLR prerequisites; no domain absence claim'}
     original = runner.packet(); runner.immutable(original)
+    _, context_sha256 = runner.sealed_context(original) # Provenance only: expired context may still support common-role read-only retirement checks.
     created = read(runner.path('created.json'))
     require(created['original_packet_sha256'] == sha(runner.path('create.packet.json')), 'Foreign creation capture')
     if operation == 'network-created':
@@ -61,10 +62,11 @@ def network(runner, operation):
         rows = interfaces(runner)
         require(0 < len(rows) <= 8 and len({row['NetworkInterfaceId'] for row in rows}) == len(rows), 'Missing/duplicate/unbounded service ENIs')
         require(all(row['OwnerId'] == v['account_id'] and row['VpcId'] == v['vpc_id'] and row['SubnetId'] in v['subnet_ids'] and row.get('RequesterManaged') is True and {g['GroupId'] for g in row['Groups']} == {v['domain_security_group_id']} for row in rows), 'Unknown ENI producer/owner/network; quarantine rather than adopt or detach')
-        save(runner.path('network-created.json'), {'ok': True, 'caller': identity, 'domain_name': created['domain_name'], 'domain_id': created['native_domain_id'], 'interfaces': rows, 'original_packet_sha256': created['original_packet_sha256']})
+        save(runner.path('network-created.json'), {'ok': True, 'context_sha256': context_sha256, 'caller': identity, 'domain_name': created['domain_name'], 'domain_id': created['native_domain_id'], 'interfaces': rows, 'original_packet_sha256': created['original_packet_sha256']})
         return {'ok': True, 'service_eni_count': len(rows), 'ownership_basis': 'exclusive empty SG baseline + captured exact domain network + service-managed interfaces; no tag-only claim'}
     require(operation == 'network-absence' and read(runner.path('phase.json')).get('status') == 'destroyed-pending-native-absence', 'Terraform destroy required before native absence')
     captured = read(runner.path('network-created.json'))
+    require(captured.get('context_sha256') == context_sha256, 'Foreign ENI context seal')
     require(captured['original_packet_sha256'] == created['original_packet_sha256'] and captured['domain_id'] == created['native_domain_id'], 'Foreign ENI capture')
     reviewed = read(runner.path('destroy.packet.json'))
     require(reviewed['created_sha256'] == sha(runner.path('created.json')) and reviewed['network_created_sha256'] == sha(runner.path('network-created.json')), 'Physical inventory differs from reviewed teardown')
@@ -75,8 +77,8 @@ def network(runner, operation):
         response = runner.aws('ec2', 'describe-network-interfaces', '--network-interface-ids', identifier, check=False)
         checks[identifier] = response.returncode != 0 and native_error(response.stderr, 'DescribeNetworkInterfaces', 'InvalidNetworkInterfaceID.NotFound')
     require(checks and all(checks.values()), 'Exact captured ENI absence unproved; Denied/empty/refresh errors do not count')
-    receipt = {'ok': True, 'caller': identity, 'checks': checks, 'original_packet_sha256': created['original_packet_sha256']}
+    receipt = {'ok': True, 'context_sha256': context_sha256, 'caller': identity, 'checks': checks, 'original_packet_sha256': created['original_packet_sha256']}
     save(runner.path('network-absence.json'), receipt)
     domain = read(runner.path('domain-absence.json'))
-    require(domain.get('ok') is True and domain['original_packet_sha256'] == created['original_packet_sha256'], 'Separate capability-role typed domain absence still required')
+    require(domain.get('ok') is True and domain.get('context_sha256') == context_sha256 and domain['original_packet_sha256'] == created['original_packet_sha256'], 'Separate capability-role typed domain absence still required')
     return {'ok': True, 'scope': 'exact disposable domain and captured service ENIs only; external VPC/subnets/SGs/roles/SLR preserved'}

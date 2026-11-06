@@ -7,10 +7,10 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from contract import caller, identities
+from contract import ADDRESSES, CONTEXT_KEYS, DOMAIN, POLICY, canonical, caller, digest, domain_name, expected_tags, identities
 from files import save, sha
 import runner as r
-from test_contract import inherited, inputs, packet
+from test_contract import create_plan, inherited, inputs, packet
 
 class RunnerGuards(unittest.TestCase):
     def setUp(self):
@@ -30,7 +30,7 @@ class RunnerGuards(unittest.TestCase):
 
     def test_context_survives_for_refresh_and_fresh_sts_is_used(self):
         original=packet();raw=json.dumps(inherited(self.v,original));self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=raw
-        _,who=self.subject.authority(original)
+        _,who=self.subject.authority(original, initial=True)
         self.assertEqual(who['Arn'],identities(self.v)['control'])
         self.assertEqual(self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT'],raw)
         self.assertEqual(len(self.calls),1);self.assertIn('get-caller-identity',self.calls[0])
@@ -40,6 +40,116 @@ class RunnerGuards(unittest.TestCase):
         self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps({**inherited(self.v,packet()),'inputs_sha256':'f'*64})
         with self.assertRaises(RuntimeError):self.subject.authority(packet())
         self.assertEqual(self.calls,[])
+
+    def seal(self, original=None):
+        original=original or packet();cap=inherited(self.v,original)
+        save(self.subject.path('original-capability-context.json'),cap)
+        fingerprint=sha(self.subject.path('original-capability-context.json'))
+        save(self.subject.path('phase.json'),{'status':'captured','context_sha256':fingerprint})
+        return cap,fingerprint
+
+    def test_every_context_field_is_frozen_before_fresh_selected_io(self):
+        original=packet();cap,_=self.seal(original)
+        for key in CONTEXT_KEYS:
+            changed={**cap,key:cap[key]+'different'}
+            if key=='approval_id':changed[key]='22222222-2222-4222-8222-222222222222'
+            if key=='approval_fingerprint':changed[key]='b'*64
+            if key=='profile_expires_at':changed[key]='2099-02-01T00:00:00.000Z'
+            self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps(changed)
+            with self.subTest(key=key),self.assertRaises((RuntimeError,ValueError)):
+                self.subject.authority(original)
+        self.assertEqual(self.calls,[])
+        self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps(cap)
+        self.subject.authority(original)
+        self.assertEqual(len(self.calls),1)
+
+    def test_selected_phases_require_seal_and_captured_hash(self):
+        original=packet();self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps(inherited(self.v,original))
+        with self.assertRaisesRegex(RuntimeError,'Missing original'):self.subject.authority(original)
+        cap,fingerprint=self.seal(original)
+        for name in ['phase.json','created.json','destroy.packet.json']:
+            save(self.subject.path(name),{'context_sha256':'f'*64})
+            with self.subTest(name=name),self.assertRaisesRegex(RuntimeError,'seal differs'):self.subject.authority(original)
+            save(self.subject.path(name),{'context_sha256':fingerprint})
+        cap['approval_id']='22222222-2222-4222-8222-222222222222'
+        save(self.subject.path('original-capability-context.json'),cap)
+        with self.assertRaisesRegex(RuntimeError,'seal differs'):self.subject.authority(original)
+        self.assertEqual(self.calls,[])
+
+    def test_expired_seal_is_readable_provenance_but_not_selected_authority(self):
+        original=packet();cap,fingerprint=self.seal(original)
+        cap['profile_expires_at']='2000-01-01T00:00:00.000Z'
+        save(self.subject.path('original-capability-context.json'),cap)
+        fingerprint=sha(self.subject.path('original-capability-context.json'))
+        save(self.subject.path('phase.json'),{'context_sha256':fingerprint})
+        self.assertEqual(self.subject.sealed_context(original),(cap,fingerprint))
+        self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps(cap)
+        with self.assertRaisesRegex(RuntimeError,'expired'):self.subject.authority(original)
+        self.assertEqual(self.calls,[])
+
+    def staged_create(self, fail=False):
+        plan=create_plan(self.v);saved=self.subject.path('create.tfplan');saved.write_text('synthetic plan')
+        original={**packet(),'plan_sha256':sha(saved),'plan_json_sha256':digest(canonical(plan))}
+        save(self.subject.path('create.packet.json'),original)
+        save(self.subject.path('network-before.json'),{'observed_at':__import__('time').time(),'inputs_sha256':sha(self.variables)})
+        cap=inherited(self.v,original);self.subject.env['PIPPEN_SANDBOX_CAPABILITY_CONTEXT']=json.dumps(cap)
+        self.subject.immutable=Mock(return_value={'backend_state_sha256':original['backend_state_sha256']})
+        self.subject.native_domain=Mock(return_value={'DomainId':'synthetic-domain-id'})
+        self.subject.aws=Mock(return_value=SimpleNamespace(returncode=1,stderr='An error occurred (ResourceNotFoundException) when calling the DescribeDomain operation'))
+        self.subject.identity=Mock(return_value={'Account':self.v['account_id'],'Arn':identities(self.v)['control']})
+        def run(args,**kwargs):
+            if 'show' in args:return SimpleNamespace(stdout=json.dumps(plan))
+            if 'apply' in args:
+                self.assertEqual(json.loads(self.subject.path('original-capability-context.json').read_text()),cap)
+                phase=json.loads(self.subject.path('phase.json').read_text())
+                self.assertEqual(phase['status'],'pending')
+                self.assertEqual(phase['context_sha256'],sha(self.subject.path('original-capability-context.json')))
+                if fail:raise RuntimeError('synthetic partial apply')
+                return SimpleNamespace(stdout='')
+            if 'output' in args:return SimpleNamespace(stdout=json.dumps({'domain_name':domain_name(self.v['pippen']['session_id']),'domain_arn':'arn:aws:es:us-west-2:111111111111:domain/'+domain_name(self.v['pippen']['session_id'])}))
+            raise AssertionError(args)
+        self.subject.run=run
+        return original,cap
+
+    def test_original_context_is_durable_before_apply_and_survives_capture(self):
+        original,cap=self.staged_create()
+        self.subject.apply(original['plan_sha256'],sha(self.subject.path('create.packet.json')))
+        fingerprint=sha(self.subject.path('original-capability-context.json'))
+        for name in ['candidate-contract.json','created.json','phase.json']:
+            self.assertEqual(json.loads(self.subject.path(name).read_text())['context_sha256'],fingerprint)
+        self.assertEqual(json.loads(self.subject.path('original-capability-context.json').read_text()),cap)
+        self.assertEqual(self.subject.sealed_context(original),(cap,fingerprint))
+
+    def test_destroy_and_native_absence_keep_original_context_seal(self):
+        original,cap=self.staged_create()
+        self.subject.apply(original['plan_sha256'],sha(self.subject.path('create.packet.json')))
+        fingerprint=sha(self.subject.path('original-capability-context.json'))
+        save(self.subject.path('network-created.json'),{'context_sha256':fingerprint})
+        ledger=json.loads(self.subject.path('created.json').read_text())
+        before={DOMAIN:{'domain_name':ledger['domain_name'],'arn':ledger['domain_arn'],'tags':expected_tags(self.v)},POLICY:{'domain_name':ledger['domain_name']},'terraform_data.guard':{}}
+        plan={'resource_changes':[{'address':a,'mode':'managed','change':{'actions':['delete'],'before':before[a]}} for a in ADDRESSES]}
+        saved=self.subject.path('destroy.tfplan');saved.write_text('synthetic delete plan')
+        destruction={**original,'plan_sha256':sha(saved),'plan_json_sha256':digest(canonical(plan)),'context_sha256':fingerprint,'original_packet_sha256':sha(self.subject.path('create.packet.json')),'created_sha256':sha(self.subject.path('created.json')),'network_created_sha256':sha(self.subject.path('network-created.json'))}
+        save(self.subject.path('destroy.packet.json'),destruction)
+        def run(args,**kwargs):
+            if 'show' in args:return SimpleNamespace(stdout=json.dumps(plan))
+            self.assertIn('apply',args)
+            phase=json.loads(self.subject.path('phase.json').read_text())
+            self.assertEqual((phase['operation'],phase['status'],phase['context_sha256']),('destroy','pending',fingerprint))
+            return SimpleNamespace(stdout='')
+        self.subject.run=run
+        self.subject.apply(destruction['plan_sha256'],sha(self.subject.path('destroy.packet.json')),destroy=True)
+        self.assertEqual(json.loads(self.subject.path('phase.json').read_text())['context_sha256'],fingerprint)
+        self.subject.domain_absence()
+        self.assertEqual(json.loads(self.subject.path('domain-absence.json').read_text())['context_sha256'],fingerprint)
+        self.assertEqual(json.loads(self.subject.path('original-capability-context.json').read_text()),cap)
+
+    def test_partial_apply_retains_original_context_and_pending_record(self):
+        original,cap=self.staged_create(fail=True)
+        with self.assertRaisesRegex(RuntimeError,'synthetic partial'):self.subject.apply(original['plan_sha256'],sha(self.subject.path('create.packet.json')))
+        self.assertEqual(json.loads(self.subject.path('original-capability-context.json').read_text()),cap)
+        self.assertEqual(json.loads(self.subject.path('phase.json').read_text())['status'],'pending')
+        self.assertFalse(self.subject.path('created.json').exists())
 
     def test_pending_creation_is_never_blindly_retried(self):
         save(self.subject.path('phase.json'),{'status':'pending'})

@@ -11,7 +11,7 @@ This Terraform/Python-only worktree has no npm manifest and required no npm
 install, invented lockfile or dependency symlink.
 
 - Terraform 1.16.7 and OpenTofu 1.11.14: backend-disabled init/validate; seven
-  portable module cases and twelve root cases pass under each engine. Disposable
+  portable module cases and thirteen root cases pass under each engine. Disposable
   native mock apply/teardown succeeds; protected defaults remain literal guarded.
 - Terraform-only historical state test shares mock state from the unindexed
   module at the base commit, applies the new default module and asserts the same
@@ -20,15 +20,28 @@ install, invented lockfile or dependency symlink.
   `state_key`, unsupported by OpenTofu 1.11, and is not a real customer migration.
 - Full source parity check compares every domain argument/security block across
   protected/disposable branches, excluding only count and the literal guard.
+- Native first-create plans under both engines resolve the policy ARN/JSON and
+  pass the exact production plan guard. Only deterministic computed `tags_all`
+  is explicitly supplied in the test helper; no policy/security/nested identity
+  overrides or production normalization occur. The original `fd5799c` apply-first
+  native tests plus synthetic JSON did not catch the module-wide dependency's
+  deferred-policy defect. Its historical failing plan remains review evidence;
+  the root dependency is removed while all fully known plan preconditions and
+  fresh wrapper identity checks remain intact.
 - Existing AWS example (two cases) and aws-environments (27 cases) pass in an
   isolated T7 source copy using the changed shared module. No consumer source is
   edited; the separate Lambda environment-binding follow-up remains open.
-- Eighteen Python offline tests cover all original context hashes, stale/foreign
+- Twenty-four Python offline tests cover all original context hashes, stale/foreign
   context, fresh caller versus cached plan identity, original approval versus
-  current teardown hashes, exact create/delete payload/address fences, public
+  current teardown hashes, all 16 immutable fields and durable seal/receipt hashes,
+  missing/tampered seals, expiry versus historical provenance, pre-apply sealing,
+  successful capture and partial-apply pending preservation, exact create/delete payload/address fences, public
   policy/role/metadata/capacity refusal, SG peers, incomplete ENI pages, typed
   NotFound/credential error distinctions, no capability-to-common permission
   fallback, inherited refresh metadata and unrelated evidence preservation.
+  The original `fd5799c` runner validated only seven packet hashes and did not
+  retain approval ID/fingerprint/expiry after capture. This source correction
+  seals all 16 fields; the old validation receipt is not retroactively upgraded.
   An inert local Python parent/grandchild timeout preserves partial output and
   proves its owned process group absent; it invokes no AWS or credential tool.
 - TFLint 0.64.0, Terraform formatting, Python AST, Git whitespace and repository

@@ -55,6 +55,12 @@ That identity is honestly recorded by Terraform as **plan identity only**. A
 saved plan may retain it at apply; it is never proof of the applying principal.
 Initial common-role planning cannot establish native OpenSearch absence.
 
+The root's input/existing-resource preconditions are fully known during planning.
+It deliberately has no module-wide dependency on the new local guard resource:
+that would defer the module's account/region/partition reads and hide the
+permission-bearing policy JSON until apply. Those reads must stay plan-known;
+the local guard is a plan-time check, not fresh apply authorization.
+
 Creation/control/destruction require the exact future lease-specific
 `/pippen/provisioning/search-control-v1-<full UUID>` role and
 `search-<UUID>` STS session. Before actions the runner reads inherited
@@ -80,6 +86,18 @@ literal CLI config; it is not a Lambda ZIP or private provider artifact. Seven
 fixed exact-case tags include the three owners, `proof:source`, Environment,
 EnvironmentClass and ManagedBy. All must be within the profile's <=8 approved
 keys. Complete metadata is immutable: no retagging to accommodate provider deltas.
+
+Immediately before the first reviewed creation apply, the runner atomically saves
+`original-capability-context.json`: exactly the sanitized 16 inherited fields,
+without credentials or per-token expiry. It never overwrites this provenance
+seal. Pending/captured phases, the raw candidate, creation and teardown records,
+and domain/ENI receipts bind its file SHA256. Every subsequent selected operation
+requires all 16 inherited fields to equal this original record, including
+approval ID, fingerprint and immutable profile expiry. A changed or missing seal
+quarantines the lifecycle before selected AWS calls. Common-role ENI reads verify
+the sealed record/hash without treating its historical expiry as current
+authority; selected operations still require fresh, unexpired context and STS.
+The local file does not confer approval or independently prove server provenance.
 
 Cleanup keeps the **original** server approval/context unchanged. It separately
 hash-reviews a current delete-only saved plan and current state, under the same
@@ -160,6 +178,17 @@ mock state from the exact historical module through `state_key`, asserts the
 same resource ID after the default migration, then requires protected conversion
 and mock teardown to fail. OpenTofu 1.11 lacks this test feature, so its portable
 module mocks are separate evidence. No real migration or domain was performed.
+
+`python3 tests/check_first_plan.py /path/to/terraform` (repeat with OpenTofu)
+feeds the actual native first-create mocked plan into the production contract.
+Only the generic AWS mock's computed `tags_all` is explicitly substituted with
+the configured tags in this test helper. Policy/security values and nested
+account/region/partition data are never overridden or normalized. No production
+normalization exists. The earlier `fd5799c` synthetic-plan/apply-first tests
+missed the deferred-policy defect; the native first-plan regression closes that
+coverage gap. Unconfigured domain policy readback, service-generated IDs/endpoints
+and the AWS-managed KMS key ID may remain computed; the standalone policy payload
+and all configured security/identity inputs consumed by the guard must be known.
 
 TFLint, repository-config terraform-docs, Checkov, Python AST and Git whitespace
 checks apply. Terraform-only source has no npm manifest/install or symlinked

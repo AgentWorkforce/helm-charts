@@ -27,6 +27,13 @@ variables {
   roles                     = { admin = "arn:aws:iam::111111111111:role/runtime/admin", indexer = "arn:aws:iam::111111111111:role/runtime/indexer", reader = "arn:aws:iam::111111111111:role/runtime/reader" }
   engine_version            = "OpenSearch_2.19"
 }
+run "first_create_policy_arn_is_known_before_apply" {
+  command = plan
+  assert {
+    condition     = jsondecode(module.search.indexer_policy_json).Statement[0].Resource == ["arn:aws:es:${var.region}:${var.account_id}:domain/${local.domain_name}/*"] && jsondecode(module.search.reader_policy_json).Statement[0].Resource == ["arn:aws:es:${var.region}:${var.account_id}:domain/${local.domain_name}/*"]
+    error_message = "A first-create plan must resolve permission-bearing domain ARNs without overriding nested account/region/partition data."
+  }
+}
 run "actual_module_explicit_external_roles_and_honest_plan_identity" {
   command = apply
   assert {
