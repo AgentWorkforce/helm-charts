@@ -1,8 +1,9 @@
 # Release status: what is proven and what is preview
 
-Current release: `agent-relay` chart 0.3.12. `release-agent-relay.yml`
-publishes it when the `agent-relay-0.3.12` tag is pushed; from then on it is
-pullable anonymously from `oci://ghcr.io/agentworkforce/charts/agent-relay`.
+Current release: `agent-relay` chart 0.3.12, published from the
+`agent-relay-0.3.12` tag by `release-agent-relay.yml`
+([release run](https://github.com/AgentWorkforce/helm-charts/actions/runs/41985579885)).
+It is pullable anonymously from `oci://ghcr.io/agentworkforce/charts/agent-relay`.
 0.3.12 adds durable actors on AWS EKS (`values-eks-actors.yaml`, off by
 default) on top of 0.3.11. Every image
 `values-gcp.yaml` renders is now a public GHCR release digest: the

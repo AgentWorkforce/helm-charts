@@ -3,13 +3,14 @@
 Status: proven end to end on EKS Auto Mode inside a Pippen sandbox
 (2026-11-04): all 15 cases of the e2e plus the EKS checks pass, with real DNS
 (`aws-proof.agentrelay.com`) and TLS (ACM). Chart
-`oci://ghcr.io/agentworkforce/charts/agent-relay` 0.3.6 with
+`oci://ghcr.io/agentworkforce/charts/agent-relay` 0.3.11 with
 [`values-eks.yaml`](../charts/agent-relay/values-eks.yaml); every image is a
 public GHCR image pinned by digest. Results: [What was proven](#what-was-proven).
 This is a proof profile, not a production reference architecture.
 
-Scope: the core suite without durable-actors (GKE-only: GKE Sandbox/gVisor
-and GCS). Relaycast runs its SQLite backend. Relayfile is off.
+Scope: the core suite with Relaycast on SQLite and Relayfile off. For the
+separate AWS actor profile, see
+[durable actors](self-hosted-durable-actors.md).
 
 Files:
 
@@ -71,20 +72,21 @@ Cloudflare DNS the same way.
 
 ## Images used
 
-These are the images the proof ran. From agent-relay 0.3.11, `values-eks.yaml`
-pins the newer selfhost-api 0.3.0
+The EKS deployment was upgraded to the published agent-relay 0.3.11 chart
+with its image pins and the interim bearer off. `values-eks.yaml` pins
+selfhost-api 0.3.0
 (`sha256:95c7877741054dc2f1cafa26be3faa9bfe4660ed85d637aef4524daa10481963`)
 and dashboard
 (`sha256:c50005fcdd1fc5ab5ef3dac9b621db8e0c7e03480406bfe519743ae435d8f1ad`)
-digests, the same as `values-gcp.yaml`. The proof has not been re-run with
-them yet.
+digests, the same as `values-gcp.yaml`. The table below describes that
+image set.
 
 | Component | Image | Source |
 | --- | --- | --- |
 | relaycast | `ghcr.io/agentworkforce/relaycast-self-host@sha256:81274dca…` | chart pin |
 | relayauth | `ghcr.io/agentworkforce/relayauth@sha256:c23c92d2…` | chart pin |
-| relay-cloud-api | `ghcr.io/agentworkforce/selfhost-api@sha256:535e6718…` (relaycontrol 8e989a1, 0.2.0) | chart pin |
-| relay-dashboard | `ghcr.io/agentworkforce/relay-dashboard@sha256:bbeca872…` | chart pin |
+| relay-cloud-api | `ghcr.io/agentworkforce/selfhost-api@sha256:95c78777…` (relaycontrol 9b80b04, 0.3.0) | chart pin |
+| relay-dashboard | `ghcr.io/agentworkforce/relay-dashboard@sha256:c50005fc…` (relay-dashboard e5003d0) | chart pin |
 | relayhistory | `ghcr.io/agentworkforce/relayhistory@sha256:d3166bb14e1d6043426a4dd8cc05408b94574c8d79ad5fd6e789e0de00ab371b` (relayhistory-cloud 53c3333) | `values-eks.yaml` |
 | worker, alleyoop, privileged SQL | `ghcr.io/agentworkforce/96bulls-services@sha256:070fe6fd46ecd1e1f9db32ff22379f6df9b9e6c4d48ede5312c8fb986a95f3a9` (sessions-pipeline f1c2672, with #204) | `values-eks.yaml` |
 | CNPG Postgres | `ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:ed6923f9…` | chart pin |
@@ -104,7 +106,7 @@ bootstrap but accepts a courier push only with the interim bearer on.
 Environment: EKS Auto Mode 1.34 (`pippen-sbx-eks-proof`, us-west-2) in the
 Pippen sandbox of agent `aws-proof` (account 361835732085), public subnets,
 built-in node pools (one to two nodes). Helm release `agent-relay`, chart
-0.3.6 from GHCR, `values-eks.yaml` plus the generated proof overlay; all
+0.3.11 from GHCR, `values-eks.yaml` plus the generated proof overlay; all
 Deployments Ready, every migration Job Complete, three CNPG clusters healthy.
 Edge: one internet-facing ALB, ACM certificate `ISSUED` for the four hosts.
 
