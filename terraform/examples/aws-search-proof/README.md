@@ -79,6 +79,8 @@ integrity and mint/revocation remain Pippen's authority. Local guards reduce
 mistakes; an operator who holds credentials is not constrained by plan hashes in
 AWS IAM. Do not claim otherwise.
 
+The creation packet now records `search_mode_history`, rechecked from native saved-plan prior state and before IDs immediately before apply. The mandatory shared pure classifier and this root's closed contract allow only the fresh disposable domain, its exact domain policy, root guard and the new built-in creation-mode marker; no new AWS address/action is allowed. Full captured destroy includes both built-in markers. Old/unmarked domain retirement first requires separately reviewed unchanged-mode enrollment; this fresh-lifecycle root does not adopt or enroll an old domain. Do not repin an existing fixture's immutable source/inputs to add a marker. Raw Terraform first-enrollment provenance and the pinned Tofu legacy shared-state harness gap remain limits documented by the module.
+
 The creation packet binds the actual original plan, inputs, source, provider
 lock/binaries, artifact and backend/state digests. Here `artifact_sha256` covers
 the committed public product source/runner plus fresh network baseline and the

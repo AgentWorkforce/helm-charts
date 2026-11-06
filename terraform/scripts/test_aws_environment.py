@@ -13,6 +13,10 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location("aws_environment", Path(__file__).with_name("aws-environment.py"))
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
+_mode_test_spec = importlib.util.spec_from_file_location("mode_fixtures", Path(__file__).resolve().parents[1] / "modules/aws/search/tests/test_creation_mode.py")
+_mode_fixtures = importlib.util.module_from_spec(_mode_test_spec)
+_mode_test_spec.loader.exec_module(_mode_fixtures)
+
 
 
 class EnvironmentBoundaryTests(unittest.TestCase):
@@ -141,9 +145,10 @@ class EnvironmentBoundaryTests(unittest.TestCase):
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_dependency_lock_and_runner_changes_invalidate_plan(self):
-        for filename in (".terraform.lock.hcl", "aws-environment.py", "terraform.tfvars.json", "override.tf.json"):
+        for filename in (".terraform.lock.hcl", "aws-environment.py", "terraform.tfvars.json", "override.tf.json", "modules/aws/search/creation_mode.py"):
             with self.subTest(filename=filename):
                 path = self.root / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("before")
                 before = runner.source_digest(self.root)
                 path.write_text("after")
@@ -198,6 +203,8 @@ class StagedPlanLifecycleTests(unittest.TestCase):
         self.calls = []
         self.hook = None
         self.fail_apply = False
+        self.plan_payload = _mode_fixtures.fixture(False, fresh=True)
+        self.shows = []
         self.environment = {"TF_BIN": "terraform"}
 
     def command(self, command, approval=None):
@@ -207,6 +214,11 @@ class StagedPlanLifecycleTests(unittest.TestCase):
         def output(args, **kwargs):
             if args[0] == "aws":
                 return json.dumps({"Account": "111111111111", "Arn": "arn:aws:sts::111111111111:assumed-role/customer-deployer/test"}).encode()
+            if args[2:4] == ["show", "-json"]:
+                self.shows.append(args)
+                if self.hook:
+                    self.hook("show", args, kwargs["env"])
+                return json.dumps(self.plan_payload).encode()
             self.assertEqual(args[2:], ["workspace", "show"])
             return b"default\n"
         def run(args, **kwargs):
@@ -234,6 +246,32 @@ class StagedPlanLifecycleTests(unittest.TestCase):
 
     def applied(self):
         return any(args[2] == "apply" for args, _ in self.calls)
+
+    def test_search_history_gate_precedes_receipt_and_apply_consumption(self):
+        self.plan_payload = _mode_fixtures.fixture(True, enrolled=False)
+        _mode_fixtures.change(self.plan_payload, _mode_fixtures.g.MARKER)["after"]["input"] = False
+        with self.assertRaises(runner.Refused): self.command("plan")
+        self.assertFalse((self.directory / "plan-receipt.json").exists())
+        self.plan_payload = _mode_fixtures.fixture(False, enrolled=False, legacy=True)
+        self.command("plan")
+        receipt = self.receipt()
+        self.assertEqual(receipt["schema_version"], 3)
+        self.assertEqual(receipt["search_mode_history"], "legacy-or-missing-marker unchanged-domain")
+        original = (self.directory / "plan-receipt.json").read_bytes()
+        self.plan_payload["resource_changes"][0]["change"]["before"] = {"id":"foreign-id"}
+        with self.assertRaises(runner.Refused): self.command("apply", receipt["plan_sha256"])
+        self.assertEqual((self.directory / "plan-receipt.json").read_bytes(), original)
+        self.assertFalse(self.applied())
+        self.assertGreaterEqual(len(self.shows), 3)
+
+    def test_show_side_effects_cannot_bypass_final_seals(self):
+        for kind in ("plan", "source", "staged", "derived"):
+            with self.subTest(kind=kind):
+                self.setUp(); self.command("plan"); receipt=self.receipt()
+                self.hook=lambda op,args,env:self.mutate(kind) if op == "show" else None
+                with self.assertRaises(runner.Refused): self.command("apply",receipt["plan_sha256"])
+                self.assertFalse(self.applied())
+                self.assertTrue((self.directory / "plan-receipt.json").exists())
 
     def test_plan_references_staged_bytes_and_private_derived_variables(self):
         original = self.variables.read_bytes()
@@ -375,7 +413,7 @@ class StagedPlanLifecycleTests(unittest.TestCase):
     def test_malformed_or_foreign_receipt_paths_never_reach_init(self):
         self.command("plan")
         original = self.receipt()
-        for patch_value in ({"schema_version": 1}, {"schema_version": 2.0}, {"attempt_id": "0" * 32}, {"plan_path": "/foreign/plan"}, {"effective_variables_path": "../foreign"}, {"artifact_path": str(self.artifact)}, {"unknown": True}, {"artifact_sha256": "../escape"}):
+        for patch_value in ({"schema_version": 1}, {"schema_version": 2.0}, {"schema_version": 2}, {"search_mode_history": []}, {"search_mode_history": "never-lost"}, {"attempt_id": "0" * 32}, {"plan_path": "/foreign/plan"}, {"effective_variables_path": "../foreign"}, {"artifact_path": str(self.artifact)}, {"unknown": True}, {"artifact_sha256": "../escape"}):
             path = self.directory / "plan-receipt.json"
             path.write_text(json.dumps({**original, **patch_value}))
             self.calls = []

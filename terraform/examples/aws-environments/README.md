@@ -62,7 +62,7 @@ python3 terraform/scripts/aws-environment.py show \
 
 Review the saved plan and its account, region, environment, resource inventory,
 cost, retention and networking. After approval of that exact plan, run `apply`
-with the same arguments and `--approve-plan <saved-plan-SHA-256>`. Receipt v2
+with the same arguments and `--approve-plan <saved-plan-SHA-256>`. Receipt v3
 binds original variables/backend paths and bytes, Terraform source/dependency
 locks, this wrapper, selected tool family and its run-owned CLI configuration.
 For local Lambda ZIPs, it also binds the original artifact path/hash and private
@@ -71,7 +71,9 @@ input variables and ZIPs are never rewritten. The active `plan-receipt.json`
 selects `plans/<random-v4-hex>/data.tfplan` and `variables.json`; local artifacts
 live under `artifacts/sha256-<hex>/package.zip`, inside the private run directory.
 Review the derived variables and staged artifact lineage with the saved plan.
-Legacy receipts are refused: create and review a new v2 plan after upgrading.
+Legacy receipts are refused: create and review a new v3 plan after upgrading.
+
+Receipt v3 also records `search_mode_history`. The mandatory pure search classifier runs on native saved-plan prior state and changes before receipt creation and again before apply. It cross-checks exact prior/before IDs, holds mixed/deposed/unknown or destructive wrong-mode history, and permits old/unmarked state only as `legacy-or-missing-marker unchanged-domain` enrollment: all search AWS actions are no-op and only the matching fixed mode marker is added. This qualification does not prove a marker was never lost. Unmarked legacy destroy requires reviewed unchanged-mode enrollment first. No skip flag or client mode/digest establishes history. Receipts v1/v2 and frozen source/input bindings are never silently repinned; prepare/review a new plan. Standalone module invocations remain subject to the module's documented manual-upgrade limits.
 
 The wrapper rechecks original/staged inputs, source, backend, CLI configuration
 and receipt around init/plan and immediately before apply. Changed bindings
