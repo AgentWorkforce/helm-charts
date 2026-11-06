@@ -77,6 +77,7 @@ resource "aws_route_table_association" "private" {
 }
 
 resource "aws_security_group" "this" {
+  #checkov:skip=CKV2_AWS_5:Database/search/function groups are exported to separate data state; this foundation root deliberately has no RDS/domain/Lambda attachment. Verify those bindings in the data plan and live proof.
   for_each    = toset(["workload", "database", "search", "function", "operator-api", "eks-auth"])
   name        = "${local.name}-${each.key}"
   description = "Environment ${var.environment} ${each.key} traffic"
