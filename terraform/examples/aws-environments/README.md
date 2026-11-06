@@ -278,8 +278,8 @@ python3 terraform/scripts/verify-aws-data.py configuration \
 ```
 
 The account, region, environment, class, installation prefix and exact private
-OpenSearch HTTPS URL must come from
-an independently reviewed installation/backend record, not from the target JSON
+OpenSearch HTTPS URL must come from an independently reviewed installation/
+backend record, not from the target JSON
 being verified. Confirm the exact URL against a separately reviewed native
 DescribeDomain record and expected domain ARN: domain names can repeat across
 accounts, and the opaque endpoint suffix is not an account ownership proof.
@@ -346,8 +346,9 @@ Version history is retained.
 
 Run `search-bootstrap` as the separate administrator, `search-write` as the
 indexer, `search-read` as the reader, then `search-cleanup` as the administrator,
-each with the same arguments and run ID. Each phase first requires the independently confirmed exact search URL, so
-runtime roles need no new DescribeDomain permission. Native bootstrap still
+each with the same arguments and run ID. Each phase first requires the
+independently confirmed exact search URL, so runtime roles need no new
+DescribeDomain permission. Native bootstrap still
 checks domain ARN and endpoint linkage. These phases create temporary scoped
 FGAC roles/mappings and two synthetic indices, verify the marker, reject both
 single and bulk reader writes, reject access to a known foreign index, and
