@@ -62,11 +62,40 @@ python3 terraform/scripts/aws-environment.py show \
 
 Review the saved plan and its account, region, environment, resource inventory,
 cost, retention and networking. After approval of that exact plan, run `apply`
-with the same arguments and `--approve-plan <saved-plan-SHA-256>`. The receipt
-binds the variables, backend, Terraform source, dependency lock files, runner
-and local Lambda artifact bytes. Changed bindings require a new plan. Successful
-apply consumes the receipt. Provider credentials refresh through the runner's
-normal SDK credential chain; the provider also fences the allowed account.
+with the same arguments and `--approve-plan <saved-plan-SHA-256>`. Receipt v2
+binds original variables/backend paths and bytes, Terraform source/dependency
+locks, this wrapper, selected tool family and its run-owned CLI configuration.
+For local Lambda ZIPs, it also binds the original artifact path/hash and private
+content-addressed bytes actually named by the plan's derived variables. Original
+input variables and ZIPs are never rewritten. The active `plan-receipt.json`
+selects `plans/<random-v4-hex>/data.tfplan` and `variables.json`; local artifacts
+live under `artifacts/sha256-<hex>/package.zip`, inside the private run directory.
+Review the derived variables and staged artifact lineage with the saved plan.
+Legacy receipts are refused: create and review a new v2 plan after upgrading.
+
+The wrapper rechecks original/staged inputs, source, backend, CLI configuration
+and receipt around init/plan and immediately before apply. Changed bindings
+require a new plan; a refused operation or failed replacement plan preserves the
+previous unconsumed approval. Every actual apply attempt atomically moves the
+active receipt to that attempt's `apply-attempt-receipt.json` **before** invoking
+Terraform, including when apply fails partially. Do not retry it automatically;
+retain evidence and independently reconcile exact state/native resources before
+reviewing a recovery plan. Receipt renames are atomic for cooperating live
+processes, not power-loss durable: directory metadata is not fsynced. After a
+host/filesystem crash, independently reconcile backend/state and attempt
+evidence before trusting or retrying any recovered approval. This wrapper does
+not own automatic rollback or
+retirement of a customer's existing installation.
+
+All inherited `TF_*` settings are discarded; the child uses only controlled
+input/data-directory/CLI-config settings, with a run-owned configuration that
+disables checkpoints. `TF_BIN` selects only the approved `terraform`/`tofu`
+family before environment sanitization. These are drift checks, not isolation
+from concurrent hostile same-UID or privileged mutation. Use an approved
+PATH/toolchain and exclude concurrent privileged mutation. The wrapper does not
+attest executable/provider bytes or remote backend state; Terraform's own
+saved-plan/state locking checks remain necessary. Provider credentials refresh
+through the runner's normal SDK chain; the provider fences the allowed account.
 
 Use `output` with the same arguments to export **only** non-secret verification
 references to `terraform/.runs/<account>/<region>/<environment>/verification.json`.
@@ -95,7 +124,10 @@ pippen sandbox exec aws-proof -- \
 
 Use the same wrapper for show/apply/output. The runner verifies Pippen's exported
 account/agent/session and exact STS caller, and refuses a Pippen execution whose
-configuration omits the lease instead of silently using customer defaults. Roles use `/pippen/workload/`, the
+configuration omits the lease instead of silently using customer defaults. Any
+`PIPPEN_SANDBOX_*` marker requires the complete exact declared/exported tuple;
+a recognized `agent-session` STS caller cannot opt out by stripping markers.
+These checks do not allocate an account or grant credentials. Roles use `/pippen/workload/`, the
 Pippen boundary, reserved tags and bucket prefix. No fallback to an admin role
 is provided. Before live use the Pippen owner must confirm the deployed boundary
 and sweeper support RDS, OpenSearch, Lambda/SQS/EventBridge and the foundation
@@ -239,21 +271,92 @@ use it for every phase:
 ```sh
 python3 terraform/scripts/verify-aws-data.py configuration \
   --config /approved/private/verification.json --run-id <32-hex-run-id> \
-  --confirm-account <account> --confirm-environment dev --confirm-live
+  --confirm-account <account> --confirm-region us-west-2 \
+  --confirm-environment dev --confirm-environment-class development \
+  --confirm-name-prefix agent-relay \
+  --confirm-search-url <separately-reviewed-private-HTTPS-search-url> --confirm-live
 ```
+
+The account, region, environment, class, installation prefix and exact private
+OpenSearch HTTPS URL must come from an independently reviewed installation/
+backend record, not from the target JSON
+being verified. Confirm the exact URL against a separately reviewed native
+DescribeDomain record and expected domain ARN: domain names can repeat across
+accounts, and the opaque endpoint suffix is not an account ownership proof.
+Do not automatically derive `--confirm-search-url` from the untrusted target
+JSON. All confirmations are required, including for cleanup. Replacing
+`verification.json` with another installation's otherwise valid same-account,
+same-environment output is refused before constructing an SDK session. There is
+no permissive legacy schema fallback: regenerate `verification` after upgrading.
+For Pippen, also supply the exact independently reviewed
+`--confirm-pippen-agent <agent> --confirm-pippen-session <UUID>`; both must match
+the exported tuple. Customer mode refuses an exported Pippen tuple. Native
+Pippen ownership tags are checked in the RDS/Aurora and Lambda phases; S3
+requests bind the expected bucket owner, and Search uses the confirmed URL and
+configuration/bootstrap ARN-to-endpoint checks rather than native tag reads.
+
+The closed output includes `name_prefix`, `environment_class`, nullable `pippen`,
+`postgres.identifier`/`master_username`, and `pipeline.function_name`. Every phase
+and the direct-import helpers require an immutable `ConfirmedInstallation` of
+scalar values (including that exact independently confirmed HTTPS origin),
+validate all derived resource names and unqualified ARN types,
+and check the caller before a target operation. RDS uses
+`<prefix>-<environment>-pg` (instance or Aurora cluster); Lambda uses
+`<prefix>-<environment>-session-pipeline`; bucket/search names and writer
+endpoints follow this root's exact conventions. Import callers must construct
+that confirmation separately with `confirm_installation(...)`; omitting it is an
+error. Before signing each direct `Search.call`, its path and exact confirmed
+origin are checked first, then STS must report the confirmed account and a
+well-formed same-account ARN. A recognized common `agent-session` caller must
+match the selected Pippen lease and is refused in customer mode. Runtime-role
+callers remain supported. Direct `Search` checks account/common lease; the
+phase helpers additionally enforce their exact configured phase-role ARN.
+Neither check inspects native IAM role content or establishes authorization.
+Names and confirmations are safety checks, not IAM authorization.
+
+Before `GetSecretValue`, the PostgreSQL phase checks singleton native RDS/Aurora
+metadata, PostgreSQL17 engine/status, exact identifiers/ARNs, private/encrypted
+settings, database/port/master username, backups/protection, writer endpoint and
+active managed-secret linkage. Aurora also checks every unique member's exact
+installation name/ARN, cluster membership, private settings and tags. Native
+`Environment`, `EnvironmentClass`, `ManagedBy` and, when selected, all three exact
+Pippen ownership tags must match before reading credentials. Missing, duplicate,
+malformed, foreign or denied metadata refuses the operation. These tags come
+from the existing DescribeDBInstances/DescribeDBClusters responses; no new IAM
+grant or permission fallback is installed. The returned secret ARN and master
+username are checked again before SQL; secret values remain only in memory.
+
+Before `Invoke`, Lambda native name/unqualified ARN, execution-role ARN,
+`Environment`/`EnvironmentClass`/`ManagedBy`/optional Pippen tags, arm64/private-VPC
+state and reviewed code/image must match. Missing or denied tags refuse; a
+`GetFunction` response with tag errors is not accepted. The external-role seam
+remains: equality to the reviewed output role proves only the actual function's
+binding. Independently verify that role's native ownership, trust, boundary,
+inline/attached policy content and approved installation use; this helper does
+not inspect IAM role content or make an authorization claim from its ARN. No
+new permission grants are added to make a refused read succeed.
 
 Run `postgres` with `--rds-ca /approved/rds-global-bundle.pem` to require real
 PostgreSQL 17, private RDS metadata, encryption/backups/protection and
 `sslmode=verify-full`, then a temporary-table round trip. Run `storage` under the
-storage role for synthetic put/get/list/delete. Version history is retained.
+storage role for synthetic put/get/list/delete. Every configuration and storage
+S3 request binds `ExpectedBucketOwner` to the separately confirmed account,
+including cleanup; a name containing an account ID is not ownership proof.
+Version history is retained.
 
 Run `search-bootstrap` as the separate administrator, `search-write` as the
 indexer, `search-read` as the reader, then `search-cleanup` as the administrator,
-each with the same arguments and run ID. These phases create temporary scoped
+each with the same arguments and run ID. Each phase first requires the
+independently confirmed exact search URL, so runtime roles need no new
+DescribeDomain permission. Native bootstrap still
+checks domain ARN and endpoint linkage. These phases create temporary scoped
 FGAC roles/mappings and two synthetic indices, verify the marker, reject both
 single and bulk reader writes, reject access to a known foreign index, and
 check the rejected writes had no effects before cleanup. Signed requests never
-follow redirects. Keep cleanup failures visible and retain the run ID so the
+follow redirects. Direct `Search.call` paths must have exactly one leading
+slash, remain on the confirmed HTTPS origin, and contain no backslash, control
+character or fragment; refusal precedes credential access or signing. Keep
+cleanup failures visible and retain the run ID so the
 exact synthetic resources can be retired later.
 
 `lambda-smoke` checks the deployed arm64/private-VPC artifact and explicitly

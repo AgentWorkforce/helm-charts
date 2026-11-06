@@ -62,6 +62,10 @@ variables {
 run "development_composition" {
   command = plan
   assert {
+    condition     = output.verification.name_prefix == var.name_prefix && output.verification.environment_class == var.environment_class && output.verification.pippen == null && output.environment.name_prefix == var.name_prefix && output.verification.postgres.identifier == "agent-relay-dev-pg" && output.verification.postgres.master_username == "relay_admin"
+    error_message = "The verifier must export the complete independently confirmed installation and exact database identity."
+  }
+  assert {
     condition     = output.environment.namespace == "agent-relay-dev" && output.verification.storage.prefix == "proofs/dev/"
     error_message = "Names must isolate the environment, account and region."
   }
@@ -167,6 +171,10 @@ run "overlong_resource_prefix_refused" {
 
 run "lambda_composition" {
   command = plan
+  assert {
+    condition     = output.verification.pipeline.function_name == "agent-relay-dev-session-pipeline"
+    error_message = "Lambda verification must export the exact installation function name, not just an arbitrary same-account ARN."
+  }
   variables {
     pipeline_runtime            = "lambda"
     lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }

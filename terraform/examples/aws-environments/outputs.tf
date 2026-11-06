@@ -1,15 +1,20 @@
 output "environment" {
   description = "Environment identity to compare with the separately configured backend before apply."
-  value       = { name = var.environment, class = var.environment_class, account_id = var.account_id, region = var.region, namespace = local.namespace }
+  value       = { name = var.environment, class = var.environment_class, account_id = var.account_id, region = var.region, namespace = local.namespace, name_prefix = var.name_prefix }
 }
 
 output "verification" {
   description = "Non-secret input for the private-runner data-path verifier. Contains secret references, never secret values."
   value = {
-    environment = var.environment
-    account_id  = var.account_id
-    region      = var.region
+    environment       = var.environment
+    environment_class = var.environment_class
+    name_prefix       = var.name_prefix
+    account_id        = var.account_id
+    region            = var.region
+    pippen            = var.pippen
     postgres = {
+      identifier            = "${local.name}-pg"
+      master_username       = module.postgres.master_username
       host                  = module.postgres.host
       port                  = module.postgres.port
       database              = module.postgres.initial_database
@@ -35,8 +40,9 @@ output "verification" {
       index_prefix     = "${local.name}-"
     }
     pipeline = var.pipeline_runtime == "lambda" ? {
-      function_arn = module.pipeline[0].function_arn
-      image_uri    = try(var.lambda_package.image_uri, null)
+      function_name = module.pipeline[0].function_name
+      function_arn  = module.pipeline[0].function_arn
+      image_uri     = try(var.lambda_package.image_uri, null)
     } : null
   }
 }
