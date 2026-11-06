@@ -154,6 +154,41 @@ ownership handoff before changing modes; otherwise Terraform proposes deleting
 the old managed roles/policies/associations. Preserve external identities through
 consumer retirement and remove them in their owning bootstrap phase afterwards.
 
+## Lambda provider and PostgreSQL TLS bindings
+
+The private managed-OpenSearch Lambda artifact needs explicit non-secret runtime
+configuration in addition to its immutable ZIP/image reference. Set
+`lambda_runtime_bindings` using the Lambda profile example. The index must start
+with `<name_prefix>-<environment>-` and match the artifact's lowercase letter/digit/
+underscore/hyphen grammar (maximum 201 characters, no dots). Choose a fresh reviewed index for a changed
+search representation. `state_backend_id` is the shared writer/reader base ID
+(maximum 114 identifier characters); the matching artifact appends
+`.js-literal-v2` before using its 128-character PostgreSQL completeness key.
+`complete_since` must be `epoch` or a nonnegative RFC3339 timestamp.
+
+The root passes the managed domain endpoint and region, index, projection schema,
+completeness settings, and strict PostgreSQL TLS configuration to the function.
+The matching artifact must contain the reviewed public CA at
+`assets/postgres-ca.pem`; `postgres_ca_sha256` must equal the digest of those exact
+packaged bytes. The configured runtime path is `/var/task/assets/postgres-ca.pem`.
+Terraform does not inspect a remote ZIP/image, fetch a CA, mount a file or prove
+that the chosen artifact implements this contract. Lambda supplies its reserved
+`AWS_REGION` variable; this root does not override it.
+
+`lambda_shared_environment` exports the same non-secret configuration for the
+matching reader deployment. Independently verify that reader's immutable
+artifact, read-only database identity, JWT issuer/audience/JWKS/origin, and
+schema/FGAC bootstrap. Keep passwords, database URLs and AWS credentials in the
+existing reviewed secret/runtime identity path, outside these bindings.
+
+Omitting bindings preserves inactive provisioning behavior, and worker mode
+rejects Lambda-only bindings. Automatic Lambda activation now refuses missing
+bindings. Supplying them is configuration only: the existing exact-artifact,
+managed-RDS bootstrap, projection-state grants, OpenSearch schema/role mappings,
+S3/SQS event-path, private networking and overlapping-worker retirement checks
+must still pass before an operator sets `activate_lambda = true`. No runtime
+invocation creates schema or grants, and this change performs no activation.
+
 ## Lambda bootstrap and the complete application
 
 Worker mode is the default. Lambda mode requires `pipeline_runtime = "lambda"`,
@@ -291,6 +326,7 @@ exact destroy inventory and recovery proof; do not remove state to bypass them.
 | function\_security\_group\_ids | Lambda security groups with private database/search access and egress to the required AWS services. | `list(string)` | `[]` | no |
 | kms\_key\_arn | Existing customer-managed key; null uses AWS-managed encryption keys. | `string` | `null` | no |
 | lambda\_package | Compatible pipeline artifact when pipeline\_runtime=lambda: exactly one immutable image, versioned S3 zip, or local zip with hash. No credential values. | ```object({ image_uri = optional(string) s3_bucket = optional(string) s3_key = optional(string) s3_object_version = optional(string) filename = optional(string) source_code_hash = optional(string) })``` | `null` | no |
+| lambda\_runtime\_bindings | Non-secret configuration for an independently verified private OpenSearch/Lambda artifact with its pinned public PostgreSQL CA at assets/postgres-ca.pem. Writer and reader must share these bindings. This is not artifact, bootstrap, FGAC or caller-transition proof. | ```object({ search_index = string state_backend_id = string complete_since = string postgres_ca_sha256 = string projection_schema = optional(string, "search_index") })``` | `null` | no |
 | name\_prefix | Product prefix. prefix-environment must be at most 21 characters. For Pippen use e.g. pippen-sbx-ar. | `string` | `"agent-relay"` | no |
 | namespace | Environment namespace; null uses agent-relay-<environment>. | `string` | `null` | no |
 | pipeline\_runtime | workers or lambda. Lambda requires its own compatible immutable handler artifact; application deployment must disable overlapping worker stages. | `string` | `"workers"` | no |
@@ -307,6 +343,7 @@ exact destroy inventory and recovery proof; do not remove state to bypass them.
 | ---- | ----------- |
 | application\_contract | Required full-suite components and selected pipeline mode. This contract does not replace complete Helm values, actor roles, bootstrap or runtime compatibility proof. |
 | environment | Environment identity to compare with the separately configured backend before apply. |
+| lambda\_shared\_environment | Non-secret writer/reader bindings, or null until explicitly configured. Independently qualify the matching reader artifact, read-only DB identity, JWT settings, schema/FGAC bootstrap and worker retirement before activation. |
 | pipeline | Lambda runtime bindings, or null in worker mode. Populate the secret out of band and verify actual handler compatibility before activation. |
 | runtime\_role\_policy\_json | Proposed search and Lambda runtime permissions for operator review. External mode does not attach them or validate existing IAM configuration. Values may be unknown until service resources exist. |
 | service\_accounts | Distinct environment-scoped workload bindings; the application chart must use these identities. |

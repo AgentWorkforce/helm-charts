@@ -71,8 +71,14 @@ resource "terraform_data" "environment_contract" {
       error_message = "Lambda mode requires a compatible package and private function security groups."
     }
     precondition {
-      condition     = !var.activate_lambda || var.pipeline_runtime == "lambda"
-      error_message = "activate_lambda requires pipeline_runtime=lambda."
+      condition     = !var.activate_lambda || (var.pipeline_runtime == "lambda" && var.lambda_runtime_bindings != null)
+      error_message = "activate_lambda requires pipeline_runtime=lambda and explicit compatible artifact/provider/TLS bindings."
+    }
+    precondition {
+      condition = var.lambda_runtime_bindings == null ? true : (
+        var.pipeline_runtime == "lambda" && startswith(var.lambda_runtime_bindings.search_index, "${local.name}-")
+      )
+      error_message = "Lambda runtime bindings require lambda mode and an index prefixed by name_prefix-environment-."
     }
     precondition {
       condition = var.lambda_package == null ? true : (
@@ -179,6 +185,7 @@ module "pipeline" {
   role_path                    = local.role_path
   permissions_boundary_arn     = local.boundary
   search_index_enabled         = true
+  environment                  = local.lambda_shared_environment
   additional_policy_statements = jsondecode(module.search.indexer_policy_json).Statement
   tags                         = local.tags
 

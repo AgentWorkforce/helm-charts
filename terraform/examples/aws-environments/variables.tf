@@ -221,3 +221,26 @@ variable "existing_runtime_roles" {
     error_message = "Supply exact IAM role ARNs for both search identities (and optionally the pipeline), without empty values or wildcards."
   }
 }
+
+variable "lambda_runtime_bindings" {
+  description = "Non-secret configuration for an independently verified private OpenSearch/Lambda artifact with its pinned public PostgreSQL CA at assets/postgres-ca.pem. Writer and reader must share these bindings. This is not artifact, bootstrap, FGAC or caller-transition proof."
+  type = object({
+    search_index       = string
+    state_backend_id   = string
+    complete_since     = string
+    postgres_ca_sha256 = string
+    projection_schema  = optional(string, "search_index")
+  })
+  default = null
+
+  validation {
+    condition = var.lambda_runtime_bindings == null ? true : (
+      can(regex("^[a-z0-9][a-z0-9_-]{0,200}$", var.lambda_runtime_bindings.search_index)) &&
+      can(regex("^[a-zA-Z0-9._-]{1,114}$", var.lambda_runtime_bindings.state_backend_id)) &&
+      can(regex("^[a-z_][a-z0-9_]{0,62}$", var.lambda_runtime_bindings.projection_schema)) &&
+      can(regex("^[0-9a-f]{64}$", var.lambda_runtime_bindings.postgres_ca_sha256)) &&
+      (var.lambda_runtime_bindings.complete_since == "epoch" ? true : try(timecmp(var.lambda_runtime_bindings.complete_since, "1970-01-01T00:00:00Z") >= 0, false))
+    )
+    error_message = "Supply a lowercase OpenSearch index of at most 201 characters without dots, backend ID of at most 114 identifier characters (the artifact adds .js-literal-v2), PostgreSQL schema identifier, lowercase SHA256, and epoch or a nonnegative RFC3339 completeness timestamp."
+  }
+}
