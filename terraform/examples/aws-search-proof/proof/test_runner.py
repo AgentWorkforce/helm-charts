@@ -229,6 +229,10 @@ class RunnerGuards(unittest.TestCase):
             nonlocal injected
             if event=='line' and frame.f_code is r.Runner.run.__code__ and frame.f_lineno==boundary and not injected:
                 injected=True;signal.raise_signal(signal.SIGTERM)
+                # CPython3.9 writes the trace-local snapshot back on return.
+                # Refresh it from the actual handler-updated cells, without
+                # assigning an invented signal or changing this boundary.
+                frame.f_locals
             return trace
         fake=SimpleNamespace(pid=123456789,returncode=None,wait=Mock(side_effect=RuntimeError('synthetic wait error')),poll=Mock(return_value=None))
         previous=sys.gettrace()
