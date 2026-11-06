@@ -182,7 +182,13 @@ and mock teardown to fail. OpenTofu 1.11 lacks this test feature, so its portabl
 module mocks are separate evidence. No real migration or domain was performed.
 
 `python3 tests/check_first_plan.py /path/to/terraform` (repeat with OpenTofu)
-feeds the actual native first-create mocked plan into the production contract.
+validates the actual native first-create mocked `test_plan` UI with the same
+private fixed product-configuration checks used after strict runtime history
+admission. UI output is not saved-plan/prior-state evidence: this helper does
+not call history admission, prove ownership or authorize apply. Runtime
+`changes()` always performs strict native saved-plan history admission first,
+then those same closed address/policy/FGAC/disposable-boolean checks. The helper
+is mandatory in the known search-proof CI block on both pinned engines.
 Only the generic AWS mock's computed `tags_all` is explicitly substituted with
 the configured tags in this test helper. Policy/security values and nested
 account/region/partition data are never overridden or normalized. No production

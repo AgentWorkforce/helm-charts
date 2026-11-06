@@ -74,6 +74,7 @@ for d in "${dirs[@]}"; do
   fi
   if want test && [ "$d" = "examples/aws-search-proof" ] && have python3; then
     run -C "$ROOT/$d" python3 -m unittest discover -s proof -p 'test_*.py'
+    run -C "$ROOT/$d" python3 tests/check_first_plan.py "$TF_BIN"
   fi
   if want tflint && have tflint; then
     run -C "$ROOT/$d" tflint --config "$ROOT/.tflint.hcl" --no-color
