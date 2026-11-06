@@ -7,7 +7,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "us-west-2" } }
   mock_data "aws_ami" { defaults = { architecture = "arm64", root_device_type = "ebs", virtualization_type = "hvm", name = "al2023-ami-example", root_device_name = "/dev/xvda" } }
   mock_resource "aws_db_instance" {
-    defaults = { address = "synthetic.example", arn = "arn:aws:rds:us-west-2:111111111111:db:pippen-sbx-example-pg", identifier = "pippen-sbx-example-pg", master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-west-2:111111111111:secret:rds-example", secret_status = "active", kms_key_id = "example" }] }
+    defaults = { address = "synthetic.example", arn = "arn:aws:rds:us-west-2:111111111111:db:pippen-sbx-example-pg", master_user_secret = [{ secret_arn = "arn:aws:secretsmanager:us-west-2:111111111111:secret:rds-example", secret_status = "active", kms_key_id = "example" }] }
   }
   mock_resource "aws_s3_bucket" { defaults = { arn = "arn:aws:s3:::pippen-sbx-example-111111111111-us-west-2", id = "pippen-sbx-example-111111111111-us-west-2" } }
 }
@@ -17,11 +17,11 @@ override_resource {
   values = { id = "sg-11111111111111111" }
 }
 override_data {
-  target = data.aws_subnet.private["subnet-example-a"]
+  target = data.aws_subnet.private_first
   values = { owner_id = "111111111111", vpc_id = "vpc-example", availability_zone = "us-west-2a", map_public_ip_on_launch = false }
 }
 override_data {
-  target = data.aws_subnet.private["subnet-example-b"]
+  target = data.aws_subnet.private_second
   values = { owner_id = "111111111111", vpc_id = "vpc-example", availability_zone = "us-west-2b", map_public_ip_on_launch = false }
 }
 override_data {
@@ -96,7 +96,7 @@ run "data_provisioning_has_no_compute_before_version_pin" {
 run "public_subnet_refused" {
   command = plan
   override_data {
-    target = data.aws_subnet.private["subnet-example-b"]
+    target = data.aws_subnet.private_second
     values = { owner_id = "111111111111", vpc_id = "vpc-example", availability_zone = "us-west-2b", map_public_ip_on_launch = true }
   }
   expect_failures = [terraform_data.guard]
@@ -132,7 +132,7 @@ run "wrong_postgres_major" {
 run "same_az_refused" {
   command = plan
   override_data {
-    target = data.aws_subnet.private["subnet-example-b"]
+    target = data.aws_subnet.private_second
     values = { owner_id = "111111111111", vpc_id = "vpc-example", availability_zone = "us-west-2a", map_public_ip_on_launch = false }
   }
   expect_failures = [terraform_data.guard]

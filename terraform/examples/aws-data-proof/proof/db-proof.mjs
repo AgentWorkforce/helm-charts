@@ -30,6 +30,8 @@ export async function prove(config) {
     admin = await connect({ ...master, ssl: verified });
     const status = (await admin.query("SELECT current_setting('server_version_num')::int AS version, (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()) AS tls, (SELECT version FROM pg_stat_ssl WHERE pid=pg_backend_pid()) AS tls_version")).rows[0];
     assert.ok(status.version >= 170000 && status.version < 180000 && status.tls === true && ['TLSv1.2', 'TLSv1.3'].includes(status.tls_version));
+    const logging = (await admin.query("SELECT current_setting('log_statement') AS statements, current_setting('log_min_error_statement') AS error_statements, current_setting('log_parameter_max_length_on_error') AS error_parameters")).rows[0];
+    assert.deepEqual(logging, { statements: 'none', error_statements: 'panic', error_parameters: '0' });
     if (config.phase === 'seed') {
       // Fresh, exclusively owned disposable DB: never adopt an existing schema/role.
       assert.equal((await admin.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [reader])).rowCount, 0);
@@ -53,7 +55,10 @@ export async function prove(config) {
     }
     const extensions = (await admin.query("SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector','pg_trgm') ORDER BY extname")).rows;
     assert.deepEqual(extensions.map(row => row.extname), ['pg_trgm', 'vector']);
-    await refused(async () => { const c = await connect({ ...master, ssl: false }); await c.end(); }, ['28000']);
+    // A broken force_ssl setting must never cause a real password to cross a
+    // plaintext connection. Invalid synthetic credentials still distinguish
+    // no-encryption HBA refusal (28000) from password refusal (28P01).
+    await refused(async () => { const c = await connect({ user: 'plaintext_refusal_probe', password: 'synthetic-only', ssl: false }); await c.end(); }, ['28000']);
     await refused(async () => { const c = await connect({ ...master, ssl: { ca: config.wrong_ca, rejectUnauthorized: true } }); await c.end(); }, ['SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY']);
     await refused(async () => { const c = await connect({ ...master, ssl: { ...verified, checkServerIdentity: (_host, cert) => checkServerIdentity('wrong.invalid', cert) } }); await c.end(); }, ['ERR_TLS_CERT_ALTNAME_INVALID']);
     limited = await connect({ user: reader, password: readerPassword, ssl: verified });

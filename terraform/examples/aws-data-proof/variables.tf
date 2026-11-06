@@ -31,11 +31,11 @@ variable "vpc_id" {
   type        = string
 }
 variable "private_subnet_ids" {
-  description = "Two or more reviewed private subnets in distinct AZs in that VPC."
+  description = "Exactly two reviewed private subnets in distinct AZs in that VPC."
   type        = set(string)
   validation {
-    condition     = length(var.private_subnet_ids) >= 2
-    error_message = "Require at least two private AZ subnets."
+    condition     = length(var.private_subnet_ids) == 2
+    error_message = "Require exactly two private AZ subnets for this bounded proof."
   }
 }
 variable "host_subnet_id" {
@@ -97,7 +97,7 @@ variable "restore_checkpoint" {
   }
 }
 variable "retire" {
-  description = "Reviewed second apply releases DB deletion protection; does not itself delete resources."
+  description = "Reviewed cleanup apply disables the verifier and releases database deletion protection."
   type        = bool
   default     = false
 }

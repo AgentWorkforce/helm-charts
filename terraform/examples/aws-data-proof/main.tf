@@ -1,9 +1,7 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
-data "aws_subnet" "private" {
-  for_each = var.private_subnet_ids
-  id       = each.value
-}
+data "aws_subnet" "private_first" { id = sort(tolist(var.private_subnet_ids))[0] }
+data "aws_subnet" "private_second" { id = sort(tolist(var.private_subnet_ids))[1] }
 data "aws_subnet" "host" { id = var.host_subnet_id }
 data "aws_ami" "host" {
   owners = ["amazon"]
@@ -13,15 +11,16 @@ data "aws_ami" "host" {
   }
 }
 locals {
-  name     = "pippen-sbx-${var.run_id}"
-  bucket   = "${local.name}-${var.account_id}-${var.region}"
-  prefix   = "fixture/${var.pippen.session_id}/"
-  phase    = var.restore_checkpoint == null ? "seed" : "restore"
-  boundary = "arn:aws:iam::${var.account_id}:policy/pippen-agent-session-boundary"
-  marker   = sha256("${var.source_sha}:${var.pippen.session_id}:${var.run_id}")
-  payload  = "transport/sha256-${var.payload_sha256}.tar.gz"
-  receipt  = "receipts/${local.phase}.json"
-  tags     = { "pippen:sandbox" = "true", "pippen:agent" = var.pippen.agent, "pippen:session" = var.pippen.session_id, "proof:run" = var.run_id, "proof:source" = var.source_sha, ManagedBy = "terraform" }
+  private_subnets = [data.aws_subnet.private_first, data.aws_subnet.private_second]
+  name            = "pippen-sbx-${var.run_id}"
+  bucket          = "${local.name}-${var.account_id}-${var.region}"
+  prefix          = "fixture/${var.pippen.session_id}/"
+  phase           = var.restore_checkpoint == null ? "seed" : "restore"
+  boundary        = "arn:aws:iam::${var.account_id}:policy/pippen-agent-session-boundary"
+  marker          = sha256("${var.source_sha}:${var.pippen.session_id}:${var.run_id}")
+  payload         = "transport/sha256-${var.payload_sha256}.tar.gz"
+  receipt         = "receipts/${local.phase}.json"
+  tags            = { "pippen:sandbox" = "true", "pippen:agent" = var.pippen.agent, "pippen:session" = var.pippen.session_id, "proof:run" = var.run_id, "proof:source" = var.source_sha, ManagedBy = "terraform" }
 }
 resource "terraform_data" "guard" {
   input = { account = var.account_id, lease = var.pippen.session_id, source = var.source_sha }
@@ -31,7 +30,7 @@ resource "terraform_data" "guard" {
       error_message = "Refuse a different account, region or allocated Pippen caller."
     }
     precondition {
-      condition     = alltrue([for subnet in data.aws_subnet.private : subnet.owner_id == var.account_id && subnet.vpc_id == var.vpc_id && !subnet.map_public_ip_on_launch]) && length(toset([for subnet in data.aws_subnet.private : subnet.availability_zone])) >= 2 && data.aws_subnet.host.owner_id == var.account_id && data.aws_subnet.host.vpc_id == var.vpc_id && !contains(var.private_subnet_ids, var.host_subnet_id)
+      condition     = alltrue([for subnet in local.private_subnets : subnet.owner_id == var.account_id && subnet.vpc_id == var.vpc_id && !subnet.map_public_ip_on_launch]) && length(toset([for subnet in local.private_subnets : subnet.availability_zone])) >= 2 && data.aws_subnet.host.owner_id == var.account_id && data.aws_subnet.host.vpc_id == var.vpc_id && !contains(var.private_subnet_ids, var.host_subnet_id)
       error_message = "Require reviewed distinct private AZ subnets and separate host subnet in the same account/VPC. Route review remains external."
     }
     precondition {

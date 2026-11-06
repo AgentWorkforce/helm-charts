@@ -179,29 +179,29 @@ Public sources: [RDS credential management and restore limitations](https://docs
 [EC2 shutdown behavior](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_ChangingInstanceInitiatedShutdownBehavior.html).
 
 <!-- BEGIN_TF_DOCS -->
-## Requirements
+### Requirements
 
 | Name | Version |
 | ---- | ------- |
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.11, < 2.0 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | = 6.72.0 |
-| <a name="requirement_random"></a> [random](#requirement\_random) | = 3.9.1 |
+| terraform | >= 1.11, < 2.0 |
+| aws | = 6.72.0 |
+| random | = 3.9.1 |
 
-## Providers
+### Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
-| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
+| aws | = 6.72.0 |
+| terraform | n/a |
 
-## Modules
+### Modules
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_objects"></a> [objects](#module\_objects) | ../../modules/aws/object-storage | n/a |
-| <a name="module_postgres"></a> [postgres](#module\_postgres) | ../../modules/aws/postgres | n/a |
+| objects | ../../modules/aws/object-storage | n/a |
+| postgres | ../../modules/aws/postgres | n/a |
 
-## Resources
+### Resources
 
 | Name | Type |
 | ---- | ---- |
@@ -224,31 +224,32 @@ Public sources: [RDS credential management and restore limitations](https://docs
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/caller_identity) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/region) | data source |
 | [aws_subnet.host](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
-| [aws_subnet.private](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
+| [aws_subnet.private_first](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
+| [aws_subnet.private_second](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
 
-## Inputs
+### Inputs
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_account_id"></a> [account\_id](#input\_account\_id) | Exact existing sandbox account; never an account creation request. | `string` | n/a | yes |
-| <a name="input_ami_id"></a> [ami\_id](#input\_ami\_id) | Exact reviewed Amazon AL2023 ARM64 HVM/EBS AMI, not latest. | `string` | n/a | yes |
-| <a name="input_host_subnet_id"></a> [host\_subnet\_id](#input\_host\_subnet\_id) | Reviewed existing public subnet with HTTPS egress through an IGW. No routing changes. | `string` | n/a | yes |
-| <a name="input_payload_sha256"></a> [payload\_sha256](#input\_payload\_sha256) | Content digest of the secret-free transport archive, checked before extraction. | `string` | n/a | yes |
-| <a name="input_payload_version_id"></a> [payload\_version\_id](#input\_payload\_version\_id) | Null provisions data without compute. Exact immutable transport VersionId enables the verifier in a separate reviewed apply. | `string` | `null` | no |
-| <a name="input_pippen"></a> [pippen](#input\_pippen) | Expected allocated non-secret lease identity. | `object({ agent = string, session_id = string })` | n/a | yes |
-| <a name="input_postgres_version"></a> [postgres\_version](#input\_postgres\_version) | Exact region-supported PostgreSQL17 minor verified independently by the operator. | `string` | n/a | yes |
-| <a name="input_private_subnet_ids"></a> [private\_subnet\_ids](#input\_private\_subnet\_ids) | Two or more reviewed private subnets in distinct AZs in that VPC. | `set(string)` | n/a | yes |
-| <a name="input_rds_ca_sha256"></a> [rds\_ca\_sha256](#input\_rds\_ca\_sha256) | Reviewed SHA256 of the public regional RDS CA bundle; never a private certificate/key. | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | Explicit approved existing region. | `string` | n/a | yes |
-| <a name="input_restore_checkpoint"></a> [restore\_checkpoint](#input\_restore\_checkpoint) | Null for seed. Supply only after a successful independently reviewed seed receipt; no secret values. | `object({ seed_receipt_sha256 = string, seed_receipt_version_id = string, secret_version_id = string })` | `null` | no |
-| <a name="input_retire"></a> [retire](#input\_retire) | Reviewed second apply releases DB deletion protection; does not itself delete resources. | `bool` | `false` | no |
-| <a name="input_run_id"></a> [run\_id](#input\_run\_id) | Lease-unique bounded slug; do not reuse while old resources or sessions exist. | `string` | n/a | yes |
-| <a name="input_source_sha"></a> [source\_sha](#input\_source\_sha) | Exact committed source of the reviewed transport payload. | `string` | n/a | yes |
-| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | Reviewed existing VPC; unchanged by this proof. | `string` | n/a | yes |
+| account\_id | Exact existing sandbox account; never an account creation request. | `string` | n/a | yes |
+| ami\_id | Exact reviewed Amazon AL2023 ARM64 HVM/EBS AMI, not latest. | `string` | n/a | yes |
+| host\_subnet\_id | Reviewed existing public subnet with HTTPS egress through an IGW. No routing changes. | `string` | n/a | yes |
+| payload\_sha256 | Content digest of the secret-free transport archive, checked before extraction. | `string` | n/a | yes |
+| pippen | Expected allocated non-secret lease identity. | `object({ agent = string, session_id = string })` | n/a | yes |
+| postgres\_version | Exact region-supported PostgreSQL17 minor verified independently by the operator. | `string` | n/a | yes |
+| private\_subnet\_ids | Exactly two reviewed private subnets in distinct AZs in that VPC. | `set(string)` | n/a | yes |
+| rds\_ca\_sha256 | Reviewed SHA256 of the public regional RDS CA bundle; never a private certificate/key. | `string` | n/a | yes |
+| region | Explicit approved existing region. | `string` | n/a | yes |
+| run\_id | Lease-unique bounded slug; do not reuse while old resources or sessions exist. | `string` | n/a | yes |
+| source\_sha | Exact committed source of the reviewed transport payload. | `string` | n/a | yes |
+| vpc\_id | Reviewed existing VPC; unchanged by this proof. | `string` | n/a | yes |
+| payload\_version\_id | Null provisions data without compute. Exact immutable transport VersionId enables the verifier in a separate reviewed apply. | `string` | `null` | no |
+| restore\_checkpoint | Null for seed. Supply only after a successful independently reviewed seed receipt; no secret values. | `object({ seed_receipt_sha256 = string, seed_receipt_version_id = string, secret_version_id = string })` | `null` | no |
+| retire | Reviewed cleanup apply disables the verifier and releases database deletion protection. | `bool` | `false` | no |
 
-## Outputs
+### Outputs
 
 | Name | Description |
 | ---- | ----------- |
-| <a name="output_proof_contract"></a> [proof\_contract](#output\_proof\_contract) | Non-secret source/lease/module/transport identities. Capture before guest termination. |
+| proof\_contract | Non-secret source/lease/module/transport identities. Capture before guest termination. |
 <!-- END_TF_DOCS -->

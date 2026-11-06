@@ -10,15 +10,19 @@ Source base: `4df7bfd54d25aa520bcfe47c3544a87d77f7d3ac` (fresh origin/main).
 Only this example path is changed. Exact tested commit and clean artifact hashes
 are recorded in the held PR/evidence, avoiding a self-referential source receipt.
 
-- Terraform 1.16.7 (CI pin), AWS 6.72.0 and random 3.9.1, darwin_arm64:
-  backend-disabled init/validate and 11 mock-provider cases passed. Initial
-  Terraform 1.17.1 checks also passed before the final cases were added.
+- Terraform 1.16.7 and OpenTofu 1.11.14 (CI pins), AWS 6.72.0 and random 3.9.1,
+  darwin_arm64: backend-disabled init/validate and 11 mock-provider cases each
+  passed. The OpenTofu run used an isolated T7 source copy; its registry/lock
+  rewrite stayed in that copy and did not alter the committed Terraform lock.
+  The bounded root uses two explicit subnet lookups so both engines test actual
+  distinct-AZ/private-addressing guards without unsupported instance overrides.
 - Offline plan/config graph proves 13 transitive prerequisites: verifier waits
   for DB/clone, exact IAM/profile and SG paths; clone waits for snapshot, primary,
   parameter and subnet groups. Reverse graph ordering does not prove asynchronous
   native deletion; exact ID checks are required separately.
 - TFLint 0.64.0 passed with the repository configuration. terraform-docs 0.24.0
-  generated the README table. Formatting and Git whitespace checks passed.
+  generated the README with the repository configuration; output-check passed.
+  Formatting and Git whitespace checks passed.
 - Checkov 3.3.30 scoped to this root including local modules: 94 passed, 0 failed,
   24 explicit skips. Deliberate single-AZ/short-lived monitoring/logging choices,
   protection-release expression and launch-template inheritance are documented
