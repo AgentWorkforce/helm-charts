@@ -204,3 +204,20 @@ variable "tags" {
     error_message = "Environment, EnvironmentClass, ManagedBy and pippen:* tags are managed by this root."
   }
 }
+
+variable "existing_runtime_roles" {
+  description = "Operator-owned runtime identities. Null manages search/pipeline roles here. Otherwise supply both search roles and, only in Lambda mode, the pipeline role. Trust, policies, guards and EKS associations must already be verified outside this state."
+  type = object({
+    indexer_role_arn  = string
+    reader_role_arn   = string
+    pipeline_role_arn = optional(string)
+  })
+  default = null
+
+  validation {
+    condition = var.existing_runtime_roles == null ? true : alltrue([
+      for arn in values(var.existing_runtime_roles) : arn == null ? true : can(regex("^arn:aws:iam::[0-9]{12}:role/([A-Za-z0-9_+=,.@-]+/)*[A-Za-z0-9_+=,.@-]+$", arn))
+    ]) && try(length(var.existing_runtime_roles.indexer_role_arn) > 0 && length(var.existing_runtime_roles.reader_role_arn) > 0, false)
+    error_message = "Supply exact IAM role ARNs for both search identities (and optionally the pipeline), without empty values or wildcards."
+  }
+}

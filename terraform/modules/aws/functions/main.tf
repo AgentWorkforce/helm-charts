@@ -8,15 +8,16 @@ locals {
   partition  = data.aws_partition.current.partition
   dns_suffix = data.aws_partition.current.dns_suffix
 
-  function_name = "${var.name}-session-pipeline"
-  queue_name    = "${var.name}-session-events"
-  dlq_name      = "${var.name}-session-events-dlq"
-  function_arn  = "arn:${local.partition}:lambda:${local.region}:${local.account_id}:function:${local.function_name}"
-  bucket_arn    = "arn:${local.partition}:s3:::${var.bucket_name}"
-  key_prefix    = trim(var.key_prefix, "/")
-  secret_arn    = var.create_secret ? aws_secretsmanager_secret.pipeline[0].arn : var.secret_arn
-  in_vpc        = length(var.vpc_subnet_ids) > 0
-  is_image      = var.package.image_uri != null
+  function_name      = "${var.name}-session-pipeline"
+  queue_name         = "${var.name}-session-events"
+  dlq_name           = "${var.name}-session-events-dlq"
+  function_arn       = "arn:${local.partition}:lambda:${local.region}:${local.account_id}:function:${local.function_name}"
+  bucket_arn         = "arn:${local.partition}:s3:::${var.bucket_name}"
+  key_prefix         = trim(var.key_prefix, "/")
+  secret_arn         = var.create_secret ? aws_secretsmanager_secret.pipeline[0].arn : var.secret_arn
+  in_vpc             = length(var.vpc_subnet_ids) > 0
+  is_image           = var.package.image_uri != null
+  execution_role_arn = var.existing_execution_role_arn != null ? var.existing_execution_role_arn : aws_iam_role.this[0].arn
 
   environment = merge({
     PIPELINE_RAW_S3_BUCKET              = var.bucket_name
@@ -143,7 +144,19 @@ resource "aws_secretsmanager_secret" "pipeline" {
 # Execution role
 # ---------------------------------------------------------------------------
 
+# Migrate managed-role state without replacing existing roles when introducing count.
+moved {
+  from = aws_iam_role.this
+  to   = aws_iam_role.this[0]
+}
+
+moved {
+  from = aws_iam_role_policy.this
+  to   = aws_iam_role_policy.this[0]
+}
+
 resource "aws_iam_role" "this" {
+  count                = var.existing_execution_role_arn == null ? 1 : 0
   name                 = local.function_name
   path                 = var.role_path
   permissions_boundary = var.permissions_boundary_arn
@@ -243,8 +256,9 @@ locals {
 }
 
 resource "aws_iam_role_policy" "this" {
+  count  = var.existing_execution_role_arn == null ? 1 : 0
   name   = "session-pipeline"
-  role   = aws_iam_role.this.id
+  role   = aws_iam_role.this[0].id
   policy = jsonencode({ Version = "2012-10-17", Statement = local.role_statements })
 }
 
@@ -265,7 +279,7 @@ resource "aws_lambda_function" "this" {
   #checkov:skip=CKV_AWS_272:Code signing is opt-in (code_signing_config_arn); container images must be pinned by digest (validated).
   #checkov:skip=CKV_AWS_117:VPC placement is opt-in (vpc_subnet_ids); needed only to reach a private HoopDb.
   function_name = local.function_name
-  role          = aws_iam_role.this.arn
+  role          = local.execution_role_arn
   description   = "agent-relay session pipeline (event-driven mode): manifest events to HoopDb pointers and search index"
 
   package_type      = local.is_image ? "Image" : "Zip"
@@ -309,6 +323,10 @@ resource "aws_lambda_function" "this" {
   tags = var.tags
 
   lifecycle {
+    precondition {
+      condition     = var.existing_execution_role_arn == null ? true : startswith(var.existing_execution_role_arn, "arn:${local.partition}:iam::${local.account_id}:role/")
+      error_message = "The existing execution role must belong to the caller's account and partition."
+    }
     precondition {
       condition     = !local.in_vpc || length(var.vpc_security_group_ids) > 0
       error_message = "vpc_subnet_ids needs vpc_security_group_ids."

@@ -29,8 +29,8 @@ output "verification" {
       domain_name      = module.search.domain_name
       domain_arn       = module.search.domain_arn
       master_role_arn  = var.search_master_user_arn
-      indexer_role_arn = module.search.indexer_role_arn
-      reader_role_arn  = module.search.reader_role_arn
+      indexer_role_arn = local.indexer_role_arn
+      reader_role_arn  = local.reader_role_arn
       lambda_role_arn  = var.pipeline_runtime == "lambda" ? module.pipeline[0].execution_role_arn : null
       index_prefix     = "${local.name}-"
     }
@@ -80,5 +80,14 @@ output "service_accounts" {
     storage   = ["${var.release_name}-worker", "${var.release_name}-alleyoop"]
     indexer   = local.search_indexer_sa
     reader    = local.search_reader_sa
+  }
+}
+
+output "runtime_role_policy_json" {
+  description = "Proposed search and Lambda runtime permissions for operator review. External mode does not attach them or validate existing IAM configuration. Values may be unknown until service resources exist."
+  value = {
+    indexer  = module.search.indexer_policy_json
+    reader   = module.search.reader_policy_json
+    pipeline = var.pipeline_runtime == "lambda" ? module.pipeline[0].execution_role_policy_json : null
   }
 }

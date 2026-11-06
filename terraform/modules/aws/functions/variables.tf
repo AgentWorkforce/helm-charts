@@ -291,20 +291,31 @@ variable "tracing_mode" {
   default     = "PassThrough"
 }
 
+variable "existing_execution_role_arn" {
+  description = "Existing same-account Lambda execution role. Null creates the role and inline policy; otherwise this module authors neither. The operator must verify trust, permissions, boundary and guards separately."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.existing_execution_role_arn == null ? true : can(regex("^arn:[a-z0-9-]+:iam::[0-9]{12}:role/([A-Za-z0-9_+=,.@-]+/)*[A-Za-z0-9_+=,.@-]+$", var.existing_execution_role_arn))
+    error_message = "existing_execution_role_arn must be an exact IAM role ARN with a conventional role path, without wildcards."
+  }
+}
+
 variable "role_path" {
-  description = "IAM path for the execution role."
+  description = "IAM path for the managed execution role; unused with existing_execution_role_arn."
   type        = string
   default     = "/"
 }
 
 variable "permissions_boundary_arn" {
-  description = "Permissions boundary for the execution role."
+  description = "Permissions boundary for the managed execution role; unused with existing_execution_role_arn."
   type        = string
   default     = null
 }
 
 variable "additional_policy_statements" {
-  description = "Extra IAM statements for the execution role (for example es:ESHttpPost/Put on an OpenSearch domain once the services have that backend)."
+  description = "Extra statements in execution_role_policy_json, attached only for a managed role (for example es:ESHttpPost/Put on an OpenSearch domain once the services have that backend)."
   type        = any
   default     = []
 }

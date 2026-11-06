@@ -218,3 +218,120 @@ run "lambda_zip_must_be_immutable" {
   }
   expect_failures = [terraform_data.environment_contract]
 }
+
+# Materialize only the local fence, so child-module data references are known
+# during subsequent mock plans. Never apply the protected service resources.
+run "external_contract_setup" {
+  command = apply
+  plan_options {
+    target = [terraform_data.environment_contract]
+  }
+}
+
+run "external_search_roles" {
+  command = plan
+  variables {
+    existing_runtime_roles = {
+      indexer_role_arn = "arn:aws:iam::111111111111:role/bootstrap/indexer"
+      reader_role_arn  = "arn:aws:iam::111111111111:role/bootstrap/reader"
+    }
+  }
+  assert {
+    condition     = output.verification.search.indexer_role_arn == var.existing_runtime_roles.indexer_role_arn && output.verification.search.reader_role_arn == var.existing_runtime_roles.reader_role_arn && output.verification.search.lambda_role_arn == null
+    error_message = "Verification must use the supplied roles even though the search module exports no authored roles."
+  }
+  assert {
+    condition     = module.search.indexer_role_arn == null && module.search.reader_role_arn == null && length(module.search.pod_identity_association_ids) == 0
+    error_message = "Search must use its existing create=false path without authoring runtime identities."
+  }
+  assert {
+    condition     = toset(jsondecode(output.runtime_role_policy_json.indexer).Statement[0].Resource) == toset(["arn:aws:es:us-west-2:111111111111:domain/agent-relay-dev-search/*"]) && output.runtime_role_policy_json.pipeline == null
+    error_message = "External bootstrap policy proposals must retain the exact environment domain scope and omit unused Lambda permissions."
+  }
+}
+
+run "external_lambda_roles" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    existing_runtime_roles = {
+      indexer_role_arn  = "arn:aws:iam::111111111111:role/bootstrap/indexer"
+      reader_role_arn   = "arn:aws:iam::111111111111:role/bootstrap/reader"
+      pipeline_role_arn = "arn:aws:iam::111111111111:role/bootstrap/pipeline"
+    }
+  }
+  assert {
+    condition     = module.pipeline[0].execution_role_arn == var.existing_runtime_roles.pipeline_role_arn && output.verification.search.lambda_role_arn == var.existing_runtime_roles.pipeline_role_arn && !output.pipeline.activation_enabled
+    error_message = "External Lambda identity must reach both the function module and verifier, without activation."
+  }
+}
+
+run "external_wrong_account" {
+  command = plan
+  variables {
+    existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::222222222222:role/indexer", reader_role_arn = "arn:aws:iam::111111111111:role/reader" }
+
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "external_runtime_alias" {
+  command = plan
+  variables {
+    existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::111111111111:role/runtime", reader_role_arn = "arn:aws:iam::111111111111:role/runtime" }
+
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "external_master_alias" {
+  command = plan
+  variables {
+    existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::111111111111:role/search-admin", reader_role_arn = "arn:aws:iam::111111111111:role/reader" }
+
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "external_storage_alias" {
+  command = plan
+  variables {
+    existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::111111111111:role/agent-relay-dev-sessions", reader_role_arn = "arn:aws:iam::111111111111:role/reader" }
+
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "external_pipeline_in_workers" {
+  command = plan
+  variables {
+    existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::111111111111:role/indexer", reader_role_arn = "arn:aws:iam::111111111111:role/reader", pipeline_role_arn = "arn:aws:iam::111111111111:role/pipeline" }
+
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "external_missing_lambda_role" {
+  command = plan
+  variables {
+    existing_runtime_roles      = { indexer_role_arn = "arn:aws:iam::111111111111:role/indexer", reader_role_arn = "arn:aws:iam::111111111111:role/reader" }
+    pipeline_runtime            = "lambda"
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "external_empty_search_identity" {
+  command = plan
+  variables { existing_runtime_roles = { indexer_role_arn = "", reader_role_arn = "arn:aws:iam::111111111111:role/reader" } }
+  expect_failures = [var.existing_runtime_roles]
+}
+
+run "external_empty_pipeline_identity" {
+  command = plan
+  variables { existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::111111111111:role/indexer", reader_role_arn = "arn:aws:iam::111111111111:role/reader", pipeline_role_arn = "" } }
+  expect_failures = [var.existing_runtime_roles]
+}

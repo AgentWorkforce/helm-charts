@@ -84,6 +84,10 @@ run "access_policy_names_principals" {
     condition     = toset(flatten([jsondecode(aws_opensearch_domain_policy.this.access_policies).Statement[0].Principal.AWS])) == toset(["arn:aws:iam::111111111111:role/indexer", "arn:aws:iam::111111111111:role/search-admin"])
     error_message = "The access policy names exactly the listed principals and the master user, never *."
   }
+  assert {
+    condition     = length(aws_iam_role.workload) == 0 && length(aws_iam_role_policy.workload) == 0 && length(aws_eks_pod_identity_association.workload) == 0
+    error_message = "External identities must not author search IAM or Pod Identity associations."
+  }
 }
 
 run "instance_count_follows_azs" {

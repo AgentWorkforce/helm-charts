@@ -40,6 +40,11 @@ variables {
 run "hosted_pattern_defaults" {
   command = apply
 
+  assert {
+    condition     = length(aws_iam_role.this) == 1 && length(aws_iam_role_policy.this) == 1 && aws_lambda_function.this.role == aws_iam_role.this[0].arn && output.execution_role_arn == aws_lambda_function.this.role
+    error_message = "The default must still author one role/policy and bind Lambda and its output to it."
+  }
+
   # A distinct DLQ ARN, so the redrive assert checks the target's identity.
   override_resource {
     target = aws_sqs_queue.dlq
@@ -86,15 +91,15 @@ run "hosted_pattern_defaults" {
     error_message = "Only EventBridge rules (by ARN) may invoke the function; there is no Function URL."
   }
   assert {
-    condition     = flatten([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s.Resource if s.Sid == "ReadSessionObjects"]) == ["arn:aws:s3:::relay-sessions/96bulls/*/v1/*"]
+    condition     = flatten([for s in jsondecode(aws_iam_role_policy.this[0].policy).Statement : s.Resource if s.Sid == "ReadSessionObjects"]) == ["arn:aws:s3:::relay-sessions/96bulls/*/v1/*"]
     error_message = "The role reads only session objects."
   }
   assert {
-    condition     = length([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s if contains(flatten([s.Action]), "s3:PutObject") || contains(flatten([s.Action]), "s3:DeleteObject")]) == 0
+    condition     = length([for s in jsondecode(aws_iam_role_policy.this[0].policy).Statement : s if contains(flatten([s.Action]), "s3:PutObject") || contains(flatten([s.Action]), "s3:DeleteObject")]) == 0
     error_message = "The role never writes or deletes objects."
   }
   assert {
-    condition     = length([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s if s.Sid == "VpcNetworkInterfaces"]) == 0
+    condition     = length([for s in jsondecode(aws_iam_role_policy.this[0].policy).Statement : s if s.Sid == "VpcNetworkInterfaces"]) == 0
     error_message = "No ENI permissions outside a VPC."
   }
   assert {
@@ -156,7 +161,7 @@ run "bucket_key_encryption_context" {
   }
 
   assert {
-    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.this.policy).Statement : s.Condition.StringLike["kms:EncryptionContext:aws:s3:arn"] if s.Sid == "DecryptSessionObjectsViaS3"]), "arn:aws:s3:::relay-sessions")
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.this[0].policy).Statement : s.Condition.StringLike["kms:EncryptionContext:aws:s3:arn"] if s.Sid == "DecryptSessionObjectsViaS3"]), "arn:aws:s3:::relay-sessions")
     error_message = "Decrypt must accept the bucket ARN context (S3 Bucket Keys)."
   }
 }
@@ -169,4 +174,44 @@ run "image_must_be_digest_pinned" {
   }
 
   expect_failures = [var.package]
+}
+
+run "existing_role_authors_no_iam_and_binds_lambda" {
+  command = apply
+  variables {
+    existing_execution_role_arn  = "arn:aws:iam::111111111111:role/bootstrap/pipeline-runtime"
+    vpc_subnet_ids               = ["subnet-private"]
+    vpc_security_group_ids       = ["sg-private"]
+    additional_policy_statements = [{ Effect = "Allow", Action = ["es:ESHttpPost"], Resource = ["arn:aws:es:us-west-2:111111111111:domain/relay-search/*"] }]
+  }
+  assert {
+    condition     = length(aws_iam_role.this) == 0 && length(aws_iam_role_policy.this) == 0
+    error_message = "Existing-role mode must not author any IAM role or inline policy."
+  }
+  assert {
+    condition     = aws_lambda_function.this.role == var.existing_execution_role_arn && output.execution_role_arn == aws_lambda_function.this.role
+    error_message = "The actual Lambda role and exported role must both be the supplied identity."
+  }
+  assert {
+    condition     = toset([for s in jsondecode(output.execution_role_policy_json).Statement : try(s.Sid, "Additional")]) == toset(["Logs", "ListBucket", "ReadSessionObjects", "SessionEvents", "PipelineSecret", "ReconcileContinues", "VpcNetworkInterfaces", "Additional"])
+    error_message = "External mode must retain the proposed service permissions, including VPC and caller additions."
+  }
+}
+
+run "existing_role_wrong_account_refused" {
+  command = plan
+  variables { existing_execution_role_arn = "arn:aws:iam::222222222222:role/pipeline" }
+  expect_failures = [aws_lambda_function.this]
+}
+
+run "existing_role_wrong_partition_refused" {
+  command = plan
+  variables { existing_execution_role_arn = "arn:aws-us-gov:iam::111111111111:role/pipeline" }
+  expect_failures = [aws_lambda_function.this]
+}
+
+run "existing_role_must_be_exact_role_arn" {
+  command = plan
+  variables { existing_execution_role_arn = "arn:aws:iam::111111111111:role/*" }
+  expect_failures = [var.existing_execution_role_arn]
 }

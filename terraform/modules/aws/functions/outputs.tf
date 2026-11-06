@@ -14,8 +14,8 @@ output "function_arn" {
 }
 
 output "execution_role_arn" {
-  description = "Execution role ARN (grant it OpenSearch or other access with additional_policy_statements, or in the resource's own policy)."
-  value       = aws_iam_role.this.arn
+  description = "Actual Lambda execution role ARN, managed here or supplied by the operator."
+  value       = local.execution_role_arn
 }
 
 output "queue_url" {
@@ -62,4 +62,9 @@ output "reconcile_rule_arn" {
 output "brief_rule_arn" {
   description = "EventBridge brief rule ARN (DISABLED unless briefs_enabled)."
   value       = aws_cloudwatch_event_rule.brief.arn
+}
+
+output "execution_role_policy_json" {
+  description = "Proposed runtime permissions, including additional_policy_statements. Attached only in managed-role mode; external-role installation and validation belong to the operator. May contain values unknown until resources exist."
+  value       = jsonencode({ Version = "2012-10-17", Statement = local.role_statements })
 }
