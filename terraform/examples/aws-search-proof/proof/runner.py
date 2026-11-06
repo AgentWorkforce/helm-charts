@@ -122,7 +122,11 @@ class Runner:
         require(not subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain'], text=True).strip(), 'Commit all source before preparing an operational packet')
         tracked = subprocess.check_output(['git', '-C', str(repo), 'ls-files', '--', str(ROOT.relative_to(repo)), str(MODULE.relative_to(repo))], text=True).splitlines()
         sources = {name: sha(repo / name) for name in tracked}
-        binaries = {str(p.relative_to(ROOT)): sha(p) for p in (ROOT / '.terraform/providers').glob('*/hashicorp/aws/6.72.0/*/terraform-provider-aws*') if p.is_file()}
+        version = json.loads(subprocess.check_output([self.terraform, 'version', '-json'], cwd=ROOT, env=self.env, text=True))
+        selected_platform = version.get('platform')
+        require(selected_platform in ['darwin_arm64', 'darwin_amd64', 'linux_arm64', 'linux_amd64'], 'Unsupported Terraform execution platform')
+        selected = ROOT / f'.terraform/providers/registry.terraform.io/hashicorp/aws/6.72.0/{selected_platform}'
+        binaries = {str(p.relative_to(ROOT)): sha(p) for p in selected.glob('terraform-provider-aws*') if p.is_file()}
         require(len(binaries) == 1, 'Exactly the locked AWS provider executable is required')
         binaries['terraform'] = sha(self.terraform)
         backend_metadata = ROOT / '.terraform/terraform.tfstate'
