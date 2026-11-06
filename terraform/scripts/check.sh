@@ -67,6 +67,9 @@ for d in "${dirs[@]}"; do
   if want test && [ "$d" = "examples/aws-environments" ] && have python3; then
     run -C "$ROOT/$d" python3 tests/check_lambda_bindings.py "$TF_BIN"
   fi
+  if want test && [ "$d" = "examples/aws-search-proof" ] && have python3; then
+    run -C "$ROOT/$d" python3 -m unittest discover -s proof -p 'test_*.py'
+  fi
   if want tflint && have tflint; then
     run -C "$ROOT/$d" tflint --config "$ROOT/.tflint.hcl" --no-color
   fi
