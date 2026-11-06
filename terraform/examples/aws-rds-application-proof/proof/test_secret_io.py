@@ -21,4 +21,15 @@ class SensitiveIo(unittest.TestCase):
         code='import subprocess,sys,time;subprocess.Popen([sys.executable,"-c","import time;time.sleep(30)"]);time.sleep(30)'
         with self.assertRaises(SecretIoError) as error:run([sys.executable,'-c',code],env={},timeout=.3)
         self.assertEqual(error.exception.code,'sensitive_timeout')
+    def test_closed_interactive_frames_keep_secret_replies_off_stdout(self):
+        seen=[]
+        def frame(line):
+            seen.append(line)
+            return b'synthetic-canary\n' if len(seen)==1 else b''
+        code='import sys;sys.stdin.readline();print("rotate",flush=True);assert sys.stdin.readline().strip()=="synthetic-canary";print("done",flush=True)'
+        r=run([sys.executable,'-c',code],input_bytes=b'initial\n',on_frame=frame,env={},timeout=5)
+        self.assertEqual(r.returncode,0);self.assertEqual(r.stdout,b'');self.assertEqual(seen,[b'rotate',b'done'])
+    def test_unterminated_or_oversized_frame_reply_fails_closed(self):
+        with self.assertRaisesRegex(SecretIoError,'unterminated'):run([sys.executable,'-c','import sys;sys.stdout.write("partial")'],on_frame=lambda _:None,env={},timeout=5)
+        with self.assertRaisesRegex(SecretIoError,'input_bound'):run([sys.executable,'-c','print("request",flush=True);input()'],on_frame=lambda _:b'x'*1000,env={},timeout=5,max_input=256)
 if __name__=='__main__':unittest.main()
