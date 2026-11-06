@@ -239,8 +239,53 @@ use it for every phase:
 ```sh
 python3 terraform/scripts/verify-aws-data.py configuration \
   --config /approved/private/verification.json --run-id <32-hex-run-id> \
-  --confirm-account <account> --confirm-environment dev --confirm-live
+  --confirm-account <account> --confirm-region us-west-2 \
+  --confirm-environment dev --confirm-environment-class development \
+  --confirm-name-prefix agent-relay --confirm-live
 ```
+
+The account, region, environment, class and installation prefix must come from
+an independently reviewed installation/backend record, not from the target JSON
+being verified. All confirmations are required, including for cleanup. Replacing
+`verification.json` with another installation's otherwise valid same-account,
+same-environment output is refused before constructing an SDK session. There is
+no permissive legacy schema fallback: regenerate `verification` after upgrading.
+For Pippen, also supply the exact independently reviewed
+`--confirm-pippen-agent <agent> --confirm-pippen-session <UUID>`; both must match
+the exported tuple. Customer mode refuses exported/native Pippen ownership tags.
+
+The closed output includes `name_prefix`, `environment_class`, nullable `pippen`,
+`postgres.identifier`/`master_username`, and `pipeline.function_name`. Every phase
+and the direct-import helpers require an immutable `ConfirmedInstallation` of
+scalar values, validate all derived resource names and unqualified ARN types,
+and check the caller before a target operation. RDS uses
+`<prefix>-<environment>-pg` (instance or Aurora cluster); Lambda uses
+`<prefix>-<environment>-session-pipeline`; bucket/search names and writer
+endpoints follow this root's exact conventions. Import callers must construct
+that confirmation separately with `confirm_installation(...)`; omitting it is an
+error. Names and confirmations are safety checks, not IAM authorization.
+
+Before `GetSecretValue`, the PostgreSQL phase checks singleton native RDS/Aurora
+metadata, PostgreSQL17 engine/status, exact identifiers/ARNs, private/encrypted
+settings, database/port/master username, backups/protection, writer endpoint and
+active managed-secret linkage. Aurora also checks every unique member's exact
+installation name/ARN, cluster membership, private settings and tags. Native
+`Environment`, `EnvironmentClass`, `ManagedBy` and, when selected, all three exact
+Pippen ownership tags must match before reading credentials. Missing, duplicate,
+malformed, foreign or denied metadata refuses the operation. These tags come
+from the existing DescribeDBInstances/DescribeDBClusters responses; no new IAM
+grant or permission fallback is installed. The returned secret ARN and master
+username are checked again before SQL; secret values remain only in memory.
+
+Before `Invoke`, Lambda native name/unqualified ARN, execution-role ARN,
+`Environment`/`EnvironmentClass`/`ManagedBy`/optional Pippen tags, arm64/private-VPC
+state and reviewed code/image must match. Missing or denied tags refuse; a
+`GetFunction` response with tag errors is not accepted. The external-role seam
+remains: equality to the reviewed output role proves only the actual function's
+binding. Independently verify that role's native ownership, trust, boundary,
+inline/attached policy content and approved installation use; this helper does
+not inspect IAM role content or make an authorization claim from its ARN. No
+new permission grants are added to make a refused read succeed.
 
 Run `postgres` with `--rds-ca /approved/rds-global-bundle.pem` to require real
 PostgreSQL 17, private RDS metadata, encryption/backups/protection and
