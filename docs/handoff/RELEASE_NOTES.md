@@ -200,11 +200,10 @@ runs the full set as the migration owner, in order:
 directory). An upgrade from 0.3.6 already ran the first, second and last at
 install.
 
-Proof: the EKS proof passed all 15 end-to-end cases with services `070fe6fd`,
-RelayHistory `d3166bb1` and the interim bearer off, using earlier API and
-dashboard builds. The GKE proof also ran earlier proof builds of the API and
-dashboard. Neither proof has been re-run with the 0.3.11 selfhost-api and
-dashboard digests yet. Renders with your own
+EKS validation passed after the upgrade to the published 0.3.11 chart with
+its selfhost-api and dashboard digests, services `070fe6fd`, RelayHistory
+`d3166bb1` and the interim bearer off. The GKE proof has not been re-run
+with the complete 0.3.11 image set. Renders with your own
 `image.repository`/`image.digest` overrides are unchanged apart from the
 `helm.sh/chart` labels.
 
