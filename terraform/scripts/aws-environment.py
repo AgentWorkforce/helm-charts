@@ -11,7 +11,11 @@ This is drift detection, NOT hostile same-UID/privileged mutation isolation.
 The operator must exclude concurrent privileged mutation and use an approved PATH
 Terraform/OpenTofu executable/runner. A tool-family name and dependency lock are
 not binary/provider attestation or remote backend-state attestation. Terraform's
-own saved-plan/state locking checks still apply. Receipt v1 requires a new plan.
+own saved-plan/state locking checks still apply. Receipt renames are atomic for
+cooperating live processes, not power-loss durable (directory metadata is not
+fsynced). After a host/filesystem crash, reconcile backend/state and attempt
+evidence before trusting a recovered approval or retrying. Receipt v1 requires a
+new plan.
 """
 import argparse
 import base64
@@ -89,11 +93,11 @@ def source_digest(root=ROOT):
         rel = path.relative_to(root)
         if any(p.startswith(".") for p in rel.parts[:-1]):
             continue
-        if path.is_symlink() and (path.is_dir() or path.name.endswith((".tf", ".tf.json", ".tftpl", ".tfvars", ".tfvars.json"))):
+        if path.is_symlink() and (path.is_dir() or path.name.endswith((".tf", ".tf.json", ".tofu", ".tofu.json", ".tftpl", ".tfvars", ".tfvars.json"))):
             raise Refused("Source symlinks are not a complete source seal")
         if not path.is_file():
             continue
-        if not (path.name.endswith((".tf", ".tf.json", ".tftpl", ".tfvars", ".tfvars.json")) or path.name in (".terraform.lock.hcl", "aws-environment.py")):
+        if not (path.name.endswith((".tf", ".tf.json", ".tofu", ".tofu.json", ".tftpl", ".tfvars", ".tfvars.json")) or path.name in (".terraform.lock.hcl", "aws-environment.py")):
             continue
         h.update(str(rel).encode() + b"\0" + checked_path(path).read_bytes() + b"\0")
     return h.hexdigest()
