@@ -247,6 +247,58 @@ class RunnerGuards(unittest.TestCase):
         self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signal.SIGTERM)
         self.assertTrue(record['process_group_absent']);self.assertTrue(self.subject.settled)
 
+    def late_signal(self, boundary, signals=(signal.SIGTERM,), error=None):
+        self.subject.transport=None
+        original={sig:signal.getsignal(sig) for sig in [signal.SIGTERM,signal.SIGHUP,signal.SIGINT]}
+        fake=SimpleNamespace(pid=123456789,returncode=0,wait=Mock(side_effect=error),poll=Mock(return_value=0))
+        opened=Path.open;set_handler=signal.signal;injected=False
+        def inject():
+            nonlocal injected
+            if not injected:
+                injected=True
+                for sig in signals:signal.raise_signal(sig)
+        class Log:
+            def __init__(self, file):self.file=file
+            def __enter__(self):return self.file.__enter__()
+            def __exit__(self,*args):
+                result=self.file.__exit__(*args) # The real log is closed first.
+                inject()
+                return result
+        def open_log(path,*args,**kwargs):
+            file=opened(path,*args,**kwargs)
+            return Log(file) if boundary in ['stdout','stderr'] and path.suffix=='.'+boundary else file
+        def restore(sig,handler):
+            if boundary=='restore' and not injected and handler==original[sig]:
+                inject()
+            return set_handler(sig,handler)
+        save(self.subject.path('phase.json'),{'status':'pending'})
+        with patch.object(Path,'open',open_log),patch.object(r.signal,'signal',side_effect=restore),patch.object(r.subprocess,'Popen',return_value=fake),patch.object(r.os,'killpg',side_effect=ProcessLookupError):
+            with self.assertRaises(type(error) if error else r.CommandInterrupted) as caught:
+                self.subject.run(['inert'])
+                save(self.subject.path('phase.json'),{'status':'captured'})
+        self.assertTrue(injected)
+        record=json.loads(next(self.subject.path('commands').glob('*.json')).read_text())
+        self.assertEqual(record['outcome'],'interrupted');self.assertEqual(record['signal'],signals[0])
+        self.assertEqual(record['error_type'],type(error).__name__ if error else 'CommandInterrupted');self.assertTrue(record['process_group_absent'])
+        if error:self.assertIs(caught.exception,error)
+        self.assertTrue(self.subject.settled)
+        self.assertEqual(json.loads(self.subject.path('phase.json').read_text()),{'status':'pending'})
+        self.assertEqual({sig:signal.getsignal(sig) for sig in original},original)
+
+    def test_signal_after_stdout_close_cannot_publish_command_success(self):self.late_signal('stdout')
+
+    def test_signal_after_stderr_close_cannot_publish_command_success(self):self.late_signal('stderr')
+
+    def test_signal_at_handler_restoration_entry_cannot_publish_command_success(self):self.late_signal('restore')
+
+    def test_repeated_signals_after_log_close_preserve_first_request(self):self.late_signal('stderr',(signal.SIGHUP,signal.SIGTERM,signal.SIGINT,signal.SIGHUP))
+
+    def test_repeated_signals_at_restore_entry_preserve_first_request(self):self.late_signal('restore',(signal.SIGINT,signal.SIGTERM,signal.SIGHUP,signal.SIGINT))
+
+    def test_late_log_signal_preserves_original_command_error(self):self.late_signal('stderr',error=RuntimeError('synthetic original wait error'))
+
+    def test_restore_entry_signal_preserves_original_command_error(self):self.late_signal('restore',error=RuntimeError('synthetic original wait error'))
+
     def test_bounded_wait_slices_preserve_one_total_timeout(self):
         self.subject.transport=None
         clock=[0.0];waits=[]

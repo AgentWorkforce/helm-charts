@@ -6,6 +6,7 @@ Capability metadata is inherited from the selected Pippen CLI, never obtained
 by inspecting its credential_process or accepting a client approval file.
 Catchable TERM/HUP/INT interrupt through owned-group settlement; SIGKILL and host
 crash/power loss cannot provide cleanup or completed evidence guarantees.
+Signals first delivered after restoration follow the caller's prior handlers.
 """
 import argparse
 import configparser
@@ -129,6 +130,7 @@ class Runner:
                 self.settled = settle()
                 pending_signal()
                 require(self.settled, 'Unsettled owned process group; quarantine before recovery')
+            pending_signal() # Log __exit__ may record a signal; retain cleanup/evidence handling.
         except BaseException as error:
             self.settled = settle(); metadata.update(outcome='interrupted', error_type=type(error).__name__, process_group_absent=self.settled)
             if process is not None: metadata.update(pid=process.pid, pgid=process.pid)
@@ -136,6 +138,16 @@ class Runner:
             save(prefix.with_suffix('.json'), metadata); raise
         finally:
             for sig, handler in previous.items(): signal.signal(sig, handler)
+            if requested is not None and metadata.get('outcome') == 'interrupted' and metadata.get('signal') != requested:
+                metadata['signal'] = requested # Preserve a late request without masking the original command error.
+                save(prefix.with_suffix('.json'), metadata)
+        # A signal recorded while restoring prior handlers is still failure.
+        # Reaching here already proved group absence; do not restart settlement
+        # under the restored handlers or publish a completed command receipt.
+        if requested is not None:
+            error = CommandInterrupted(requested)
+            metadata.update(outcome='interrupted', error_type=type(error).__name__, process_group_absent=self.settled, signal=requested)
+            save(prefix.with_suffix('.json'), metadata); raise error
         metadata.update(outcome='completed', exit_code=process.returncode, process_group_absent=self.settled); save(prefix.with_suffix('.json'), metadata)
         result = subprocess.CompletedProcess(args, process.returncode, prefix.with_suffix('.stdout').read_text(), prefix.with_suffix('.stderr').read_text())
         require(not check or result.returncode == 0, 'Tool failed; preserve private command evidence')
