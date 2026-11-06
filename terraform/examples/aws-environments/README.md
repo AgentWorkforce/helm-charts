@@ -290,7 +290,10 @@ same-environment output is refused before constructing an SDK session. There is
 no permissive legacy schema fallback: regenerate `verification` after upgrading.
 For Pippen, also supply the exact independently reviewed
 `--confirm-pippen-agent <agent> --confirm-pippen-session <UUID>`; both must match
-the exported tuple. Customer mode refuses exported/native Pippen ownership tags.
+the exported tuple. Customer mode refuses an exported Pippen tuple. Native
+Pippen ownership tags are checked in the RDS/Aurora and Lambda phases; S3
+requests bind the expected bucket owner, and Search uses the confirmed URL and
+configuration/bootstrap ARN-to-endpoint checks rather than native tag reads.
 
 The closed output includes `name_prefix`, `environment_class`, nullable `pippen`,
 `postgres.identifier`/`master_username`, and `pipeline.function_name`. Every phase
@@ -351,7 +354,8 @@ single and bulk reader writes, reject access to a known foreign index, and
 check the rejected writes had no effects before cleanup. Signed requests never
 follow redirects. Direct `Search.call` paths must have exactly one leading
 slash, remain on the confirmed HTTPS origin, and contain no backslash, control
-character or fragment; refusal precedes credential access or signing. Keep cleanup failures visible and retain the run ID so the
+character or fragment; refusal precedes credential access or signing. Keep
+cleanup failures visible and retain the run ID so the
 exact synthetic resources can be retired later.
 
 `lambda-smoke` checks the deployed arm64/private-VPC artifact and explicitly
