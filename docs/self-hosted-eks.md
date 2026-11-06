@@ -160,6 +160,7 @@ of the `cf-*` commands only):
 
 ```sh
 export EKS_PROOF_API_CIDR=<operator egress>/32
+export EKS_PROOF_CHART_VERSION=0.3.11
 pippen sandbox exec <agent> -- scripts/selfhost/eks-proof-sandbox.sh up
 pippen sandbox exec <agent> -- scripts/selfhost/eks-proof-dns.sh cert-request
 CF_API_TOKEN=... scripts/selfhost/eks-proof-dns.sh cf-validation
