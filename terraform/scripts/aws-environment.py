@@ -89,11 +89,11 @@ def source_digest(root=ROOT):
         rel = path.relative_to(root)
         if any(p.startswith(".") for p in rel.parts[:-1]):
             continue
-        if path.is_symlink() and (path.is_dir() or path.name.endswith((".tf", ".tftpl", ".tfvars", ".tfvars.json"))):
+        if path.is_symlink() and (path.is_dir() or path.name.endswith((".tf", ".tf.json", ".tftpl", ".tfvars", ".tfvars.json"))):
             raise Refused("Source symlinks are not a complete source seal")
         if not path.is_file():
             continue
-        if not (path.name.endswith((".tf", ".tftpl", ".tfvars", ".tfvars.json")) or path.name in (".terraform.lock.hcl", "aws-environment.py")):
+        if not (path.name.endswith((".tf", ".tf.json", ".tftpl", ".tfvars", ".tfvars.json")) or path.name in (".terraform.lock.hcl", "aws-environment.py")):
             continue
         h.update(str(rel).encode() + b"\0" + checked_path(path).read_bytes() + b"\0")
     return h.hexdigest()

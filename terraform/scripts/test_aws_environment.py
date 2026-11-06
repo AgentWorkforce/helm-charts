@@ -111,13 +111,20 @@ class EnvironmentBoundaryTests(unittest.TestCase):
         source.write_text('resource "terraform_data" "different" {}')
         self.assertNotEqual(before, runner.source_digest(self.root))
 
+    def test_json_configuration_symlink_is_not_a_source_seal(self):
+        target = self.root / "untracked.json"
+        target.write_text('{}')
+        (self.root / "override.tf.json").symlink_to(target)
+        with self.assertRaises(runner.Refused):
+            runner.source_digest(self.root)
+
     def test_private_receipt_permissions(self):
         path = self.root / "receipt.json"
         runner.private_json(path, {"environment": "dev"})
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_dependency_lock_and_runner_changes_invalidate_plan(self):
-        for filename in (".terraform.lock.hcl", "aws-environment.py", "terraform.tfvars.json"):
+        for filename in (".terraform.lock.hcl", "aws-environment.py", "terraform.tfvars.json", "override.tf.json"):
             with self.subTest(filename=filename):
                 path = self.root / filename
                 path.write_text("before")
@@ -237,6 +244,8 @@ class StagedPlanLifecycleTests(unittest.TestCase):
             self.backend.write_text(self.backend.read_text() + "\n")
         elif kind == "source":
             (self.stack / "main.tf").write_text("changed source")
+        elif kind == "json_source":
+            (self.stack / "override.tf.json").write_text('{"terraform": {"required_version": ">= 9.0"}}')
         elif kind == "rc":
             (self.directory / "terraform.rc").chmod(0o600)
             (self.directory / "terraform.rc").write_text("provider_installation {}")
@@ -252,7 +261,7 @@ class StagedPlanLifecycleTests(unittest.TestCase):
             Path(self.receipt()["plan_path"]).write_bytes(b"changed saved plan")
 
     def test_init_swaps_refuse_apply_and_preserve_unconsumed_approval(self):
-        for kind in ("artifact", "variables", "backend", "source", "rc", "staged", "derived", "plan"):
+        for kind in ("artifact", "variables", "backend", "source", "json_source", "rc", "staged", "derived", "plan"):
             with self.subTest(kind=kind):
                 self.setUp()
                 self.command("plan")
@@ -268,7 +277,7 @@ class StagedPlanLifecycleTests(unittest.TestCase):
 
     def test_plan_swaps_do_not_publish_preplan_digest_receipt(self):
         for operation in ("init", "plan"):
-            for kind in ("artifact", "variables", "backend", "source", "rc", "staged", "derived"):
+            for kind in ("artifact", "variables", "backend", "source", "json_source", "rc", "staged", "derived"):
                 with self.subTest(operation=operation, kind=kind):
                     self.setUp()
                     self.hook = lambda op, args, env: self.mutate(kind) if op == operation else None
