@@ -335,3 +335,176 @@ run "external_empty_pipeline_identity" {
   variables { existing_runtime_roles = { indexer_role_arn = "arn:aws:iam::111111111111:role/indexer", reader_role_arn = "arn:aws:iam::111111111111:role/reader", pipeline_role_arn = "" } }
   expect_failures = [var.existing_runtime_roles]
 }
+
+run "lambda_activation_requires_runtime_bindings" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "lambda_provider_and_tls_bindings" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-sessions-v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  assert {
+    condition = (
+      output.lambda_shared_environment.SEARCH_INDEX_BACKEND == "opensearch" &&
+      output.lambda_shared_environment.OPENSEARCH_REGION == "us-west-2" &&
+      output.lambda_shared_environment.OPENSEARCH_INDEX == "agent-relay-dev-sessions-v2" &&
+      output.lambda_shared_environment.SEARCH_INDEX_STATE_BACKEND_ID == "agent-relay-dev-sessions" &&
+      output.lambda_shared_environment.READ_API_COMPLETE_SINCE == "epoch" &&
+      output.lambda_shared_environment.SEARCH_INDEX_POSTGRES_SCHEMA == "search_index" &&
+      output.lambda_shared_environment.SESSION_POSTGRES_TLS_PROFILE == "custom-ca" &&
+      output.lambda_shared_environment.SESSION_POSTGRES_CA_FILE == "/var/task/assets/postgres-ca.pem" &&
+      output.lambda_shared_environment.SESSION_POSTGRES_CA_SHA256 == var.lambda_runtime_bindings.postgres_ca_sha256 &&
+      !contains(keys(output.lambda_shared_environment), "AWS_REGION") && output.pipeline.activation_enabled
+    )
+    error_message = "Writer and reader must share explicit OpenSearch/projection/CA settings without a reserved AWS_REGION override; activation requires its explicit flag."
+  }
+}
+
+run "lambda_binding_environment_mismatch" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-prod-sessions-v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "lambda_bindings_refused_in_worker_mode" {
+  command = plan
+  variables {
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-sessions-v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [terraform_data.environment_contract]
+}
+
+run "invalid_ca_digest_refused" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-sessions-v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "not-a-reviewed-sha256"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "invalid_projection_identifier_refused" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-sessions-v2"
+      state_backend_id   = "other tenant/backend"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "negative_completeness_timestamp_refused" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-sessions-v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "1969-12-31T23:59:59Z"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "artifact_refuses_dotted_index" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-sessions.v2"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "artifact_refuses_202_character_index" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-${join("", [for i in range(186) : "s"])}"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  expect_failures = [var.lambda_runtime_bindings]
+}
+
+run "artifact_accepts_201_character_index" {
+  command = plan
+  variables {
+    pipeline_runtime            = "lambda"
+    activate_lambda             = true
+    lambda_package              = { s3_bucket = "reviewed-artifacts", s3_key = "pipeline.zip", s3_object_version = "reviewed-version" }
+    function_security_group_ids = ["sg-function"]
+    lambda_runtime_bindings = {
+      search_index       = "agent-relay-dev-${join("", [for i in range(185) : "s"])}"
+      state_backend_id   = "agent-relay-dev-sessions"
+      complete_since     = "epoch"
+      postgres_ca_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+  assert {
+    condition     = length(output.lambda_shared_environment.OPENSEARCH_INDEX) == 201 && output.pipeline.activation_enabled
+    error_message = "The maximum index accepted by the matching private artifact must remain usable."
+  }
+}
