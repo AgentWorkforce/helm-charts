@@ -6,6 +6,12 @@ run_id = "example"
 pippen = { agent = "example-agent", session_id = "00000000-0000-4000-8000-000000000000" }
 vpc_id = "vpc-REPLACE"
 private_subnet_ids = ["subnet-REPLACE-A", "subnet-REPLACE-B"]
+# Alternatively set private_subnet_ids=null and create_private_subnets to two
+# reviewed non-overlapping /24-/28 CIDR/AZ objects in the existing default VPC:
+# create_private_subnets = {
+#   first  = { cidr = "REPLACE_WITH_REVIEWED_CIDR_A", az = "REPLACE_WITH_AZ_A" }
+#   second = { cidr = "REPLACE_WITH_REVIEWED_CIDR_B", az = "REPLACE_WITH_AZ_B" }
+# }
 host_subnet_id = "subnet-REPLACE-HOST"
 ami_id = "ami-REPLACE"
 postgres_version = "17.REPLACE"

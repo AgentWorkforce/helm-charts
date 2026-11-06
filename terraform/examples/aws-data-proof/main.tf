@@ -1,7 +1,13 @@
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
-data "aws_subnet" "private_first" { id = sort(tolist(var.private_subnet_ids))[0] }
-data "aws_subnet" "private_second" { id = sort(tolist(var.private_subnet_ids))[1] }
+data "aws_subnet" "private_first" {
+  count = var.private_subnet_ids == null ? 0 : 1
+  id    = sort(tolist(var.private_subnet_ids))[0]
+}
+data "aws_subnet" "private_second" {
+  count = var.private_subnet_ids == null ? 0 : 1
+  id    = sort(tolist(var.private_subnet_ids))[1]
+}
 data "aws_subnet" "host" { id = var.host_subnet_id }
 data "aws_ami" "host" {
   owners = ["amazon"]
@@ -11,7 +17,8 @@ data "aws_ami" "host" {
   }
 }
 locals {
-  private_subnets = [data.aws_subnet.private_first, data.aws_subnet.private_second]
+  private_subnets = var.private_subnet_ids == null ? [] : [data.aws_subnet.private_first[0], data.aws_subnet.private_second[0]]
+  private_ids     = var.private_subnet_ids == null ? concat(aws_subnet.private_first[*].id, aws_subnet.private_second[*].id) : sort(tolist(var.private_subnet_ids))
   name            = "pippen-sbx-${var.run_id}"
   bucket          = "${local.name}-${var.account_id}-${var.region}"
   prefix          = "fixture/${var.pippen.session_id}/"
@@ -30,7 +37,11 @@ resource "terraform_data" "guard" {
       error_message = "Refuse a different account, region or allocated Pippen caller."
     }
     precondition {
-      condition     = alltrue([for subnet in local.private_subnets : subnet.owner_id == var.account_id && subnet.vpc_id == var.vpc_id && !subnet.map_public_ip_on_launch]) && length(toset([for subnet in local.private_subnets : subnet.availability_zone])) >= 2 && data.aws_subnet.host.owner_id == var.account_id && data.aws_subnet.host.vpc_id == var.vpc_id && !contains(var.private_subnet_ids, var.host_subnet_id)
+      condition     = (var.private_subnet_ids == null) != (var.create_private_subnets == null)
+      error_message = "Select exactly one of existing private_subnet_ids or create_private_subnets."
+    }
+    precondition {
+      condition     = (var.private_subnet_ids == null ? true : alltrue([for subnet in local.private_subnets : subnet.owner_id == var.account_id && subnet.vpc_id == var.vpc_id && !subnet.map_public_ip_on_launch]) && length(toset([for subnet in local.private_subnets : subnet.availability_zone])) == 2 && !contains(var.private_subnet_ids, var.host_subnet_id)) && data.aws_subnet.host.owner_id == var.account_id && data.aws_subnet.host.vpc_id == var.vpc_id
       error_message = "Require reviewed distinct private AZ subnets and separate host subnet in the same account/VPC. Route review remains external."
     }
     precondition {
@@ -99,7 +110,7 @@ module "postgres" {
   database_name                       = "moduleproof"
   master_username                     = "proof_admin"
   instance_class                      = "db.t4g.micro"
-  subnet_ids                          = sort(tolist(var.private_subnet_ids))
+  subnet_ids                          = local.private_ids
   vpc_security_group_ids              = [aws_security_group.database.id]
   multi_az                            = false
   allocated_storage                   = 20
@@ -118,7 +129,7 @@ module "postgres" {
     { name = "log_parameter_max_length_on_error", value = "0", apply_method = "immediate" }
   ] # Do not log generated synthetic login passwords through failing DDL/parameters.
   tags       = local.tags
-  depends_on = [terraform_data.guard]
+  depends_on = [terraform_data.guard, aws_route_table_association.private_first, aws_route_table_association.private_second]
 }
 module "objects" {
   source = "../../modules/aws/object-storage"

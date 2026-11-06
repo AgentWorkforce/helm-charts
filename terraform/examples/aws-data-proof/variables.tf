@@ -31,11 +31,23 @@ variable "vpc_id" {
   type        = string
 }
 variable "private_subnet_ids" {
-  description = "Exactly two reviewed private subnets in distinct AZs in that VPC."
+  description = "Exactly two reviewed existing private subnets in distinct AZs; null when create_private_subnets is selected."
   type        = set(string)
+  default     = null
   validation {
-    condition     = length(var.private_subnet_ids) == 2
+    condition     = var.private_subnet_ids == null ? true : length(var.private_subnet_ids) == 2
     error_message = "Require exactly two private AZ subnets for this bounded proof."
+  }
+}
+variable "create_private_subnets" {
+  description = "Optional two owned local-only private subnets in the existing default VPC. Explicit reviewed non-overlapping /24-/28 IPv4 CIDRs and distinct available AZs; mutually exclusive with private_subnet_ids."
+  type        = object({ first = object({ cidr = string, az = string }), second = object({ cidr = string, az = string }) })
+  default     = null
+  validation {
+    condition = var.create_private_subnets == null ? true : alltrue([for subnet in values(var.create_private_subnets) : try(
+      can(regex("^[0-9.]+/(24|25|26|27|28)$", subnet.cidr)) && subnet.cidr == "${cidrhost(subnet.cidr, 0)}/${split("/", subnet.cidr)[1]}" && length(trimspace(subnet.az)) > 0, false
+    )])
+    error_message = "Require two canonical IPv4 /24-/28 network CIDRs and explicit AZs."
   }
 }
 variable "host_subnet_id" {

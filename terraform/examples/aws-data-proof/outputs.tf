@@ -11,5 +11,12 @@ output "proof_contract" {
     compute            = try({ instance_id = aws_instance.verifier[0].id, root_volume_ids = [for disk in aws_instance.verifier[0].root_block_device : disk.volume_id], eni_id = aws_instance.verifier[0].primary_network_interface_id }, null),
     verifier_identity  = { launch_template_id = aws_launch_template.verifier.id, role_arn = aws_iam_role.verifier.arn, profile_arn = aws_iam_instance_profile.verifier.arn },
     security_group_ids = [aws_security_group.database.id, aws_security_group.verifier.id]
+    private_subnet_ids = local.private_ids
+    owned_network = var.create_private_subnets == null ? null : {
+      subnet_ids            = local.private_ids
+      subnets               = var.create_private_subnets
+      route_table_id        = aws_route_table.private[0].id
+      route_association_ids = [aws_route_table_association.private_first[0].id, aws_route_table_association.private_second[0].id]
+    }
   }
 }

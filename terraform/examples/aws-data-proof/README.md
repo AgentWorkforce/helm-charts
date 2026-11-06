@@ -5,8 +5,10 @@ modules in a reviewed existing VPC. It prepares a private encrypted PostgreSQL17
 instance, its owned subnet/parameter groups, versioned SSE-KMS bucket, synthetic
 sentinel, two dedicated security groups, and a temporary ARM verifier with its
 own launch template, encrypted delete-on-termination disk/ENI and boundary-capped
-`/pippen/workload/` role plus `eks-*` instance profile. It changes no existing
-VPC, application, role, routing, cluster, baseline policy or provider source.
+`/pippen/workload/` role plus `eks-*` instance profile. An optional mode owns two
+private subnets, one local-only route table and their two explicit associations
+in the reviewed existing default VPC. It changes no existing VPC, subnet, route
+table, application, role, cluster, baseline policy or provider source.
 
 **Source only / held draft. No live plan, apply, credential retrieval, SQL,
 cloud call or runtime proof was performed by this source lane.** An authorized
@@ -43,10 +45,24 @@ remain enabled. No saved credential profile/static credentials belong here.
 1. Independently review non-secret lease/account/region, exact available PG17
    minor and instance classes, pinned Amazon AL2023 ARM AMI, existing VPC/subnet
    ownership/AZs/routes, permissions/boundary, quotas and public regional RDS CA
-   bundle digest. Private subnet metadata checks do not prove routing. Supply
-   two private AZ subnets and a distinct existing public host subnet with HTTPS
-   egress. The root creates no NAT or network route. Refuse collisions/adoption
-   of any derived database, bucket, role, group, snapshot or verifier identity.
+   bundle digest. Select exactly one network mode: two reviewed existing private
+   AZ subnets (`private_subnet_ids`), or `create_private_subnets` with exactly two
+   explicit canonical IPv4 /24-/28 CIDRs and distinct available AZs in the existing
+   default VPC. Do not change modes after provisioning. The created CIDRs must fit
+   its primary IPv4 CIDR and overlap neither each other nor any existing subnet.
+   Fresh inventory/ownership review remains mandatory; inputs cannot authorize
+   adoption/import. Subsequent plans exempt an exact slot/CIDR/AZ with all current
+   lease/run/source tags from the overlap check only; an orphan still causes AWS
+   CreateSubnet to refuse overlap. Preserve the applied source identity through
+   retirement. Supply a distinct existing public host subnet with HTTPS egress.
+   The root creates no NAT/IGW, VPC, route to the internet, main-table change or
+   association for an existing subnet. Created subnets disable public IPs and
+   are explicitly associated with an owned table containing only AWS implicit
+   VPC-local routes and no propagated routes. Database creation waits for both
+   associations; reverse ordering keeps them until database retirement. Existing
+   VPC DNS, default NACL and host routes/return paths remain reviewed external
+   prerequisites; private subnet metadata alone does not prove reachability.
+   Refuse collisions/adoption of any derived identity or network resource.
 2. Review the committed source/lock/artifact hashes and initial saved plan with
    `payload_version_id=null`, `restore_checkpoint=null`, `retire=false`. This
    provisions modules/identity/network prerequisites with **zero EC2 instances**.
@@ -147,6 +163,13 @@ normal retirement verifier.
   and both compute lifetimes; a self-terminated guest does not retire IAM/LT/SG.
   Confirm every volume, ENI, SG, launch template, role/profile, DB, subnet group,
   parameter group, marker snapshot, automated backup, managed secret and bucket.
+  In owned-network mode also capture/confirm both subnet IDs, the route-table ID
+  and both association IDs from `owned_network`. Database/subnet-group and compute
+  retirement precedes association/subnet/table destruction. Native RDS ENI removal
+  is asynchronous; wait for specific absence rather than force-detaching an ENI.
+  Association absence requires a complete empty exact association-filtered route
+  table response; specific subnet/table NotFound is required too. External
+  existing subnet IDs are output for composition but never retirement targets.
   AWS-managed KMS/service baseline resources remain external and preserved.
 
 `proof/retirement.py` is a parent-operated **read-only** final check. Its ledger
@@ -154,6 +177,8 @@ contains `contract` (the last active `proof_contract` captured **before** the
 retire apply clears its compute output), `compute_history` (the
 seed and restore `compute` captures), distinct `database_resource_ids`, verified
 `database_network_interface_ids`, and `managed_secret_arns` (exact primary ARN).
+The contract's optional `owned_network` ledger is required when that mode is used;
+capture the CIDRs/AZs, native routes/ownership and association IDs before destroy.
 It requires specific service NotFound codes or explicit empty native backup lists;
 arbitrary empty/Denied responses cannot pass. Run it only after the destroy and
 native backup/secret retirement, retry only within the parent's cleanup deadline,
@@ -165,7 +190,8 @@ proof. Uncaptured/unknown resources remain an explicit blocker.
 `terraform init -backend=false`, `validate`, mock `test`, TFLint, terraform-docs,
 Checkov, Python unittest/AST and Node tests/syntax run without credentials. Tests
 cover the real module composition, restore/protection phases, exact caller,
-private AZ separation, host IAM/IMDS/storage binding, malformed/foreign S3 pages,
+private AZ separation, owned CIDR/VPC/AZ/collision guards, local-only associations
+and reverse graph ordering, host IAM/IMDS/storage binding, malformed/foreign S3 pages,
 unknown-version refusal, unrelated-key preservation and native NotFound semantics.
 Mock passes do not prove service versions/capacity, network paths, deployed IAM,
 async RDS cleanup, actual restore or application compatibility. Inline Checkov
@@ -177,6 +203,8 @@ Public sources: [RDS credential management and restore limitations](https://docs
 [RDS TLS verification](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.SSL.html),
 [Terraform RDS restore](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/db_instance),
 [EC2 shutdown behavior](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_ChangingInstanceInitiatedShutdownBehavior.html).
+Network semantics: [VPC subnet route tables](https://docs.aws.amazon.com/vpc/latest/userguide/subnet-route-tables.html)
+and [exact association filtering](https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-route-tables.html).
 
 <!-- BEGIN_TF_DOCS -->
 ### Requirements
@@ -212,20 +240,30 @@ Public sources: [RDS credential management and restore limitations](https://docs
 | [aws_iam_role_policy.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/iam_role_policy) | resource |
 | [aws_instance.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/instance) | resource |
 | [aws_launch_template.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/launch_template) | resource |
+| [aws_route_table.private](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/route_table) | resource |
+| [aws_route_table_association.private_first](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/route_table_association) | resource |
+| [aws_route_table_association.private_second](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/route_table_association) | resource |
 | [aws_s3_object.sentinel](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/s3_object) | resource |
 | [aws_security_group.database](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/security_group) | resource |
 | [aws_security_group.verifier](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/security_group) | resource |
+| [aws_subnet.private_first](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/subnet) | resource |
+| [aws_subnet.private_second](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/subnet) | resource |
 | [aws_vpc_security_group_egress_rule.database](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_egress_rule.https](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/vpc_security_group_egress_rule) | resource |
 | [aws_vpc_security_group_ingress_rule.database](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/vpc_security_group_ingress_rule) | resource |
 | [terraform_data.execution](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.guard](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.network_guard](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [aws_ami.host](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/ami) | data source |
+| [aws_availability_zones.available](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/availability_zones) | data source |
 | [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/caller_identity) | data source |
 | [aws_region.current](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/region) | data source |
 | [aws_subnet.host](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
+| [aws_subnet.inventory](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
 | [aws_subnet.private_first](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
 | [aws_subnet.private_second](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnet) | data source |
+| [aws_subnets.inventory](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/subnets) | data source |
+| [aws_vpc.existing](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/data-sources/vpc) | data source |
 
 ### Inputs
 
@@ -237,13 +275,14 @@ Public sources: [RDS credential management and restore limitations](https://docs
 | payload\_sha256 | Content digest of the secret-free transport archive, checked before extraction. | `string` | n/a | yes |
 | pippen | Expected allocated non-secret lease identity. | `object({ agent = string, session_id = string })` | n/a | yes |
 | postgres\_version | Exact region-supported PostgreSQL17 minor verified independently by the operator. | `string` | n/a | yes |
-| private\_subnet\_ids | Exactly two reviewed private subnets in distinct AZs in that VPC. | `set(string)` | n/a | yes |
 | rds\_ca\_sha256 | Reviewed SHA256 of the public regional RDS CA bundle; never a private certificate/key. | `string` | n/a | yes |
 | region | Explicit approved existing region. | `string` | n/a | yes |
 | run\_id | Lease-unique bounded slug; do not reuse while old resources or sessions exist. | `string` | n/a | yes |
 | source\_sha | Exact committed source of the reviewed transport payload. | `string` | n/a | yes |
 | vpc\_id | Reviewed existing VPC; unchanged by this proof. | `string` | n/a | yes |
+| create\_private\_subnets | Optional two owned local-only private subnets in the existing default VPC. Explicit reviewed non-overlapping /24-/28 IPv4 CIDRs and distinct available AZs; mutually exclusive with private\_subnet\_ids. | `object({ first = object({ cidr = string, az = string }), second = object({ cidr = string, az = string }) })` | `null` | no |
 | payload\_version\_id | Null provisions data without compute. Exact immutable transport VersionId enables the verifier in a separate reviewed apply. | `string` | `null` | no |
+| private\_subnet\_ids | Exactly two reviewed existing private subnets in distinct AZs; null when create\_private\_subnets is selected. | `set(string)` | `null` | no |
 | restore\_checkpoint | Null for seed. Supply only after a successful independently reviewed seed receipt; no secret values. | `object({ seed_receipt_sha256 = string, seed_receipt_version_id = string, secret_version_id = string })` | `null` | no |
 | retire | Reviewed cleanup apply disables the verifier and releases database deletion protection. | `bool` | `false` | no |
 

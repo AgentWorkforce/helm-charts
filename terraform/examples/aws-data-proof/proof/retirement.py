@@ -10,7 +10,8 @@ OPERATIONS={
  'describe-network-interfaces':'DescribeNetworkInterfaces','describe-security-groups':'DescribeSecurityGroups',
  'describe-launch-templates':'DescribeLaunchTemplates','get-role':'GetRole','get-instance-profile':'GetInstanceProfile',
  'list-object-versions':'ListObjectVersions','list-multipart-uploads':'ListMultipartUploads',
- 'describe-db-subnet-groups':'DescribeDBSubnetGroups','describe-db-parameter-groups':'DescribeDBParameterGroups'
+ 'describe-db-subnet-groups':'DescribeDBSubnetGroups','describe-db-parameter-groups':'DescribeDBParameterGroups',
+ 'describe-subnets':'DescribeSubnets','describe-route-tables':'DescribeRouteTables'
 }
 
 def request(contract,service,operation,*args):
@@ -25,6 +26,21 @@ def absent(contract,service,operation,args,code):
     value,error=request(contract,service,operation,*args)
     if error:return error==code
     return False
+
+def network_absence(contract):
+    if 'owned_network' not in contract:raise RuntimeError('Missing owned/external network capture')
+    network=contract['owned_network']
+    if network is None:return {} # Existing external subnets/routes are never deletion targets.
+    subnets=network['subnet_ids'];associations=network['route_association_ids'];table=network['route_table_id']
+    if len(set(subnets))!=2 or set(subnets)!=set(contract['private_subnet_ids']) or len(set(associations))!=2 or not all(re.fullmatch(r'subnet-[0-9a-f]+',x) for x in subnets) or not all(re.fullmatch(r'rtbassoc-[0-9a-f]+',x) for x in associations) or not re.fullmatch(r'rtb-[0-9a-f]+',table):raise RuntimeError('Incomplete owned network capture')
+    checks={}
+    for subnet in subnets:
+        checks['subnet:'+subnet]=absent(contract,'ec2','describe-subnets',['--subnet-ids',subnet],'InvalidSubnetID.NotFound')
+    checks['route_table:'+table]=absent(contract,'ec2','describe-route-tables',['--route-table-ids',table],'InvalidRouteTableID.NotFound')
+    for association in associations:
+        value,error=request(contract,'ec2','describe-route-tables','--filters',f'Name=association.route-table-association-id,Values={association}')
+        checks['route_association:'+association]=error is None and isinstance(value.get('RouteTables'),list) and value['RouteTables']==[] and not value.get('NextToken')
+    return checks
 
 def check(ledger):
     c=ledger['contract'];checks={};ids=ledger['database_resource_ids']
@@ -66,6 +82,7 @@ def check(ledger):
         name=c['database']['subnet_group'] if key=='DBSubnetGroups' else c['database']['parameter_group']
         code='DBSubnetGroupNotFoundFault' if key=='DBSubnetGroups' else 'DBParameterGroupNotFound'
         checks[key]=absent(c,'rds',operation,[arg,name],code)
+    checks.update(network_absence(c))
     return {'ok':all(checks.values()),'checks':checks,'scope':'exact captured owned IDs only; no account-wide or application proof'}
 
 if __name__=='__main__':

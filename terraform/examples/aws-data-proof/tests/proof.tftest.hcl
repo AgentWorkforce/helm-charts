@@ -1,4 +1,8 @@
 mock_provider "aws" {
+  mock_data "aws_vpc" { defaults = { owner_id = "111111111111", default = true, cidr_block = "10.0.0.0/16" } }
+  mock_data "aws_availability_zones" { defaults = { names = ["us-west-2a", "us-west-2b"] } }
+  mock_data "aws_subnets" { defaults = { ids = [] } }
+  mock_data "aws_subnet" { defaults = { owner_id = "111111111111", vpc_id = "vpc-example", availability_zone = "us-west-2a", map_public_ip_on_launch = false, cidr_block = "10.0.240.0/24", tags = {} } }
   mock_resource "aws_launch_template" { defaults = { id = "lt-0123456789abcdef0", latest_version = 1 } }
   mock_resource "aws_security_group" { defaults = { id = "sg-0123456789abcdef0" } }
   mock_data "aws_caller_identity" {
@@ -15,6 +19,14 @@ mock_provider "random" {}
 override_resource {
   target = aws_security_group.verifier
   values = { id = "sg-11111111111111111" }
+}
+override_resource {
+  target = aws_subnet.private_first
+  values = { id = "subnet-aaaaaaaaaaaaaaaaa" }
+}
+override_resource {
+  target = aws_subnet.private_second
+  values = { id = "subnet-bbbbbbbbbbbbbbbbb" }
 }
 override_data {
   target = data.aws_subnet.private_first
