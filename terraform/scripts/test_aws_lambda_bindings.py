@@ -110,6 +110,8 @@ class LambdaBindings(unittest.TestCase):
         self.assertTrue(self.invoke([other, baseline()])[1]["ok"])
 
     def test_missing_malformed_resource_inventory_refuses(self):
+        event = baseline(); del event["test_plan"]["resource_changes"]
+        self.refuses(event, "Missing native resource changes")
         for value in [None, {}, "unknown"]:
             event = baseline(); event["test_plan"]["resource_changes"] = value
             with self.subTest(value=value): self.refuses(event, "Missing native resource changes")
@@ -126,6 +128,8 @@ class LambdaBindings(unittest.TestCase):
                     self.refuses(event, "Missing or duplicate actual resource")
 
     def test_missing_or_malformed_environment_refuses(self):
+        event = baseline(); del row(event, FUNCTION)["after"]["environment"]
+        self.refuses(event, "Actual Lambda environment missing/malformed")
         for value in [None, [], {}, [{}], [{"variables": []}],
                       [{"variables": "unknown"}], [{"variables": {}}, {"variables": {}}]]:
             event = baseline(); row(event, FUNCTION)["after"]["environment"] = value
